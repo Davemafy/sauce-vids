@@ -60,6 +60,13 @@ def _check_actions(actions):
             if not isinstance(sel, str) or not 1 <= len(sel) <= 150:
                 raise ValueError("Missing or excessively long selector")
             item["selector"] = sel
+        if "expected_visible_heading" in a:
+            if mode != "click_link":
+                raise ValueError("expected_visible_heading is supported only on click_link")
+            heading = a["expected_visible_heading"]
+            if not isinstance(heading, str) or not 1 <= len(heading.strip()) <= 160:
+                raise ValueError("expected_visible_heading must be 1–160 non-whitespace characters")
+            item["expected_visible_heading"] = heading.strip()
         if mode == "scroll":
             pixels = a.get("pixels", 400)
             if type(pixels) is not int or not -1300 <= pixels <= 1300:
@@ -67,6 +74,17 @@ def _check_actions(actions):
             item["pixels"] = pixels
         result.append(item)
     return result
+
+def _wait_for_expected_heading(page, heading):
+    """Wait for rendered content, not just DOMContentLoaded (important for SPAs).
+
+    Exact accessible heading match avoids accidentally advancing on unrelated text.
+    A missing heading raises instead of marking an incomplete shot successful.
+    """
+    page.get_by_role("heading", name=heading, exact=True).first.wait_for(
+        state="visible", timeout=15000
+    )
+
 
 CURSOR = r"""(() => {
   const id='sauce-pointer';
@@ -108,6 +126,7 @@ def capture(args, **kwargs):
             events.append({"time": round(time.monotonic()-start,2), "type": "page", "url": page.url})
             for action in actions:
                 mode = action["type"]
+                heading_verified = False
                 if mode == "scroll":
                     page.mouse.wheel(0, action["pixels"])
                 elif mode == "hover":
@@ -132,9 +151,16 @@ def capture(args, **kwargs):
                     page.mouse.click(x,y)
                     page.wait_for_load_state("domcontentloaded",timeout=15000)
                     _url(page.url, host)
+                    if action.get("expected_visible_heading"):
+                        _wait_for_expected_heading(page, action["expected_visible_heading"])
+                        heading_verified = True
                 page.wait_for_timeout(int(action["seconds"]*1000))
-                events.append({"time": round(time.monotonic()-start,2), "type": mode,
-                               "url": page.url, "selector": action.get("selector")})
+                event = {"time": round(time.monotonic()-start,2), "type": mode,
+                         "url": page.url, "selector": action.get("selector")}
+                if heading_verified:
+                    event["expected_visible_heading"] = action["expected_visible_heading"]
+                    event["heading_verified"] = True
+                events.append(event)
             page.wait_for_timeout(700)
             video = page.video
             page.close()

@@ -1,8 +1,0 @@
-__pycache__/
-*.py[cod]
-.venv/
-*.webm
-*.mp4
-*.wav
-*.mp3
-.env

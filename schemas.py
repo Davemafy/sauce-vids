@@ -9,7 +9,13 @@ CAPTURE = {
                 "type": {"type": "string", "enum": ["wait", "scroll", "hover", "click_link"]},
                 "selector": {"type": "string"},
                 "pixels": {"type": "integer"},
-                "seconds": {"type": "number"}
+                "seconds": {"type": "number"},
+                "expected_visible_heading": {
+                    "type": "string",
+                    "description": "Optional exact accessible heading to wait for after click_link. Helpful on React/SPA pages that render after DOMContentLoaded.",
+                    "minLength": 1,
+                    "maxLength": 160
+                }
             }, "required": ["type"]}},
         "project": {"type": "string", "description": "Short lowercase project identifier"}
     }, "required": ["url", "project"]}

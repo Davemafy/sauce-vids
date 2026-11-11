@@ -61,6 +61,27 @@ For brand imagery or a professionally designed visual background, supply a licen
 
 A `sauce_capture` call returns a run ID. Pass that run ID to `sauce_render`, then `sauce_inspect` to retrieve the video metadata and evidence from the same recording.
 
+## Waiting for SPA content after a link click
+
+For React and other client-rendered websites, navigating to the correct URL does not always mean the screen has finished rendering. Supply `expected_visible_heading` on a `click_link` action to wait for the exact, visible heading before advancing to the next shot:
+
+```json
+{
+  "url": "https://example.com",
+  "project": "example",
+  "actions": [
+    {
+      "type": "click_link",
+      "selector": "a[href='/dashboard']",
+      "expected_visible_heading": "Dashboard",
+      "seconds": 1
+    }
+  ]
+}
+```
+
+The heading check is optional. When provided, Sauce Vids waits up to 15 seconds for the heading to become visible, then records `heading_verified: true` with the completed action in the capture receipt. If the heading never appears, capture returns an error rather than treating the loading screen as a successful shot. Use a heading observed on the actual destination page, not a guess. Recording continues during the wait; the receipt's timing can guide a later edit to remove loading frames.
+
 ## Verification
 
 - **15/15 checks passed** using Hermes's official plugin admission validator, including capability registration and security scanning.
