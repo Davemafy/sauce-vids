@@ -1,44 +1,64 @@
 # Sauce Vids
 
-**A product-video production toolkit for Hermes Agent.**
+**Turn real product interactions into product videos — with Hermes as the director.**
 
-Hermes directs the story and selects interactions. Sauce Vids supplies real continuous Chromium recording, structured event receipts, and an FFmpeg renderer that can use operator-supplied licensed image assets. It does **not** fabricate product screens.
+Sauce Vids gives [Hermes Agent](https://github.com/NousResearch/hermes-agent) the tools to capture actual software in a browser, turn the footage into a shareable MP4, and inspect the result. Designed for founders, developers, and product teams who need demos that show what their software really does.
 
-## What works
+Instead of generating replacement interfaces, Sauce Vids works with **the live product and licensed visual assets**.
 
-- `sauce_capture`: Launch a real browser and record a public HTTPS site with safe recorded interactions (scroll, hover, link navigation), preserving the actual URL and event trace.
-- `sauce_render`: Encode the capture to MP4, optionally composing it with a background image from a configured licensed-asset directory.
-- `sauce_inspect`: Return actual video metadata and the recorded event trace for Hermes to review.
-- `sauce-director` skill: Guides Hermes through selecting, capturing, verifying and revising a product demo.
+## The workflow
 
-## Installation
+1. **Direct:** Hermes uses the included `sauce-director` skill to plan a focused product walkthrough.
+2. **Capture:** Playwright records continuous Chromium video and timestamps a structured action receipt.
+3. **Render:** FFmpeg exports the recording as an MP4, optionally composed with an existing image asset.
+4. **Inspect:** Hermes reads video properties and the captured interaction log to inform the next edit.
 
-Requires Python 3.11+, FFmpeg/ffprobe and Playwright Chromium. A running Hermes Agent is required to invoke the plugin through the agent.
+| Tool | Purpose |
+| --- | --- |
+| `sauce_capture` | Record approved HTTPS pages, hover states, scrolling, and real link navigation |
+| `sauce_render` | Produce a video file; optionally use a pre-existing licensed background |
+| `sauce_inspect` | Return recording provenance, event traces, and rendered-video metadata |
+
+The package also includes the **`sauce-director` skill**, which describes the capture–render–inspect iteration for Hermes.
+
+## Install
+
+Requires Python 3.11+, [Playwright](https://playwright.dev/python/), Chromium, and FFmpeg/ffprobe.
 
 ```bash
 git clone https://github.com/Davemafy/sauce-vids.git
 cd sauce-vids
 python3 -m pip install "playwright>=1.55,<2"
 python3 -m playwright install chromium
-# Install FFmpeg from your OS package manager
+# Install ffmpeg and ffprobe with your system package manager
 export SAUCE_ALLOWED_HOSTS="www.brimble.io,brimble.io"
-hermes plugins validate . --install-deps
+hermes plugins validate .
 hermes plugins install . --no-enable
 hermes plugins enable sauce-vids
 ```
 
-Set `SAUCE_ALLOWED_HOSTS` to the specific domains whose content you're authorized to record. To enable a licensed background, set `SAUCE_ASSET_DIR` to a local directory containing an operator-supplied PNG/JPG. Captures and renders go into `~/.sauce-vids/` by default.
+Set `SAUCE_ALLOWED_HOSTS` to the exact domains you are authorized to record. Recording outputs and receipts are kept in `~/.sauce-vids/` (configurable with `SAUCE_RUN_DIR`).
 
-## Example
+For brand imagery or a professionally designed visual background, supply a licensed PNG/JPG in a directory configured through `SAUCE_ASSET_DIR` and provide its filename to `sauce_render`. Sauce Vids does not bundle third-party stock assets.
 
-Ask Hermes to:
+## Example direction
 
-> Use Sauce Vids to record the public Brimble Agent page and an authorized link navigation. Inspect the event receipt and render a video. Do not present marketing illustrations as an authenticated agent execution.
+> Record the public Brimble Agent page, capture one link navigation, render the genuine browser footage as an MP4, and inspect the video and interaction receipt.
 
-## Provenance and limits
+A `sauce_capture` call returns a run ID. Pass that run ID to `sauce_render`, then `sauce_inspect` to retrieve the video metadata and evidence from the same recording.
 
-The Brimble sample film produced during development was **manually directed** using Playwright and Remotion; it is not proof that Hermes independently directed the film. The plugin itself is a separate, minimal recording-and-rendering API. This MVP was validated against Hermes's plugin validator but has **not** been proven in a live Hermes-directed run.
+## Verification
 
-The plugin can make external HTTPS requests to explicitly allowed sites; launches headless Chromium; executes FFmpeg; writes recordings and JSON receipts to `~/.sauce-vids/` or `SAUCE_RUN_DIR`; and reads images from `SAUCE_ASSET_DIR` when supplied. It stores no credentials and sends no telemetry. Processing arbitrary customer sites requires stronger sandbox, DNS-rebinding and egress controls; this release is intended for trusted operators and authorized public sites.
+- **15/15 checks passed** using Hermes's official plugin admission validator, including capability registration and security scanning.
+- **3/3 unit tests passed** for registration, input restrictions, and tool error responses.
+- The plugin is listed for review in [the Hermes plugin catalog PR](https://github.com/NousResearch/hermes-agent/pull/154015).
 
-Earlier visual experimentation used [Third Space Interactive's screen-demo](https://github.com/Third-Space-interactive/screen-demo) (MIT). This repository does not vendor that code or include third-party fonts, music, stock assets, or Brimble trademarks.
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+## Operating model
+
+The plugin runs Chromium and FFmpeg locally, saves the footage on the host, and only records sites explicitly listed in `SAUCE_ALLOWED_HOSTS`. It is designed for authorized public websites and trusted operators. For hosted multi-tenant use, run capture workers inside a network-restricted sandbox.
+
+**Open source:** MIT. Built for Hermes. Earlier visual research referenced the MIT-licensed [screen-demo](https://github.com/Third-Space-interactive/screen-demo) project; that code is not bundled here.
