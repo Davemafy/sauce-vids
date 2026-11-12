@@ -262,3 +262,36 @@ svg { display: block; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Second-pass art direction: keep the liquid away from the product pixels. */
+@media (min-width: 651px) {
+  .stream-wrap { top: 295px; height: 106px; }
+}
+@media (max-width: 650px) {
+  .hero-inner { min-height: 1120px; }
+  .scene { top: 490px; }
+  .bottle-wrap { top: 7px; right: -103px; width: 250px; }
+  .stream-wrap { display: none; }
+  .before-wrap { width: 59%; left: 0; bottom: 432px; }
+  .after-wrap { width: 88%; height: 271px; right: 6%; bottom: 50px; }
+  .after-player { padding: 28px 15px 15px; }
+  .hand-arrow { left: 63%; bottom: 356px; width: 46px; transform: rotate(54deg); }
+  .art-disclaimer { bottom: 15px; right: 7%; }
+}
+@media (max-width: 380px) {
+  .hero-inner { min-height: 1080px; }
+  .scene { top: 472px; }
+  .bottle-wrap { width: 225px; right: -93px; }
+  .before-wrap { bottom: 413px; }
+  .after-wrap { height: 249px; bottom: 50px; }
+  .hand-arrow { bottom: 332px; }
+}
+
+
+/* Keep the edited result close to the first mobile viewport. */
+@media (min-width: 381px) and (max-width: 650px) {
+  .hero-inner { min-height: 1060px; }
+  .before-wrap { bottom: 372px; }
+  .after-wrap { bottom: 60px; }
+  .hand-arrow { bottom: 326px; }
+}
