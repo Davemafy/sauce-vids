@@ -53,3 +53,29 @@ AUTO = {
         "background_asset":{"type":"string","description":"Optional licensed PNG/JPG in SAUCE_ASSET_DIR"}
     }, "required":["url"]}
 }
+
+COMPOSE = {
+    "name": "sauce_compose",
+    "description": "Validate and save Hermes-authored floating-window scene JSON for a verified Sauce browser run. Never chooses creative decisions. Stage source files from the recorded run and approved licensed-assets directory.",
+    "parameters": {"type": "object", "properties": {
+        "run_id": {"type": "string", "description": "Existing Sauce capture run ID"},
+        "project": {"type": "object", "description": "Complete StudioProject v1 object including canvas, one scene, browser framing, background and fixed camera"},
+        "music_asset": {"type": "string", "description": "Optional licensed audio filename in SAUCE_ASSET_DIR"},
+        "background_asset": {"type": "string", "description": "Optional licensed image filename in SAUCE_ASSET_DIR"}
+    }, "required": ["run_id","project"]}
+}
+
+PREVIEW = {
+    "name": "sauce_preview",
+    "description": "Render an actual preview frame from a saved Hermes-authored StudioProject and real captured footage.",
+    "parameters": {"type": "object", "properties": {
+        "run_id": {"type": "string"},
+        "time_s": {"type": "number", "minimum": 0}
+    }, "required": ["run_id"]}
+}
+
+RENDER_PROJECT = {
+    "name": "sauce_render_project",
+    "description": "Render the saved versioned StudioProject to a 1080p MP4 using the Remotion-designed stage and memory-bounded FFmpeg. No generated product UI.",
+    "parameters": {"type": "object", "properties": {"run_id": {"type":"string"}}, "required":["run_id"]}
+}

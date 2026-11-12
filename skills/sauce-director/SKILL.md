@@ -23,3 +23,33 @@ Focus actions only scroll to observed headings. Tabs must be real role=tab
 controls, and links must be approved same-host anchors. Never enter credentials,
 submit destructive forms, purchase, delete or make claims not grounded in
 recordings. Objective QA does not substitute for visual aesthetic inspection.
+
+
+## Studio production mode
+
+The final film's look belongs to Hermes, not `sauce_auto`. After a real
+`sauce_capture` + `sauce_render`, Hermes should choose a versioned
+`StudioProject` based on observed footage and user-provided visual references.
+Use `studio/examples/brimble-first-scene.json` for the schema shape; do not
+impose its look on other products. Current valid Studio projects have one
+static floating-browser scene only (1920×1080, 30fps); the backend rejects
+moving-window camera keyframes and multi-window scenes.
+
+1. Choose a real browser title and the **same** domain found in the capture
+   receipt, with a composition background and safe margins. Never invent app UI.
+2. Call `sauce_compose({run_id,project,music_asset?,background_asset?})`.
+   Requested music/background files must exist in the configured licensed-assets
+   folder; Sauce stages source footage from the verified run.
+3. Call `sauce_preview({run_id,time_s})` at multiple points; visually inspect
+   the actual PNG files with an available image/view tool. Identify text too
+   small for mobile, clipped UI, bad whitespace, distracting crop or weak depth.
+4. Revise and call `sauce_compose` and `sauce_preview` again if needed.
+5. Call `sauce_render_project({run_id})` for the actual 1080p film. Verify
+   the MP4/receipt and return paths. Do not call it professional-looking
+   unless the film was actually reviewed.
+6. Do not claim authenticated product interaction when the only evidence is
+   the public marketing site.
+
+Full Remotion frame-by-frame video exceeded the Vultr worker's 1 GiB memory
+limit. This slice composes the stage with Remotion and composites genuine
+footage/audio with FFmpeg, one operation at a time.

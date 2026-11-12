@@ -23,3 +23,18 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Compile plugin
         run: python -m compileall -q .
+
+  studio-typecheck:
+    name: Studio TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Studio dependencies
+        working-directory: studio
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck Remotion studio
+        working-directory: studio
+        run: npm run typecheck

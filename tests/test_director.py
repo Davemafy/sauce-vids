@@ -31,9 +31,9 @@ class DirectorTest(unittest.TestCase):
         (folder/"recording.webm").write_bytes(b"fake test fixture")
         return folder
 
-    def test_registers_seven_declared_tools(self):
+    def test_registers_ten_declared_tools(self):
         declared = [schemas.CAPTURE, schemas.RENDER, schemas.INSPECT,
-                    schemas.SCOUT, schemas.PLAN, schemas.REVIEW, schemas.AUTO]
+                    schemas.SCOUT, schemas.PLAN, schemas.REVIEW, schemas.AUTO, schemas.COMPOSE, schemas.PREVIEW, schemas.RENDER_PROJECT]
         class Context:
             def __init__(self):
                 self.tools = []
@@ -45,7 +45,7 @@ class DirectorTest(unittest.TestCase):
         pkg.register(ctx)
         self.assertEqual([x["name"] for x in ctx.tools],
                          [x["name"] for x in declared])
-        self.assertEqual(len(ctx.tools),7)
+        self.assertEqual(len(ctx.tools),10)
 
     def test_tab_action_and_heading(self):
         parsed=tools._check_actions([{"type":"click_tab","selector":"[role=tab]",

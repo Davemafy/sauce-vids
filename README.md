@@ -21,6 +21,16 @@ Instead of generating replacement interfaces, Sauce Vids works with **the live p
 
 The package also includes the **`sauce-director` skill**, which describes the capture–render–inspect iteration for Hermes.
 
+## v0.4 — production studio (Hermes directs)
+
+Sauce now includes a real Remotion-based **floating-browser stage** and a memory-bounded FFmpeg compositor. Hermes supplies a versioned scene project, including browser framing, backdrop and licensed audio. Sauce validates actual footage/provenance and renders precisely what was requested without another creative-planning model.
+
+The production loop is `sauce_compose` → `sauce_preview` → Hermes visually critiques the actual frame → `sauce_render_project`. These tools are separate from the old `sauce_auto` first-cut smoke-test heuristic.
+
+A 19.67-second Brimble public-site film, 1920×1080 H.264/AAC, was rendered on the isolated Vultr worker. The browser mockup/window is a composition layer; the content inside is the real captured marketing site, **not** an authenticated Brimble deployment. Only one static floating-window scene is supported in this slice. Dynamic camera paths, independent multi-window layers and full Hermes conversational orchestration have **not** been proven.
+
+The design-system and execution reference is documented in [studio/README.md](studio/README.md). Install Node.js dependencies with `cd studio && npm ci`, ensure FFmpeg and Chromium are available, and set `SAUCE_REMOTION_BROWSER` to the browser binary. Approved licensed assets still come only from `SAUCE_ASSET_DIR`; no third-party audio is bundled.
+
 ## v0.3 — one URL, first-cut MP4
 
 sauce_auto is the one-call entry point. Input: an approved public HTTPS URL,
