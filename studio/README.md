@@ -47,3 +47,25 @@ The 1 GiB Vultr worker could not sustain a full 360-frame Remotion browser rende
 The Brimble public website recording demonstrates marketing-page content, **not** real authenticated agent activity.
 
 Source reference: `Third-Space-interactive/screen-demo` (MIT), https://github.com/Third-Space-interactive/screen-demo . We inspected its components; this Studio implementation is authored separately. Remotion licenses apply independently: https://www.remotion.dev/license .
+
+
+## v0.5 quality baseline (implementation in progress)
+
+New Sauce capture runs produce a **native 1920×1080 / 30fps** original WebM from
+a 1440×810 viewport at device scale 1.5. The renderer uses the original
+source rather than a prior 720p-cropped re-encode and rejects footage smaller
+than the output window aperture. The minimum single-browser width is 1400px.
+
+The separate tab and navigation/address bars are a more faithful browser
+composition, but the updated chrome has passed TypeScript checks **only**.
+An end-to-end preview on the shared VM has not yet passed; the Remotion
+renderer hit its process/concurrency limit. A timed-out process is cleaned
+up with its Chromium children. A visually verified browser screenshot is a
+release gate, not something to claim from compilation.
+
+The old hand-drawn pointer injection is disabled. A genuine OS-style cursor
+needs approved assets, correct hotspots and a separately recorded motion
+track; that feature is not implemented yet. No cursor is preferable to a
+misleading approximation.
+
+Read [../docs/quality-floor-v05.md](../docs/quality-floor-v05.md).

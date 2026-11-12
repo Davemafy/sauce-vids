@@ -81,7 +81,7 @@ export const BrowserWindow: React.FC<{scene: Scene; showFootage?: boolean; settl
   const frame = useCurrentFrame();
   const {browser} = scene;
   const cam = cameraAt(settledFrame ?? frame, scene.camera);
-  const chromeHeight = 54;
+  const chromeHeight = 86;
   const contentHeight = browser.width / browser.aspect_ratio;
   const height = chromeHeight + contentHeight;
   const scale = cam.scale;
@@ -104,41 +104,96 @@ export const BrowserWindow: React.FC<{scene: Scene; showFootage?: boolean; settl
   }}>
     <div style={{
       height:chromeHeight, background:chrome, color:foreground,
-      fontFamily:'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
-      display:'flex', alignItems:'center', position:'relative',
-      borderBottom:dark ? '1px solid #2a2b31' : '1px solid #dedede',
-      boxSizing:'border-box',padding:'0 18px',fontSize:13,
+      fontFamily:'-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif',
+      userSelect:'none', borderBottom:dark ? '1px solid #2b2c31' : '1px solid #d9dadc',
+      boxSizing:'border-box',
     }}>
-      <div style={{display:'flex',gap:8,alignItems:'center',flex:'0 0 125px'}}>
-        {['#ed6a62','#f0c453','#64c76d'].map((color,index)=>
-          <div key={index} style={{
-            width:12,height:12,borderRadius:'50%',
-            background:color,opacity:.94
-          }}/>
-        )}
+      <div style={{
+        height:35,display:'flex',alignItems:'center',gap:8,
+        padding:'0 16px',boxSizing:'border-box',
+        background: dark ? '#25262b' : '#ebecef'
+      }}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginRight:26}}>
+          {['#ff5f57','#febc2e','#28c840'].map((color,index)=>
+            <div key={index} style={{
+              width:12,height:12,borderRadius:'50%',background:color,
+              boxShadow:'inset 0 0 0 .6px rgba(0,0,0,.18)'
+            }}/>
+          )}
+        </div>
+        <div style={{
+          height:31,alignSelf:'end',display:'flex',alignItems:'center',
+          background:dark ? '#34363b' : '#f9f9fa',
+          borderRadius:'11px 11px 0 0',padding:'0 13px',
+          width:245,minWidth:0,boxSizing:'border-box',gap:11
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+               style={{flexShrink:0,opacity:.87}}>
+            <circle cx="12" cy="12" r="8.4" stroke="currentColor" strokeWidth="1.7"/>
+            <path d="M3.9 12h16.2M12 3.7c5.5 5 5.5 11.6 0 16.6M12 3.7c-5.5 5-5.5 11.6 0 16.6"
+              stroke="currentColor" strokeWidth="1.1"/>
+          </svg>
+          <span style={{fontSize:13,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',
+                        textOverflow:'ellipsis',flex:1,letterSpacing:'-.01em'}}>
+            {browser.title}
+          </span>
+          <span style={{fontSize:15,lineHeight:'14px',opacity:.53,marginLeft:4}}>×</span>
+        </div>
+        <span style={{fontSize:19,opacity:.57,marginLeft:10}}>+</span>
       </div>
       <div style={{
-        display:'flex',alignItems:'center',gap:9,
-        maxWidth:250,minWidth:170,
-        background:dark ? '#28292e' : '#eae9e8',
-        borderRadius:'9px 9px 0 0', height:38,
-        alignSelf:'end', padding:'0 17px',
-        boxSizing:'border-box', letterSpacing:'-.01em'
+        height:50,display:'flex',alignItems:'center',gap:19,
+        padding:'0 17px',boxSizing:'border-box',
+        background:dark ? '#34363b' : '#f9f9fa',
+        borderTop: dark ? '1px solid rgba(255,255,255,.03)' : '1px solid #ebebeb'
       }}>
-        <span style={{opacity:.76,fontSize:11}}>◈</span>
-        <span style={{textOverflow:'ellipsis',whiteSpace:'nowrap',overflow:'hidden'}}>
-          {browser.title}
-        </span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+             style={{opacity:.67,flexShrink:0}}>
+          <path d="m15 5-7 7 7 7" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+             style={{opacity:.35,flexShrink:0}}>
+          <path d="m9 5 7 7-7 7" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+             style={{opacity:.75,flexShrink:0}}>
+          <path d="M20.5 8A9 9 0 1 0 21 12M20.5 3v5h-5"
+                stroke="currentColor" strokeWidth="1.9"
+                strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <div style={{
+          height:36,flex:1,minWidth:0,borderRadius:18,display:'flex',alignItems:'center',
+          background:dark ? '#24252a' : '#e9eaed',
+          border:dark?'1px solid rgba(255,255,255,.055)':'1px solid #dfe0e3',
+          padding:'0 15px',boxSizing:'border-box',gap:10
+        }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+               style={{opacity:.56,flexShrink:0}}>
+            <rect x="5" y="10.5" width="14" height="10" rx="2"
+                  stroke="currentColor" strokeWidth="1.8"/>
+            <path d="M8 10V7a4 4 0 0 1 8 0v3"
+                  stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+          </svg>
+          <span style={{
+            fontSize:13,opacity:.8,overflow:'hidden',whiteSpace:'nowrap',
+            textOverflow:'ellipsis',letterSpacing:'.005em'
+          }}>{browser.url}</span>
+        </div>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+             style={{opacity:.68,flexShrink:0}}>
+          <path d="M12 17V3m0 0L8 7m4-4 4 4M5 13v7h14v-7"
+                stroke="currentColor" strokeWidth="1.7"
+                strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <svg width="19" height="19" viewBox="0 0 24 24"
+             style={{opacity:.69,flexShrink:0}} fill="currentColor">
+          <circle cx="12" cy="5" r="1.65"/>
+          <circle cx="12" cy="12" r="1.65"/>
+          <circle cx="12" cy="19" r="1.65"/>
+        </svg>
       </div>
-      <div style={{
-        position:'absolute',left:'54%',top:'50%',
-        transform:'translate(-50%,-50%)',
-        opacity:.55,fontSize:12,letterSpacing:'.005em',
-        whiteSpace:'nowrap'
-      }}>
-        {browser.url}
-      </div>
-      <div style={{marginLeft:'auto',opacity:.65,fontSize:17,paddingRight:8}}>＋</div>
     </div>
     <div style={{width:browser.width,height:contentHeight,background:'#f4f5f5'}}>
       {showFootage && <OffthreadVideo

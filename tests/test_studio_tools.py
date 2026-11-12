@@ -57,6 +57,18 @@ class StudioBridgeTests(unittest.TestCase):
         self.assertEqual(saved["provenance"]["source_url"],"https://www.example.com/app")
         self.assertEqual((self.stage/"footage/demo-123.mp4").read_bytes(),b"authentic-recording-fixture")
 
+    def test_compose_prefers_unprocessed_webm_over_legacy_mp4(self):
+        folder=self._captured()
+        (folder/"recording.webm").write_bytes(b"native-1080p-webm")
+        project=copy.deepcopy(EXAMPLE)
+        project["scenes"][0]["browser"]["url"]="example.com/app"
+        project.pop("audio",None)
+        result=json.loads(studio_tools.compose({"run_id":"demo-123","project":project}))
+        self.assertTrue(result["ok"],result)
+        saved=json.loads((folder/"studio-project.json").read_text())["project"]
+        self.assertEqual(saved["scenes"][0]["footage"],"footage/demo-123.webm")
+        self.assertEqual((self.stage/"footage/demo-123.webm").read_bytes(),b"native-1080p-webm")
+
     def test_compose_rejects_spoofed_url(self):
         self._captured()
         project=copy.deepcopy(EXAMPLE)

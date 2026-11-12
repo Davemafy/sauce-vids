@@ -91,6 +91,7 @@ class PluginTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             with (patch.dict(sys.modules,{"playwright":module_main,
                                           "playwright.sync_api":module_sync}),
+                  patch.object(tools,"_verify_recording",return_value={"duration_s":3.0,"width":1920,"height":1080,"fps":30.0}),
                   patch.object(tools,"_url",return_value="example.com"),
                   patch.object(tools,"ROOT",Path(d))):
                 result=json.loads(tools.capture({
@@ -104,6 +105,32 @@ class PluginTest(unittest.TestCase):
             self.assertEqual(result["events"][1]["position"]["x"],725)
             self.assertTrue(result["events"][1]["media_guided"])
             self.assertIn("start_time",result["events"][1])
+
+    def test_capture_quality_profile_preserves_native_frames(self):
+        self.assertEqual(tools.CAPTURE_SIZE, {"width":1920,"height":1080})
+        self.assertEqual(tools.CAPTURE_FPS,30)
+        self.assertEqual(tools.CAPTURE_VIEWPORT,{"width":1440,"height":810})
+        self.assertFalse(hasattr(tools,"CURSOR"))
+
+    def test_recording_verifier_rejects_empty_and_wrong_framerate(self):
+        from unittest.mock import patch, MagicMock
+        good=json.dumps({"streams":[{"codec_type":"video","width":1920,
+            "height":1080,"avg_frame_rate":"30/1"}],
+            "format":{"duration":"5.4"}})
+        broken=json.dumps({"streams":[{"codec_type":"video","width":1440,
+            "height":900,"avg_frame_rate":"25/1"}],
+            "format":{"duration":"5.4"}})
+        with patch.object(tools.shutil,"which",return_value="/usr/bin/ffprobe"):
+            with patch.object(tools.subprocess,"run",return_value=MagicMock(returncode=0,stdout=good)):
+                receipt=tools._verify_recording(Path("recording.webm"))
+                self.assertEqual(receipt["fps"],30)
+                self.assertEqual(receipt["width"],1920)
+            with patch.object(tools.subprocess,"run",return_value=MagicMock(returncode=0,stdout=broken)):
+                with self.assertRaisesRegex(RuntimeError,"baseline"):
+                    tools._verify_recording(Path("recording.webm"))
+            with patch.object(tools.subprocess,"run",return_value=MagicMock(returncode=1,stdout="")):
+                with self.assertRaisesRegex(RuntimeError,"unreadable"):
+                    tools._verify_recording(Path("recording.webm"))
 
     def test_tool_errors_are_json(self):
         self.assertFalse(json.loads(tools.capture({"project":"../secrets","url":"https://www.brimble.io"}))["ok"])

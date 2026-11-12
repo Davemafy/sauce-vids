@@ -53,3 +53,16 @@ moving-window camera keyframes and multi-window scenes.
 Full Remotion frame-by-frame video exceeded the Vultr worker's 1 GiB memory
 limit. This slice composes the stage with Remotion and composites genuine
 footage/audio with FFmpeg, one operation at a time.
+
+
+## Non-negotiable visual integrity (v0.5)
+
+Treat fidelity as an engine invariant, not a creative preference. Do not pass
+old 25fps/1440x900 footage through the 720p editor and label it 1080p.
+The capture tool now verifies real 30fps native footage before declaring
+success. Studio may reject a source if rendering would enlarge its pixels.
+Never invent a pointer, browser UI, product outcome or accessibility claim.
+If a product's own UI is too dense to remain legible in a floating frame,
+tell Hermes to request a tighter *real-footage* crop/fullscreen shot; do not
+fabricate or repaint the application. Current static Studio does not yet
+support those advanced shots and must not silently pretend otherwise.

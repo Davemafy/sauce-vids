@@ -22,7 +22,7 @@ class StudioContractTests(unittest.TestCase):
         config=self.valid(EXAMPLE)
         self.assertEqual(config["window"]["width"],1490)
         self.assertEqual(config["window"]["x"],215)
-        self.assertEqual(config["window"]["y"],148)
+        self.assertEqual(config["window"]["y"],180)
         self.assertEqual(config["window"]["height"],838)
 
     def test_rejects_traversal_and_remote_paths(self):
@@ -53,6 +53,18 @@ class StudioContractTests(unittest.TestCase):
             with self.subTest(mutation=repr(mutation)):
                 with self.assertRaises(ValueError):
                     self.valid(data)
+
+    def test_rejects_tiny_browser_even_when_agent_requests_it(self):
+        data=copy.deepcopy(EXAMPLE)
+        data["project"]["scenes"][0]["browser"]["width"]=850
+        with self.assertRaisesRegex(ValueError,"framing is invalid"):
+            self.valid(data)
+
+    def test_refuses_to_enlarge_source_pixels(self):
+        with patch.object(module,"approved_file",return_value=Path("/tmp/sample.mp4")):
+            with patch.object(module,"_duration",return_value=(20,1440,810)):
+                with self.assertRaisesRegex(ValueError,"smaller than the displayed"):
+                    module.validate(EXAMPLE,"ffprobe")
 
     def test_real_media_ratio_must_match_scene(self):
         with patch.object(module,"approved_file",return_value=Path("/tmp/sample.mp4")):

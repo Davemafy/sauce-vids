@@ -96,14 +96,18 @@ def validate(props: dict, ffprobe: str) -> dict:
     ratio = browser.get("aspect_ratio")
     if (not all(type(v) in (int,float) and math.isfinite(v)
                 for v in (bwidth,x,y,radius,ratio))
-        or not 700 <= bwidth <= 1650 or not 0 <= x
+        or not 1400 <= bwidth <= 1650 or not 0 <= x
         or not 0 <= y or not 0 <= radius <= 36
         or not 1.2 <= ratio <= 2.5):
         raise ValueError("Browser framing is invalid")
     if abs(ratio - (video_w/video_h)) > .015:
         raise ValueError("Window aspect ratio differs from recorded video; refusing to stretch UI")
     video_height = round(bwidth/ratio)
-    chrome_h = 54
+    # Never enlarge under-resolved screen pixels. A 720p or 1440px legacy
+    # capture cannot magically become readable by rendering at 1080p.
+    if video_w < bwidth or video_h < video_height:
+        raise ValueError("Source capture is smaller than the displayed window; recapture at native resolution")
+    chrome_h = 86
     if x + bwidth > width or y + video_height + chrome_h > height:
         raise ValueError("Browser content would extend beyond the canvas")
     for key in ("title","url"):
@@ -132,9 +136,27 @@ def validate(props: dict, ffprobe: str) -> dict:
 
 
 def command(args:list[str], timeout:int=300) -> None:
-    result=subprocess.run(args,cwd=STUDIO,timeout=timeout)
-    if result.returncode:
-        raise RuntimeError(f"Render command exited {result.returncode}")
+    """Own the entire renderer process group, including Chromium grandchildren."""
+    import signal
+    child = subprocess.Popen(args, cwd=STUDIO, start_new_session=True)
+    try:
+        exit_code = child.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        # subprocess.run() kills only its direct child. npx -> node -> Chrome
+        # can otherwise survive indefinitely and exhaust the 1GiB worker.
+        try:
+            os.killpg(child.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            child.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            try: os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError: pass
+            child.wait()
+        raise RuntimeError(f"Render timed out after {timeout}s; all Sauce child processes terminated")
+    if exit_code:
+        raise RuntimeError(f"Render command exited {exit_code}")
 
 
 def render(project_file:Path, output:Path, preview_at:float|None, browser_exe:str|None) -> dict:

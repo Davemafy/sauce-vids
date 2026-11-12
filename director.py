@@ -117,7 +117,7 @@ def scout(args, **kwargs):
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
             try:
-                ctx = browser.new_context(viewport={"width": 1440, "height": 900},
+                ctx = browser.new_context(viewport={"width": 1440, "height": 810},
                                           device_scale_factor=1)
                 page = ctx.new_page()
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)

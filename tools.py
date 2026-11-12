@@ -97,21 +97,38 @@ def _wait_for_expected_heading(page, heading):
     )
 
 
-CURSOR = r"""(() => {
-  const id='sauce-pointer';
-  function mount() {
-    if (document.getElementById(id)) return;
-    const n=document.createElement('div');n.id=id;
-    n.style.cssText='position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;display:none;width:28px;height:36px;filter:drop-shadow(0 1px 1px #0004)';
-    n.innerHTML='<svg viewBox="0 0 28 36" width="28" height="36"><path d="M3 2 V27 L9 21 L15 33 L20 30 L14 19 H24 Z" fill="#17181c" stroke="white" stroke-width="2.3" stroke-linejoin="round"/></svg>';
-    document.documentElement.appendChild(n);
-  }
-  document.addEventListener('DOMContentLoaded',mount);
-  document.addEventListener('mousemove',(e)=>{
-    mount();const n=document.getElementById(id);
-    n.style.display='block';n.style.transform='translate('+(e.clientX-4)+'px,'+(e.clientY-2)+'px)';
-  },true);
-})();"""
+# Cursor rendering deliberately happens AFTER capture. Browser-screencast
+# footage is kept clean; hand-drawn DOM pointers are not acceptable artifacts.
+CAPTURE_VIEWPORT = {"width": 1440, "height": 810}
+CAPTURE_SIZE = {"width": 1920, "height": 1080}
+CAPTURE_FPS = 30
+CAPTURE_DEVICE_SCALE = 1.5
+
+def _verify_recording(path):
+    """Verify real frames were saved; a valid EBML header alone is not proof."""
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        raise RuntimeError("ffprobe is required to verify the browser recording")
+    result = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries",
+         "format=duration:stream=codec_type,width,height,avg_frame_rate",
+         "-of", "json", str(path)],
+        capture_output=True, text=True, timeout=25,
+    )
+    if result.returncode:
+        raise RuntimeError("Browser recording is unreadable or empty")
+    metadata = json.loads(result.stdout)
+    videos = [v for v in metadata.get("streams", []) if v.get("codec_type") == "video"]
+    if not videos:
+        raise RuntimeError("No video stream in browser recording")
+    video = videos[0]
+    from fractions import Fraction
+    fps = float(Fraction(video.get("avg_frame_rate", "0/1")))
+    duration = float(metadata.get("format", {}).get("duration", 0))
+    if duration <= 0.5 or video.get("width") != 1920 or video.get("height") != 1080 or fps < 29.5:
+        raise RuntimeError("Recording does not meet native 1080p/30fps baseline")
+    return {"duration_s":duration, "width":1920, "height":1080, "fps":fps}
+
 
 def capture(args, **kwargs):
     try:
@@ -125,10 +142,15 @@ def capture(args, **kwargs):
         events = []
         start = time.monotonic()
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
-            context = browser.new_context(viewport={"width": 1440, "height": 900},
-                                          record_video_dir=str(folder), record_video_size={"width": 1440, "height": 900})
-            context.add_init_script(CURSOR)
+            browser = pw.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+            context = browser.new_context(
+                viewport=CAPTURE_VIEWPORT,
+                device_scale_factor=CAPTURE_DEVICE_SCALE,
+                record_video_dir=str(folder),
+                record_video_size=CAPTURE_SIZE,
+                record_video_fps=CAPTURE_FPS,
+                reduced_motion="reduce",
+            )
             page = context.new_page()
             page.set_default_timeout(10000)
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
@@ -208,8 +230,16 @@ def capture(args, **kwargs):
             context.close()
             video.save_as(str(folder/"recording.webm"))
             browser.close()
+        media = _verify_recording(folder/"recording.webm")
         info = {"run_id":run_id,"source":"continuous Chromium recording","url":url,
                 "events":events,"recording":str(folder/"recording.webm"),
+                "verified_media":media,
+                "capture_profile":{"viewport":CAPTURE_VIEWPORT,
+                                   "video":CAPTURE_SIZE,
+                                   "fps":CAPTURE_FPS,
+                                   "device_scale_factor":CAPTURE_DEVICE_SCALE,
+                                   "reduced_motion":"reduce",
+                                   "cursor":"not_baked_into_pixels"},
                 "claims":"Public website only; no authenticated deployment or customer action proved."}
         (folder/"capture.json").write_text(json.dumps(info,indent=2))
         return _receipt(ok=True, **info)

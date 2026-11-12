@@ -21,6 +21,29 @@ Instead of generating replacement interfaces, Sauce Vids works with **the live p
 
 The package also includes the **`sauce-director` skill**, which describes the capture–render–inspect iteration for Hermes.
 
+## v0.5 — source-quality baseline
+
+Sauce now records approved public websites as **1920×1080 / 30 fps VP9**
+from a 1440×810 browser viewport at 1.5× device scale, with the browser's
+reduced-motion preference enabled to prioritize stable demonstrations. A real
+`ffprobe` check confirms that footage contains the required video stream,
+dimensions, frame rate and duration before Sauce reports capture success.
+A zero-byte or corrupted recording is a failure, not a successful demo.
+
+The former hand-drawn pointer injection is disabled: it was neither an
+authentic macOS nor Windows cursor. The compositor now prioritizes the native
+source WebM, avoiding the old 720p intermediate zoom/render pipeline.
+The Studio renderer rejects sources smaller than their intended display
+aperture rather than stretching low-resolution UI.
+
+The browser header has been rebuilt with separate tab and navigation/address
+rows. A faithful OS-style cursor **rendered from tracked pointer events** is
+still a pending quality gate; an absent cursor is preferable to a fake one.
+Capture of CSS animations is intentionally reduced for stability, but real
+dynamic product interactions must eventually have an explicit opt-in
+motion-preservation mode. The new header still needs visual verification
+on an unconstrained renderer and is not considered launch-ready.
+
 ## v0.4 — production studio (Hermes directs)
 
 Sauce now includes a real Remotion-based **floating-browser stage** and a memory-bounded FFmpeg compositor. Hermes supplies a versioned scene project, including browser framing, backdrop and licensed audio. Sauce validates actual footage/provenance and renders precisely what was requested without another creative-planning model.

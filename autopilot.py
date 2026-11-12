@@ -133,7 +133,7 @@ def make_shots(events: list[dict], source_duration: float,
         title = event.get("label") or ("Overview" if mode=="wait" else mode.replace("_"," ").title())
         pos = event.get("position") or {}
         fx = max(0.1,min(0.9,float(pos.get("x",720))/1440))
-        fy = max(0.1,min(0.9,float(pos.get("y",450))/900))
+        fy = max(0.1,min(0.9,float(pos.get("y",405))/810))
         zoom = 1.0 if mode=="wait" else (1.18 if event.get("media_guided") else 1.08)
         result.append({"start_s":round(start,3), "end_s":round(end,3),
                        "zoom":zoom,"focus_x":round(fx,3),"focus_y":round(fy,3),

@@ -1,5 +1,5 @@
 name: sauce-vids
-version: 0.4.0
+version: 0.5.0
 description: Record real product interactions and render authentic SaaS demos with licensed assets.
 provides_tools:
   - sauce_capture
@@ -15,5 +15,5 @@ provides_tools:
 requires_env:
   - SAUCE_ALLOWED_HOSTS
 python_dependencies:
-  - "playwright>=1.55,<2"
+  - "playwright>=1.64,<2"
   - "Pillow>=11,<13"

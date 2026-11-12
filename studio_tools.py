@@ -42,11 +42,15 @@ def compose(args, **kwargs):
     """Store a validated Hermes-selected composition for one captured run."""
     try:
         ident, folder = _run(args.get("run_id"))
-        source = folder / "final.mp4"
+        # Composite the ORIGINAL video when available. Reusing final.mp4
+        # would bake in the legacy 720p zoom, scaling and second encode.
+        source = folder / "recording.webm"
+        if not source.is_file():
+            source = folder / "final.mp4"  # Compatibility with older runs
         capture_file = folder / "capture.json"
         if (not source.is_file() or source.is_symlink()
             or not capture_file.is_file() or capture_file.is_symlink()):
-            raise ValueError("Real browser capture receipt and final.mp4 required")
+            raise ValueError("Real browser capture receipt and original recording required")
         receipt = json.loads(capture_file.read_text())
         actual_url = receipt.get("url")
         if not isinstance(actual_url, str) or not actual_url.startswith("https://"):
@@ -68,7 +72,7 @@ def compose(args, **kwargs):
             raise ValueError("Browser address must match the captured site")
         stage_dir = engine.STATIC / "footage"
         stage_dir.mkdir(parents=True, exist_ok=True)
-        stage_name = f"footage/{ident}.mp4"
+        stage_name = f"footage/{ident}{source.suffix}"
         shutil.copyfile(source, engine.STATIC / stage_name)
         scene["footage"] = stage_name
         # The footage is always the actual captured run. Never trust an
