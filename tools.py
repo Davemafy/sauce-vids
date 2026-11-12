@@ -137,15 +137,19 @@ def capture(args, **kwargs):
                 if mode == "scroll":
                     page.mouse.wheel(0, action["pixels"])
                 elif mode in ("hover", "focus"):
-                    el = page.locator(action["selector"]).first()
-                    el.scroll_into_view_if_needed()
+                    el = page.locator(action["selector"]).first
+                    if mode == "focus":
+                        el.evaluate("(node)=>node.scrollIntoView({behavior:'smooth',block:'center'})")
+                        page.wait_for_timeout(650)
+                    else:
+                        el.scroll_into_view_if_needed()
                     box = el.bounding_box()
                     if box is None: raise RuntimeError("Target not visible")
                     x,y = box["x"]+box["width"]/2,box["y"]+box["height"]/2
                     position = {"x":round(x,1),"y":round(y,1)}
                     page.mouse.move(x,y,steps=26)
                 elif mode == "click_link":
-                    el = page.locator(action["selector"]).first()
+                    el = page.locator(action["selector"]).first
                     el.scroll_into_view_if_needed()
                     if el.evaluate("(e)=>e.tagName.toLowerCase()") != "a":
                         raise ValueError("Only actual anchor links can be clicked")
@@ -161,7 +165,7 @@ def capture(args, **kwargs):
                     page.wait_for_load_state("domcontentloaded",timeout=15000)
                     _url(page.url, host)
                 elif mode == "click_tab":
-                    el = page.locator(action["selector"]).first()
+                    el = page.locator(action["selector"]).first
                     if el.get_attribute("role") != "tab":
                         raise ValueError("Only role=tab controls can use click_tab")
                     el.scroll_into_view_if_needed()

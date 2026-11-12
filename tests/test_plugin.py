@@ -60,6 +60,47 @@ class PluginTest(unittest.TestCase):
             state="visible", timeout=15000
         )
 
+    def test_capture_uses_playwright_locator_first_property(self):
+        import contextlib
+        import tempfile
+        import types
+        from unittest.mock import MagicMock, patch
+        class Locator:
+            @property
+            def first(self):
+                return self
+            def evaluate(self, *a, **kw):
+                return None
+            def bounding_box(self):
+                return {"x":200,"y":220,"width":300,"height":80}
+        locator=Locator()
+        page=MagicMock()
+        page.url="https://example.com"
+        page.locator.return_value=locator
+        page.video.save_as.side_effect=lambda path:Path(path).write_bytes(b"webm")
+        context=MagicMock()
+        context.new_page.return_value=page
+        browser=MagicMock()
+        browser.new_context.return_value=context
+        playwright=MagicMock()
+        playwright.chromium.launch.return_value=browser
+        module_sync=types.ModuleType("playwright.sync_api")
+        module_sync.sync_playwright=lambda:contextlib.nullcontext(playwright)
+        module_main=types.ModuleType("playwright")
+        module_main.sync_api=module_sync
+        with tempfile.TemporaryDirectory() as d:
+            with (patch.dict(sys.modules,{"playwright":module_main,
+                                          "playwright.sync_api":module_sync}),
+                  patch.object(tools,"_url",return_value="example.com"),
+                  patch.object(tools,"ROOT",Path(d))):
+                result=json.loads(tools.capture({
+                  "project":"demo","url":"https://example.com",
+                  "actions":[{"type":"focus","selector":"h1",
+                              "label":"Observed heading","seconds":0.1}]}))
+            self.assertTrue(result["ok"],result)
+            self.assertEqual(result["events"][1]["label"],"Observed heading")
+            self.assertIn("start_time",result["events"][1])
+
     def test_tool_errors_are_json(self):
         self.assertFalse(json.loads(tools.capture({"project":"../secrets","url":"https://www.brimble.io"}))["ok"])
         self.assertFalse(json.loads(tools.render({"run_id":"../secrets"}))["ok"])

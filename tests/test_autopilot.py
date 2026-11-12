@@ -30,6 +30,20 @@ class AutoTest(unittest.TestCase):
         self.assertFalse(any(a.get("selector")=="#contact" for a in actions))
         self.assertEqual(actions[-1]["type"],"click_tab")
 
+    def test_prefers_illustrated_feature_sequence_to_generic_footer(self):
+        observed={"document_height":3200,"controls":[],
+                  "headings":[
+                      {"tag":"H3","text":"Launch with one click","selector":"#f1","document_y":600},
+                      {"tag":"H3","text":"Watch deployment logs","selector":"#f2","document_y":830},
+                      {"tag":"H3","text":"Fix a pull request","selector":"#f3","document_y":1100},
+                      {"tag":"H3","text":"Watch a website get built","selector":"#f4","document_y":1440},
+                      {"tag":"H2","text":"You ask. It works. You stay in charge.",
+                       "selector":"#generic","document_y":1950}]}
+        actions=autopilot.select_actions(observed,20)
+        self.assertEqual([a.get("selector") for a in actions if a["type"]=="focus"],
+                         ["#f1","#f2","#f3","#f4"])
+        self.assertGreater(actions[1]["seconds"],2.2)
+
     def test_fallback_scrolling_for_sparse_heading_pages(self):
         observed={"document_height":4200,"headings":[],"controls":[]}
         actions=autopilot.select_actions(observed,20)
@@ -60,6 +74,20 @@ class AutoTest(unittest.TestCase):
         self.assertTrue(all(0<=s["start_s"]<s["end_s"]<=10 for s in shots))
         self.assertEqual(shots[0]["zoom"],1.0)
         self.assertGreater(shots[1]["focus_x"],0.5)
+
+    def test_preserves_all_sections_under_length_limit(self):
+        events=[{"type":"page","time":1},
+                {"type":"wait","start_time":1,"time":3.5}]
+        t=3.5
+        for i in range(5):
+            events.append({"type":"focus","start_time":t,"time":t+4.8,
+                           "label":"Feature "+str(i),
+                           "position":{"x":400 if i%2 else 1000,"y":450}})
+            t+=4.8
+        shots=autopilot.make_shots(events,t+1,20)
+        self.assertEqual(len(shots),6)
+        self.assertEqual(shots[-1]["label"],"Feature 4")
+        self.assertLessEqual(sum(s["end_s"]-s["start_s"] for s in shots),20.01)
 
     def test_output_target_bounds(self):
         for value in (0,7,40,float("nan")):

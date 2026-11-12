@@ -74,7 +74,10 @@ SCOUT_JS = r"""() => {
     .filter(el=>{const b=el.getBoundingClientRect();return b.width>0 && b.height>0;})
     .slice(0,60).map(el=>{
       const b=el.getBoundingClientRect();
+      const region=el.closest('section');
+      const regionHeading=region && region.querySelector('h1,h2');
       return {text:(el.innerText||el.textContent||'').trim().slice(0,110),
+              section_title:regionHeading ? (regionHeading.innerText||'').trim().slice(0,100) : '',
               tag:el.tagName,selector:selector(el),
               document_y:Math.round(b.top+window.scrollY),
               center_x:Math.round(b.left+b.width/2),

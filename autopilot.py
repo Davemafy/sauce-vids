@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from . import director, tools
 
 BLOCKLIST = re.compile(
-    r"\b(login|log in|sign in|sign up|pricing|billing|checkout|subscribe|"
+    r"\b(login|log in|sign in|sign up|pricing|billing|checkout|subscribe|faq|trial|"
     r"buy|delete|logout|log out|account|terms|privacy|legal|cookie)\b", re.I
 )
 FOOTER = re.compile(r"\b(footer|contact us|newsletter|legal|copyright)\b", re.I)
@@ -28,7 +28,7 @@ def select_actions(observed: dict, target_seconds: float) -> list[dict]:
     headings = observed.get("headings", [])
     if not isinstance(headings, list):
         raise ValueError("Invalid heading observations")
-    actions = [{"type": "wait", "seconds": 2.2}]
+    actions = [{"type": "wait", "seconds": min(3.0, max(2.2, target_seconds/8))}]
     page_height = max(900.0, float(observed.get("document_height", 900)))
     candidates = []
     seen = set()
@@ -40,22 +40,31 @@ def select_actions(observed: dict, target_seconds: float) -> list[dict]:
         y = item.get("document_y")
         if not isinstance(y, (int, float)) or not math.isfinite(y):
             continue
+        section_title = str(item.get("section_title", ""))
         if (not isinstance(text, str) or not 5 <= len(text) <= 105
             or not isinstance(selector, str) or len(selector) > 150
             or not selector or FOOTER.search(text) or BLOCKLIST.search(text)
+            or BLOCKLIST.search(section_title)
+            or text.endswith("?") or section_title.lower().startswith("faq")
             or item.get("tag") not in ("H1", "H2", "H3")):
             continue
         y = float(y)
         # Initial hero is already shown in the opening scene.
-        if y < 650 or y > page_height - 50:
+        if y < 480 or y > page_height - 50:
             continue
         key = text.casefold()
         if key in seen:
             continue
         seen.add(key)
         candidates.append({"text": text, "selector": selector, "y": y,
+                           "tag": item["tag"],
                            "x": float(item.get("center_x", 720))})
     candidates.sort(key=lambda c: c["y"])
+    feature_headings = [item for item in candidates if item["tag"] == "H3"]
+    if len(feature_headings) >= 4:
+        # A clustered sequence of feature cards usually shows the actual
+        # interface better than a distant generic closing/value statement.
+        candidates = feature_headings
 
     max_actions = min(8, max(2, int((target_seconds - 3.0) / 2.3)))
     # Reduce coverage evenly across the document, rather than choosing the first
@@ -64,9 +73,10 @@ def select_actions(observed: dict, target_seconds: float) -> list[dict]:
         picks = [round(i * (len(candidates)-1) / (max_actions-1))
                  for i in range(max_actions)]
         candidates = [candidates[i] for i in picks]
+    dwell = min(3.0,max(2.25,(target_seconds-3.5)/max(1,len(candidates))))
     for item in candidates:
         actions.append({"type": "focus", "selector": item["selector"],
-                        "label": item["text"][:100], "seconds": 2.25})
+                        "label": item["text"][:100], "seconds": dwell})
 
     if len(candidates) < 2 and page_height > 1600:
         # Fallback for pages with few semantic headings: real scrolling only.
@@ -127,20 +137,28 @@ def make_shots(events: list[dict], source_duration: float,
         end=min(float(source_duration), float(target_seconds), 20)
         result=[{"start_s":0.15,"end_s":end,"zoom":1.0,
                  "focus_x":0.5,"focus_y":0.5,"label":"Overview"}]
-    # Never cut an observation out of time order. Trim final shots if the
-    # recording is longer than requested; shorter input stays shorter.
-    total = 0.0
-    clipped = []
-    for shot in result:
-        remaining = float(target_seconds)-total
-        if remaining < 0.55:
-            break
-        duration = shot["end_s"]-shot["start_s"]
-        if duration > remaining:
-            shot = {**shot, "end_s":round(shot["start_s"]+remaining,3)}
-        clipped.append(shot)
-        total += shot["end_s"]-shot["start_s"]
-    return clipped
+    # Allocate time across ALL observed sections. Truncating the tail drops
+    # key product features when smooth scrolling takes longer than expected.
+    total = sum(s["end_s"]-s["start_s"] for s in result)
+    if total <= target_seconds:
+        return result
+    if len(result) == 1:
+        first=result[0]
+        return [{**first,"end_s":round(min(first["end_s"],first["start_s"]+target_seconds),3)}]
+    first=result[0]
+    opening=min(first["end_s"]-first["start_s"],
+                max(1.6,min(2.5,target_seconds*0.13)))
+    remaining=max(0,target_seconds-opening)
+    others=result[1:]
+    budget=remaining/len(others)
+    selected=[{**first,"end_s":round(first["start_s"]+opening,3)}]
+    for shot in others:
+        # Keep the latest stable portion after the verified scroll settles.
+        cut=min(shot["end_s"]-shot["start_s"],budget)
+        if cut < 0.55:
+            continue
+        selected.append({**shot,"start_s":round(shot["end_s"]-cut,3)})
+    return selected
 
 
 def run(args: dict, **kwargs) -> str:
