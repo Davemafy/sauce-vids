@@ -1,0 +1,50 @@
+{
+  "project": {
+    "schema_version": 1,
+    "canvas": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration_frames": 590
+    },
+    "background": {
+      "kind": "preset",
+      "preset": "lilac-sunset"
+    },
+    "scenes": [
+      {
+        "id": "brimble-stage-01",
+        "start_frame": 0,
+        "duration_frames": 590,
+        "footage": "footage/brimble-autonomous.mp4",
+        "footage_start_frame": 0,
+        "browser": {
+          "title": "Brimble Agent",
+          "url": "brimble.io/agent",
+          "chrome": "dark",
+          "width": 1490,
+          "x": 215,
+          "y": 94,
+          "radius": 18,
+          "aspect_ratio": 1.7777777777777777
+        },
+        "camera": [
+          {
+            "frame": 0,
+            "scale": 1,
+            "focus_x": 0.5,
+            "focus_y": 0.5
+          }
+        ]
+      }
+    ],
+    "audio": {
+      "file": "audio/digital-clouds-mixkit.mp3",
+      "volume": 0.14
+    },
+    "provenance": {
+      "run_id": "brimble-33f3d80cfb",
+      "source_url": "https://www.brimble.io/agent"
+    }
+  }
+}

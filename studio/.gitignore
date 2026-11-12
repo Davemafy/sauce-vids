@@ -1,0 +1,10 @@
+node_modules/
+public/footage/
+public/audio/
+out/
+*.mp4
+*.webm
+
+.tmp/
+.cache/
+
