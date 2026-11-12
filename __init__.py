@@ -1,6 +1,6 @@
 """Sauce Vids native Hermes tool registration."""
 from pathlib import Path
-from . import tools, schemas, director
+from . import tools, schemas, director, autopilot
 
 def register(ctx):
     for name, handler, schema in (
@@ -10,6 +10,7 @@ def register(ctx):
         ("sauce_scout", director.scout, schemas.SCOUT),
         ("sauce_plan", director.plan, schemas.PLAN),
         ("sauce_review", director.review, schemas.REVIEW),
+        ("sauce_auto", autopilot.run, schemas.AUTO),
     ):
         ctx.register_tool(name=name, toolset="sauce_vids", schema=schema, handler=handler)
     ctx.register_skill("sauce-director", str(Path(__file__).parent / "skills" / "sauce-director" / "SKILL.md"))

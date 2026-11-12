@@ -72,7 +72,14 @@ SCOUT_JS = r"""() => {
   }
   const headings=[...document.querySelectorAll('h1,h2,h3,[role="heading"]')]
     .filter(el=>{const b=el.getBoundingClientRect();return b.width>0 && b.height>0;})
-    .slice(0,35).map(el=>({text:el.innerText.trim().slice(0,110),tag:el.tagName}));
+    .slice(0,60).map(el=>{
+      const b=el.getBoundingClientRect();
+      return {text:(el.innerText||el.textContent||'').trim().slice(0,110),
+              tag:el.tagName,selector:selector(el),
+              document_y:Math.round(b.top+window.scrollY),
+              center_x:Math.round(b.left+b.width/2),
+              screen_y:Math.round(b.top+b.height/2)};
+    });
   const controls=[...document.querySelectorAll('a[href],[role="tab"]')]
     .filter(el=>{const b=el.getBoundingClientRect();return b.width>0 && b.height>0;})
     .slice(0,90).map(el=>{
@@ -223,18 +230,17 @@ def render_edited(args):
     keys=[]
     for i,shot in enumerate(shots):
         zoom=shot["zoom"]
-        crop_w=round(1920/zoom/2)*2
-        crop_h=round(1080/zoom/2)*2
-        left=round((1920-crop_w)*shot["focus_x"]/2)*2
-        top=round((1080-crop_h)*shot["focus_y"]/2)*2
-        left=min(left,1920-crop_w)
-        top=min(top,1080-crop_h)
-        # Preserve browser pixels and keep all shots on the same output canvas.
+        # Progressive camera push over genuine footage. Work at 720p to
+        # reduce filter memory consumption in the 1GiB worker.
+        clip_seconds=max(0.25,shot["end_s"]-shot["start_s"])
+        step=max(0,(zoom-1))/(clip_seconds*30)
         filt=(f"[0:v]trim=start={shot['start_s']}:end={shot['end_s']},"
               f"setpts=PTS-STARTPTS,fps=30,"
-              f"scale=1920:1080:force_original_aspect_ratio=increase,"
-              f"crop=1920:1080,crop={crop_w}:{crop_h}:{left}:{top},"
-              f"scale=1920:1080,setsar=1,format=yuv420p[v{i}]")
+              f"scale=1280:720:force_original_aspect_ratio=increase:flags=bicubic,"
+              f"crop=1280:720,setsar=1,zoompan=z='min({zoom:.4f},1+on*{step:.8f})':"
+              f"x='(iw-iw/zoom)*{shot['focus_x']:.4f}':"
+              f"y='(ih-ih/zoom)*{shot['focus_y']:.4f}':d=1:s=1280x720:fps=30,"
+              f"scale=1920:1080:flags=bicubic,format=yuv420p[v{i}]")
         parts.append(filt)
         keys.append(f"[v{i}]")
     parts.append("".join(keys)+f"concat=n={len(keys)}:v=1:a=0[cut]")
@@ -256,8 +262,9 @@ def render_edited(args):
         cmd+=["-map","[aud]","-c:a","aac","-b:a","160k"]
     else:
         cmd+=["-an"]
-    cmd+=["-c:v","libx264","-pix_fmt","yuv420p","-crf","19",
-          "-preset","veryfast","-movflags","+faststart","-t",f"{duration:.3f}",str(out)]
+    cmd+=["-c:v","libx264","-pix_fmt","yuv420p","-crf","20",
+          "-preset","veryfast","-threads","1","-movflags","+faststart",
+          "-t",f"{duration:.3f}",str(out)]
     result=subprocess.run(cmd,capture_output=True,text=True,timeout=300)
     if result.returncode:
         raise RuntimeError("FFmpeg edit failed: "+result.stderr[-1500:])

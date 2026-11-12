@@ -48,18 +48,23 @@ def _check_actions(actions):
         raise ValueError("Maximum 24 actions")
     result = []
     for a in actions:
-        if not isinstance(a, dict) or a.get("type") not in ("wait", "scroll", "hover", "click_link", "click_tab"):
+        if not isinstance(a, dict) or a.get("type") not in ("wait", "scroll", "hover", "click_link", "click_tab", "focus"):
             raise ValueError("Unsupported action")
         mode = a["type"]
         seconds = float(a.get("seconds", 0.65))
         if not 0.1 <= seconds <= 3:
             raise ValueError("Action time outside 0.1–3 seconds")
         item = {"type": mode, "seconds": seconds}
-        if mode in ("hover", "click_link", "click_tab"):
+        if mode in ("hover", "click_link", "click_tab", "focus"):
             sel = a.get("selector", "")
             if not isinstance(sel, str) or not 1 <= len(sel) <= 150:
                 raise ValueError("Missing or excessively long selector")
             item["selector"] = sel
+        if "label" in a:
+            label = a["label"]
+            if not isinstance(label, str) or not 1 <= len(label.strip()) <= 100:
+                raise ValueError("Action label must be 1–100 characters")
+            item["label"] = label.strip()
         if "expected_visible_heading" in a:
             if mode not in ("click_link", "click_tab"):
                 raise ValueError("expected_visible_heading supported only on clicks")
@@ -127,14 +132,18 @@ def capture(args, **kwargs):
             for action in actions:
                 mode = action["type"]
                 heading_verified = False
+                action_started = round(time.monotonic()-start,2)
+                position = None
                 if mode == "scroll":
                     page.mouse.wheel(0, action["pixels"])
-                elif mode == "hover":
+                elif mode in ("hover", "focus"):
                     el = page.locator(action["selector"]).first()
                     el.scroll_into_view_if_needed()
                     box = el.bounding_box()
                     if box is None: raise RuntimeError("Target not visible")
-                    page.mouse.move(box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=26)
+                    x,y = box["x"]+box["width"]/2,box["y"]+box["height"]/2
+                    position = {"x":round(x,1),"y":round(y,1)}
+                    page.mouse.move(x,y,steps=26)
                 elif mode == "click_link":
                     el = page.locator(action["selector"]).first()
                     el.scroll_into_view_if_needed()
@@ -166,8 +175,13 @@ def capture(args, **kwargs):
                     _wait_for_expected_heading(page, action["expected_visible_heading"])
                     heading_verified = True
                 page.wait_for_timeout(int(action["seconds"]*1000))
-                event = {"time": round(time.monotonic()-start,2), "type": mode,
+                event = {"time": round(time.monotonic()-start,2),
+                         "start_time":action_started, "type": mode,
                          "url": page.url, "selector": action.get("selector")}
+                if position:
+                    event["position"] = position
+                if action.get("label"):
+                    event["label"] = action["label"]
                 if heading_verified:
                     event["expected_visible_heading"] = action["expected_visible_heading"]
                     event["heading_verified"] = True

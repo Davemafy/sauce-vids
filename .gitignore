@@ -6,3 +6,13 @@ __pycache__/
 *.wav
 *.mp3
 .env
+.deps/
+.browsers/
+.syslibs/
+.tmp/
+.cache/
+.npmcache/
+node_modules/
+demo-runs/
+patch_v03.py
+package-lock.json

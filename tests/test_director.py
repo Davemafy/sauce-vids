@@ -13,7 +13,7 @@ spec = importlib.util.spec_from_file_location("sauce_test",ROOT/"__init__.py",su
 pkg = importlib.util.module_from_spec(spec)
 sys.modules["sauce_test"] = pkg
 spec.loader.exec_module(pkg)
-from sauce_test import director, tools, schemas
+from sauce_test import director, tools, schemas, autopilot
 
 
 class DirectorTest(unittest.TestCase):
@@ -31,9 +31,9 @@ class DirectorTest(unittest.TestCase):
         (folder/"recording.webm").write_bytes(b"fake test fixture")
         return folder
 
-    def test_registers_six_declared_tools(self):
+    def test_registers_seven_declared_tools(self):
         declared = [schemas.CAPTURE, schemas.RENDER, schemas.INSPECT,
-                    schemas.SCOUT, schemas.PLAN, schemas.REVIEW]
+                    schemas.SCOUT, schemas.PLAN, schemas.REVIEW, schemas.AUTO]
         class Context:
             def __init__(self):
                 self.tools = []
@@ -45,7 +45,7 @@ class DirectorTest(unittest.TestCase):
         pkg.register(ctx)
         self.assertEqual([x["name"] for x in ctx.tools],
                          [x["name"] for x in declared])
-        self.assertEqual(len(ctx.tools),6)
+        self.assertEqual(len(ctx.tools),7)
 
     def test_tab_action_and_heading(self):
         parsed=tools._check_actions([{"type":"click_tab","selector":"[role=tab]",

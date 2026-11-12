@@ -6,8 +6,9 @@ CAPTURE = {
         "url": {"type": "string", "description": "Public product URL on an approved domain"},
         "actions": {"type": "array", "description": "Observed browsing actions in order; click selectors must point to real links, no forms or credential entry", "items": {
             "type": "object", "properties": {
-                "type": {"type": "string", "enum": ["wait", "scroll", "hover", "click_link", "click_tab"]},
+                "type": {"type": "string", "enum": ["wait", "scroll", "hover", "click_link", "click_tab", "focus"]},
                 "selector": {"type": "string"},
+                "label": {"type": "string", "maxLength": 100},
                 "pixels": {"type": "integer"},
                 "seconds": {"type": "number"},
                 "expected_visible_heading": {
@@ -39,3 +40,15 @@ INSPECT = {
 SCOUT = {"name":"sauce_scout","description":"Observe real headings, verified selectors and screenshots on an approved public HTTPS page.","parameters":{"type":"object","properties":{"url":{"type":"string"},"project":{"type":"string"}},"required":["url","project"]}}
 PLAN = {"name":"sauce_plan","description":"Write reproducible video cuts and zoom edit plan for an existing recorded run.","parameters":{"type":"object","properties":{"run_id":{"type":"string"},"shots":{"type":"array","minItems":1,"maxItems":12,"items":{"type":"object","properties":{"start_s":{"type":"number"},"end_s":{"type":"number"},"zoom":{"type":"number"},"focus_x":{"type":"number"},"focus_y":{"type":"number"},"label":{"type":"string"}},"required":["start_s","end_s"]}}},"required":["run_id","shots"]}}
 REVIEW = {"name":"sauce_review","description":"Extract video frames and detect blank footage for visual review.","parameters":{"type":"object","properties":{"run_id":{"type":"string"}},"required":["run_id"]}}
+
+AUTO = {
+    "name": "sauce_auto",
+    "description": "From an approved public HTTPS URL, scout real sections, record safe interactions, choose cuts, render 1080p MP4, and return review receipts. No manual first-cut directing.",
+    "parameters": {"type":"object", "properties": {
+        "url":{"type":"string"},
+        "project":{"type":"string","description":"Lowercase slug, default demo"},
+        "duration_seconds":{"type":"number","minimum":8,"maximum":30},
+        "music_asset":{"type":"string","description":"Optional licensed MP3/WAV/OGG/M4A in SAUCE_ASSET_DIR"},
+        "background_asset":{"type":"string","description":"Optional licensed PNG/JPG in SAUCE_ASSET_DIR"}
+    }, "required":["url"]}
+}

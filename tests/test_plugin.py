@@ -19,7 +19,7 @@ class PluginTest(unittest.TestCase):
             def register_tool(self,**kw): self.registered.append(kw)
             def register_skill(self,*a): self.skills.append(a)
         c=C();module.register(c)
-        self.assertEqual([x["name"] for x in c.registered],["sauce_capture","sauce_render","sauce_inspect","sauce_scout","sauce_plan","sauce_review"])
+        self.assertEqual([x["name"] for x in c.registered],["sauce_capture","sauce_render","sauce_inspect","sauce_scout","sauce_plan","sauce_review","sauce_auto"])
         self.assertEqual(c.skills[0][0],"sauce-director")
     def test_rejects_private_urls_and_unsafe_actions(self):
         import os

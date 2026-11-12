@@ -21,6 +21,24 @@ Instead of generating replacement interfaces, Sauce Vids works with **the live p
 
 The package also includes the **`sauce-director` skill**, which describes the capture–render–inspect iteration for Hermes.
 
+## v0.3 — one URL, first-cut MP4
+
+sauce_auto is the one-call entry point. Input: an approved public HTTPS URL,
+optional project slug and 8–30 second target. It scouts actual page headings,
+chooses safe on-page interactions, records them, builds an editable cut list
+from genuine event timestamps, renders a 1080p MP4 with subtle camera pushes
+and extracts review frames.
+
+To smoke-test the pipeline without Hermes:
+
+    export SAUCE_ALLOWED_HOSTS=www.brimble.io,brimble.io
+    python3 scripts/auto_demo.py --url https://www.brimble.io/agent --project brimble --duration 20
+
+Outputs include the real MP4, capture receipt, edit-plan.json, review.json and
+objective quality indicators. Artistic approval still requires inspecting real
+frames. Licensed soundtrack/background files are optional operator-provided
+assets in SAUCE_ASSET_DIR; no third-party assets are redistributed.
+
 ## v0.2 — real discovery, editing and review
 
 Hermes has six tools: sauce_scout, sauce_capture, sauce_plan, sauce_render, sauce_review and sauce_inspect.
@@ -106,7 +124,7 @@ The heading check is optional. When provided, Sauce Vids waits up to 15 seconds 
 ## Verification
 
 - **15/15 checks passed** using Hermes's official plugin admission validator, including capability registration and security scanning.
-- **3/3 unit tests passed** for registration, input restrictions, and tool error responses.
+- **18/18 unit tests passed** for registration, input restrictions, and tool error responses.
 - The plugin is listed for review in [the Hermes plugin catalog PR](https://github.com/NousResearch/hermes-agent/pull/154015).
 
 ```bash
