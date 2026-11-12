@@ -21,6 +21,27 @@ Instead of generating replacement interfaces, Sauce Vids works with **the live p
 
 The package also includes the **`sauce-director` skill**, which describes the capture–render–inspect iteration for Hermes.
 
+## v0.2 — real discovery, editing and review
+
+Hermes has six tools: sauce_scout, sauce_capture, sauce_plan, sauce_render, sauce_review and sauce_inspect.
+
+1. Scout a public approved HTTPS product site. Hermes receives actual headings, verified link and tab selectors, and screenshot files.
+2. Capture the selected interactions. The click_tab action is restricted to role=tab controls; expected_visible_heading waits for real rendered content.
+3. Ask Hermes to write a scene-by-scene edit plan with sauce_plan, using timestamps from the actual recording. Save cuts, 1.0–1.45x zoom and focal position to edit-plan.json.
+4. Call sauce_render with use_edit_plan=true. The final film is produced with H.264/FFmpeg. Optional music_asset and background_asset are existing licensed files supplied in SAUCE_ASSET_DIR, not automatically sourced or bundled.
+5. Call sauce_review to extract film frames and detect sustained black sections. Hermes should inspect the actual frames and revise the plan if needed.
+
+Example editing calls:
+
+    sauce_plan({"run_id":"brimble-example123","shots":[
+      {"start_s":0,"end_s":3,"zoom":1.0,"label":"Hero"},
+      {"start_s":4,"end_s":8,"zoom":1.2,"focus_x":0.6,"focus_y":0.5,"label":"Feature"}
+    ]})
+    sauce_render({"run_id":"brimble-example123","use_edit_plan":true})
+    sauce_review({"run_id":"brimble-example123"})
+
+The tool suite records and edits genuine browser footage; it does not autonomously guarantee professional cinematography without Hermes choosing and reviewing the shots.
+
 ## Judge quickstart — no hosted account required
 
 Sauce Vids runs on the same machine as Hermes. **No API key, paid cloud service, or login is required for the public-site test.** Linux with Python 3.11+, Chrome/Chromium via Playwright, and FFmpeg is recommended.

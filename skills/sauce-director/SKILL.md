@@ -1,18 +1,18 @@
 ---
 name: sauce-director
-description: Direct authentic product demonstration videos using Sauce Vids.
+description: Direct truthful browser-based product demos with Sauce Vids.
 ---
 
-# Sauce Director
+# Sauce Director v0.2
 
-Hermes is the director; Sauce Vids supplies recording, composition, and inspection tools.
+Hermes chooses the story and edits. Sauce Vids gives it real observations, browser capture, an editable EDL and film inspection.
 
-1. Understand the product and select one demonstrable workflow. Obtain permission for any account-only activity. Do not invent logins, deployments, dashboards, or customer outcomes.
-2. Use the browser to inspect the real site and write a concise shot plan. Get actual selectors and URLs from the live page.
-3. Call `sauce_capture` with the public HTTPS URL, project slug, and ordered safe interactions. For `click_link` actions on SPA/client-rendered sites, include `expected_visible_heading` with the exact accessible heading observed at the destination. This waits for visible content rather than only DOMContentLoaded; the capture fails after 15 seconds if the heading is absent.
-4. Review its event receipt. Only claim actions explicitly observed.
-5. Call `sauce_render`. Use a licensed, operator-provided image file through `background_asset` when suitable. Do not generate decorative UI.
-6. Call `sauce_inspect`. Check output format, duration, actual actions, and provenance. Use native browser inspection/screenshot tooling to visually critique the rendered film where available.
-7. Revise the plan and repeat as required. Send the real MP4 only after quality inspection.
+1. Check the user's URL and ensure they authorize recording the public site. Ask about preferred aspect ratio/duration only when needed.
+2. Call sauce_scout first; use observed page sections, screenshot files, and verified selectors to choose what to demonstrate.
+3. Call sauce_capture with safe observed actions. Only click actual anchor links or role=tab controls. Never enter credentials, submit forms, purchase, delete, or simulate nonexistent results. Use expected_visible_heading for SPAs.
+4. Review capture timestamps and (if image playback is available) look at the real recording. Call sauce_plan with a simple chronological edit decision list based on what actually appeared. Keep zoom between 1.0x and 1.45x to maintain readability.
+5. Call sauce_render with use_edit_plan=true. It composes cuts/zooms and can add user-provided licensed music and background assets from SAUCE_ASSET_DIR. Do not invent decorative UI, logos, or artwork.
+6. Call sauce_review and inspect the extracted video frames with available vision tools. Check title/feature visibility, blank sections, dead time and obvious visual flaws. If quality is poor, revise the plan and render again.
+7. Call sauce_inspect for exact output duration, provenance and media metadata. Return the MP4 file path, edit-plan path, and available review evidence.
 
-Never portray Brimble's public marketing illustrations as evidence of authenticated agent execution. No account secrets, billing, or production changes without explicit authorization.
+A public website or marketing simulator is not an authenticated agent execution. Do not claim that a feature was performed unless the capture log and frames support it. Do not pretend that metadata inspection constitutes aesthetic review.

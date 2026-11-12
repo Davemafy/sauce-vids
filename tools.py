@@ -48,21 +48,21 @@ def _check_actions(actions):
         raise ValueError("Maximum 24 actions")
     result = []
     for a in actions:
-        if not isinstance(a, dict) or a.get("type") not in ("wait", "scroll", "hover", "click_link"):
+        if not isinstance(a, dict) or a.get("type") not in ("wait", "scroll", "hover", "click_link", "click_tab"):
             raise ValueError("Unsupported action")
         mode = a["type"]
         seconds = float(a.get("seconds", 0.65))
         if not 0.1 <= seconds <= 3:
             raise ValueError("Action time outside 0.1–3 seconds")
         item = {"type": mode, "seconds": seconds}
-        if mode in ("hover", "click_link"):
+        if mode in ("hover", "click_link", "click_tab"):
             sel = a.get("selector", "")
             if not isinstance(sel, str) or not 1 <= len(sel) <= 150:
                 raise ValueError("Missing or excessively long selector")
             item["selector"] = sel
         if "expected_visible_heading" in a:
-            if mode != "click_link":
-                raise ValueError("expected_visible_heading is supported only on click_link")
+            if mode not in ("click_link", "click_tab"):
+                raise ValueError("expected_visible_heading supported only on clicks")
             heading = a["expected_visible_heading"]
             if not isinstance(heading, str) or not 1 <= len(heading.strip()) <= 160:
                 raise ValueError("expected_visible_heading must be 1–160 non-whitespace characters")
@@ -151,9 +151,20 @@ def capture(args, **kwargs):
                     page.mouse.click(x,y)
                     page.wait_for_load_state("domcontentloaded",timeout=15000)
                     _url(page.url, host)
-                    if action.get("expected_visible_heading"):
-                        _wait_for_expected_heading(page, action["expected_visible_heading"])
-                        heading_verified = True
+                elif mode == "click_tab":
+                    el = page.locator(action["selector"]).first()
+                    if el.get_attribute("role") != "tab":
+                        raise ValueError("Only role=tab controls can use click_tab")
+                    el.scroll_into_view_if_needed()
+                    box = el.bounding_box()
+                    if box is None: raise RuntimeError("Tab target invisible")
+                    x,y=box["x"]+box["width"]/2,box["y"]+box["height"]/2
+                    page.mouse.move(x,y,steps=25)
+                    page.mouse.click(x,y)
+                    _url(page.url, host)
+                if mode in ("click_link", "click_tab") and action.get("expected_visible_heading"):
+                    _wait_for_expected_heading(page, action["expected_visible_heading"])
+                    heading_verified = True
                 page.wait_for_timeout(int(action["seconds"]*1000))
                 event = {"time": round(time.monotonic()-start,2), "type": mode,
                          "url": page.url, "selector": action.get("selector")}
@@ -177,6 +188,9 @@ def capture(args, **kwargs):
 
 def render(args, **kwargs):
     try:
+        if args.get("use_edit_plan"):
+            from . import director
+            return _receipt(ok=True, **director.render_edited(args))
         folder = _dir(args.get("run_id"))
         video = folder/"recording.webm"
         if not video.is_file(): raise ValueError("Missing recorded video")
