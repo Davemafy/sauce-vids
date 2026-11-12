@@ -44,6 +44,21 @@ class AutoTest(unittest.TestCase):
                          ["#f1","#f2","#f3","#f4"])
         self.assertGreater(actions[1]["seconds"],2.2)
 
+    def test_media_focus_comes_from_observed_layout(self):
+        site={"document_height":2500,"controls":[],"headings":[
+            {"tag":"H3","text":"Real product preview",
+             "selector":"#f1","document_y":900,"media_center_x":1100}]}
+        actions=autopilot.select_actions(site,20)
+        self.assertEqual(actions[1]["camera_x"],1100)
+        shots=autopilot.make_shots([
+            {"type":"page","time":1},
+            {"type":"wait","start_time":1,"time":3},
+            {"type":"focus","start_time":3,"time":7,
+             "position":{"x":1100,"y":450},"media_guided":True}
+        ],8,20)
+        self.assertEqual(shots[-1]["zoom"],1.18)
+        self.assertGreater(shots[-1]["focus_x"],0.7)
+
     def test_fallback_scrolling_for_sparse_heading_pages(self):
         observed={"document_height":4200,"headings":[],"controls":[]}
         actions=autopilot.select_actions(observed,20)

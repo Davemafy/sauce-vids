@@ -124,7 +124,7 @@ The heading check is optional. When provided, Sauce Vids waits up to 15 seconds 
 ## Verification
 
 - **15/15 checks passed** using Hermes's official plugin admission validator, including capability registration and security scanning.
-- **21/21 unit tests passed** for registration, input restrictions, and tool error responses.
+- **22/22 unit tests passed** for registration, input restrictions, and tool error responses.
 - The plugin is listed for review in [the Hermes plugin catalog PR](https://github.com/NousResearch/hermes-agent/pull/154015).
 
 ```bash

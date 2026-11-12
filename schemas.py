@@ -9,6 +9,7 @@ CAPTURE = {
                 "type": {"type": "string", "enum": ["wait", "scroll", "hover", "click_link", "click_tab", "focus"]},
                 "selector": {"type": "string"},
                 "label": {"type": "string", "maxLength": 100},
+                "camera_x": {"type": "number", "minimum": 0, "maximum": 1440},
                 "pixels": {"type": "integer"},
                 "seconds": {"type": "number"},
                 "expected_visible_heading": {

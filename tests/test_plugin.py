@@ -96,9 +96,13 @@ class PluginTest(unittest.TestCase):
                 result=json.loads(tools.capture({
                   "project":"demo","url":"https://example.com",
                   "actions":[{"type":"focus","selector":"h1",
+                              "camera_x":1100,
                               "label":"Observed heading","seconds":0.1}]}))
             self.assertTrue(result["ok"],result)
             self.assertEqual(result["events"][1]["label"],"Observed heading")
+            # Heading center 350 and media center 1100 -> row center 725.
+            self.assertEqual(result["events"][1]["position"]["x"],725)
+            self.assertTrue(result["events"][1]["media_guided"])
             self.assertIn("start_time",result["events"][1])
 
     def test_tool_errors_are_json(self):

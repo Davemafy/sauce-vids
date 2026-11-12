@@ -58,7 +58,8 @@ def select_actions(observed: dict, target_seconds: float) -> list[dict]:
         seen.add(key)
         candidates.append({"text": text, "selector": selector, "y": y,
                            "tag": item["tag"],
-                           "x": float(item.get("center_x", 720))})
+                           "x": float(item.get("center_x", 720)),
+                           "media_x": item.get("media_center_x")})
     candidates.sort(key=lambda c: c["y"])
     feature_headings = [item for item in candidates if item["tag"] == "H3"]
     if len(feature_headings) >= 4:
@@ -75,8 +76,12 @@ def select_actions(observed: dict, target_seconds: float) -> list[dict]:
         candidates = [candidates[i] for i in picks]
     dwell = min(3.0,max(2.25,(target_seconds-3.5)/max(1,len(candidates))))
     for item in candidates:
-        actions.append({"type": "focus", "selector": item["selector"],
-                        "label": item["text"][:100], "seconds": dwell})
+        action={"type": "focus", "selector": item["selector"],
+                "label": item["text"][:100], "seconds": dwell}
+        if (isinstance(item.get("media_x"),(int,float))
+            and 100 <= item["media_x"] <= 1340):
+            action["camera_x"]=item["media_x"]
+        actions.append(action)
 
     if len(candidates) < 2 and page_height > 1600:
         # Fallback for pages with few semantic headings: real scrolling only.
@@ -129,7 +134,7 @@ def make_shots(events: list[dict], source_duration: float,
         pos = event.get("position") or {}
         fx = max(0.1,min(0.9,float(pos.get("x",720))/1440))
         fy = max(0.1,min(0.9,float(pos.get("y",450))/900))
-        zoom = 1.0 if mode=="wait" else 1.08
+        zoom = 1.0 if mode=="wait" else (1.18 if event.get("media_guided") else 1.08)
         result.append({"start_s":round(start,3), "end_s":round(end,3),
                        "zoom":zoom,"focus_x":round(fx,3),"focus_y":round(fy,3),
                        "label":str(title)[:120]})

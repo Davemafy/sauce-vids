@@ -60,6 +60,12 @@ def _check_actions(actions):
             if not isinstance(sel, str) or not 1 <= len(sel) <= 150:
                 raise ValueError("Missing or excessively long selector")
             item["selector"] = sel
+        if "camera_x" in a:
+            x = a["camera_x"]
+            if (mode != "focus" or type(x) not in (int,float)
+                or not 0 <= x <= 1440):
+                raise ValueError("camera_x only accepts on-page focus positions")
+            item["camera_x"] = float(x)
         if "label" in a:
             label = a["label"]
             if not isinstance(label, str) or not 1 <= len(label.strip()) <= 100:
@@ -146,7 +152,11 @@ def capture(args, **kwargs):
                     box = el.bounding_box()
                     if box is None: raise RuntimeError("Target not visible")
                     x,y = box["x"]+box["width"]/2,box["y"]+box["height"]/2
-                    position = {"x":round(x,1),"y":round(y,1)}
+                    # A demo shot must contain BOTH the heading and its
+                    # adjacent product illustration. Frame their midpoint,
+                    # rather than zooming off-axis into one column.
+                    framing_x = (x + action.get("camera_x",x)) / 2
+                    position = {"x":round(framing_x,1),"y":round(y,1)}
                     page.mouse.move(x,y,steps=26)
                 elif mode == "click_link":
                     el = page.locator(action["selector"]).first
@@ -184,6 +194,8 @@ def capture(args, **kwargs):
                          "url": page.url, "selector": action.get("selector")}
                 if position:
                     event["position"] = position
+                    if "camera_x" in action:
+                        event["media_guided"] = True
                 if action.get("label"):
                     event["label"] = action["label"]
                 if heading_verified:

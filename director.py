@@ -76,7 +76,14 @@ SCOUT_JS = r"""() => {
       const b=el.getBoundingClientRect();
       const region=el.closest('section');
       const regionHeading=region && region.querySelector('h1,h2');
+      const row=el.parentElement && el.parentElement.parentElement;
+      const mediaNode=row && row.children.length===2 &&
+        [...row.children].find(c=>c!==el.parentElement);
+      const mediaBox=mediaNode && mediaNode.getBoundingClientRect();
+      const mediaCenterX=(mediaBox && mediaBox.width>=250 && mediaBox.height>=85)
+        ? Math.round(mediaBox.x+mediaBox.width/2) : null;
       return {text:(el.innerText||el.textContent||'').trim().slice(0,110),
+              media_center_x:mediaCenterX,
               section_title:regionHeading ? (regionHeading.innerText||'').trim().slice(0,100) : '',
               tag:el.tagName,selector:selector(el),
               document_y:Math.round(b.top+window.scrollY),
@@ -241,8 +248,9 @@ def render_edited(args):
               f"setpts=PTS-STARTPTS,fps=30,"
               f"scale=1280:720:force_original_aspect_ratio=increase:flags=bicubic,"
               f"crop=1280:720,setsar=1,zoompan=z='min({zoom:.4f},1+on*{step:.8f})':"
-              f"x='(iw-iw/zoom)*{shot['focus_x']:.4f}':"
-              f"y='(ih-ih/zoom)*{shot['focus_y']:.4f}':d=1:s=1280x720:fps=30,"
+              f"x='max(0,min(iw-iw/zoom,iw*{shot['focus_x']:.4f}-iw/(2*zoom)))':"
+              f"y='max(0,min(ih-ih/zoom,ih*{shot['focus_y']:.4f}-ih/(2*zoom)))':"
+              f"d=1:s=1280x720:fps=30,"
               f"scale=1920:1080:flags=bicubic,format=yuv420p[v{i}]")
         parts.append(filt)
         keys.append(f"[v{i}]")
