@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<rect x="4" y="4" width="1016" height="1016" rx="146" fill="#fff0d8" stroke="#ad1711" stroke-width="9"/>
+<text x="512" y="411" text-anchor="middle" font-family="FreeSerif, Georgia, serif" font-style="italic" font-weight="bold" font-size="245" letter-spacing="-12" fill="#a71310">Sauce</text>
+<path d="M222 449 Q497 514 786 443" stroke="#ac1710" stroke-linecap="round" stroke-width="23" fill="none"/>
+<text x="512" y="655" text-anchor="middle" font-family="Liberation Sans, Arial, sans-serif" font-weight="bold" font-size="54" letter-spacing="6" fill="#352420">TURN RECORDINGS</text>
+<text x="512" y="735" text-anchor="middle" font-family="Liberation Sans, Arial, sans-serif" font-weight="bold" font-size="60" letter-spacing="6" fill="#352420">INTO DEMOS</text>
+<circle cx="512" cy="851" r="28" fill="#bc2117"/>
+<path d="M512 826 L497 813 L504 833 L488 824 L502 846 L512 837 L524 846 L536 824 L520 832 L527 813 Z" fill="#66834b"/>
+</svg>
