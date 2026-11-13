@@ -39,3 +39,30 @@ Compare the \`timing.total_seconds\` fields in the two benchmark receipts.
 Do not compare with earlier Sauce previews using different codecs, sources,
 frame dimensions, or capture logic. This measures pipeline runtime; it does
 not validate the aesthetics or storytelling of the resulting film.
+
+
+## First measured run (November 13, 2026 UTC)
+
+Same \`scripts/render_github_5k.py\` script, identical 12-second input,
+288-frame output, H.264 master and Android-compatible preview:
+
+| Metric | GitHub-hosted Ubuntu 24.04 | Native Vultr VM |
+| --- | ---: | ---: |
+| Capture | 114.16 s | 133.64 s |
+| Encode and full decode verification | 38.12 s | 30.32 s |
+| Script total | **152.36 s** | **164.09 s** |
+| Maximum process RSS | ~1.73 GB | ~1.72 GB |
+| Outcome | 5K + 720p produced | 5K + 720p produced |
+
+GitHub was ~7.1% faster *inside the render script* in this single test,
+but its full hosted job took about **207 seconds**, including dependency
+installation, setup, and artifact upload. The Vultr runtime was measured on
+a prepared machine. Neither result is a reliable long-term performance
+guarantee; repeated runs would be needed for statistical confidence.
+
+[Successful Actions run](https://github.com/Davemafy/sauce-vids/actions/runs/43527441608)
+contains an 8 MB artifact zip, including the verified 5K master, 720p phone
+version, poster, and machine-readable receipt. It expires after 14 days.
+
+We have verified code correctness and the ability to render 5K in GitHub
+Actions, **not** the creative quality of this short scrolling-page test.
