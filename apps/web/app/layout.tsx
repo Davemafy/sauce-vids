@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
-import '@fontsource-variable/big-shoulders-display/wght.css';
-import '@fontsource-variable/instrument-sans/wght.css';
+import '@fontsource-variable/big-shoulders-display';
+import '@fontsource-variable/instrument-sans';
 import '@fontsource/lobster/400.css';
 import './globals.css';
 
