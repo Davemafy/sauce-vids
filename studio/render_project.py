@@ -69,7 +69,7 @@ def validate(props: dict, ffprobe: str) -> dict:
         raise ValueError("Studio v0.4 currently supports 1920×1080, 30fps, 1–60 seconds")
     bg = project.get("background", {})
     if bg.get("kind") == "preset":
-        if bg.get("preset") not in ("lilac-sunset", "warm-paper", "ink"):
+        if bg.get("preset") not in ("lilac-sunset", "warm-paper", "ink", "sauce"):
             raise ValueError("Unknown stage background preset")
     elif bg.get("kind") == "image":
         approved_file("backgrounds",bg.get("file"))

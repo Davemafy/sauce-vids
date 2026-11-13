@@ -69,3 +69,23 @@ track; that feature is not implemented yet. No cursor is preferable to a
 misleading approximation.
 
 Read [../docs/quality-floor-v05.md](../docs/quality-floor-v05.md).
+
+## Sauce identity baseline (Vultr, November 13, 2026)
+
+The sauce stage preset uses the same red/cream palette and Lobster and
+Instrument Sans typography as the Sauce landing page. It is a simple
+product-film frame, not a substitute for excellent footage or direction.
+
+An example project lives at studio/examples/sauce-brimble-brand-pass.json.
+Bring your own authorized browser recording named
+studio/public/footage/brand-brimble-fixed.webm (1920x1080, native 30 fps).
+Then run the Studio renderer with that project JSON.
+
+This run corrected a real Playwright padding defect caused by recording a
+1440x810 CSS viewport in a 1920x1080 video canvas. The fix records matching
+1920x1080 browser and video frames at 30fps.
+
+The public Brimble marketing page was captured, not an authenticated app.
+This sample verifies recording, composite and visual identity consistency,
+but is not approved as a final marketing film: cursor, timing, typography
+at mobile viewing size, camera choreography and audio remain quality gates.

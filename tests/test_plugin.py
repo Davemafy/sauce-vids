@@ -109,7 +109,8 @@ class PluginTest(unittest.TestCase):
     def test_capture_quality_profile_preserves_native_frames(self):
         self.assertEqual(tools.CAPTURE_SIZE, {"width":1920,"height":1080})
         self.assertEqual(tools.CAPTURE_FPS,30)
-        self.assertEqual(tools.CAPTURE_VIEWPORT,{"width":1440,"height":810})
+        self.assertEqual(tools.CAPTURE_VIEWPORT,tools.CAPTURE_SIZE)
+        self.assertEqual(tools.CAPTURE_DEVICE_SCALE,1)
         self.assertFalse(hasattr(tools,"CURSOR"))
 
     def test_recording_verifier_rejects_empty_and_wrong_framerate(self):

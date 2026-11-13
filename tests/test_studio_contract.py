@@ -25,6 +25,12 @@ class StudioContractTests(unittest.TestCase):
         self.assertEqual(config["window"]["y"],180)
         self.assertEqual(config["window"]["height"],838)
 
+    def test_accepts_sauce_brand_background_preset(self):
+        project=copy.deepcopy(EXAMPLE)
+        project["project"]["background"]={"kind":"preset","preset":"sauce"}
+        result=self.valid(project)
+        self.assertEqual(result["project"]["background"]["preset"],"sauce")
+
     def test_rejects_traversal_and_remote_paths(self):
         for name in ("../bad.mp4","footage/../bad.mp4",
                      "footage/a/b.mp4","https://malicious.test/file.mp4"):

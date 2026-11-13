@@ -24,7 +24,7 @@ The package also includes the **`sauce-director` skill**, which describes the ca
 ## v0.5 — source-quality baseline
 
 Sauce now records approved public websites as **1920×1080 / 30 fps VP9**
-from a 1440×810 browser viewport at 1.5× device scale, with the browser's
+from a matching 1920×1080 browser viewport at 1× device scale, with the browser's
 reduced-motion preference enabled to prioritize stable demonstrations. A real
 `ffprobe` check confirms that footage contains the required video stream,
 dimensions, frame rate and duration before Sauce reports capture success.

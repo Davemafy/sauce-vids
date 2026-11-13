@@ -1,5 +1,5 @@
 export type Background =
-  | {kind: 'preset'; preset: 'lilac-sunset' | 'warm-paper' | 'ink'}
+  | {kind: 'preset'; preset: 'lilac-sunset' | 'warm-paper' | 'ink' | 'sauce'}
   | {kind: 'image'; file: string};
 
 export type CameraKeyframe = {

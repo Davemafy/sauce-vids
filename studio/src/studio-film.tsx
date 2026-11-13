@@ -1,3 +1,5 @@
+import '@fontsource/lobster/400.css';
+import '@fontsource-variable/instrument-sans';
 import React from 'react';
 import {
   AbsoluteFill, Audio, Easing, Img, OffthreadVideo, Sequence,
@@ -45,6 +47,40 @@ export const Wallpaper: React.FC<{background: Background}> = ({background}) => {
         transform: `scale(${1.025 + frame * 0.000009})`,
       }}/>
       <AbsoluteFill style={{background: 'rgba(8,12,22,.055)'}}/>
+    </AbsoluteFill>;
+  }
+  if (background.preset === 'sauce') {
+    // A restrained Sauce production frame, based on our actual red/cream
+    // identity—not a stock gradient or an invented client's brand system.
+    return <AbsoluteFill style={{
+      background: '#fff8e6', color: '#b30713',
+      fontFamily: 'Instrument Sans Variable, Arial, sans-serif',
+    }}>
+      <div style={{position:'absolute',top:0,left:0,right:0,height:8,background:'#b30713'}}/>
+      <div style={{
+        position:'absolute',top:39,left:215,display:'flex',
+        alignItems:'baseline',gap:18,
+      }}>
+        <span style={{
+          fontSize:38,fontWeight:400,letterSpacing:'-.045em',
+          fontFamily:'Lobster, cursive',lineHeight:1
+        }}>Sauce</span>
+        <span style={{fontSize:13,fontWeight:800,letterSpacing:'.155em'}}>
+          PRODUCT FILM
+        </span>
+      </div>
+      <div style={{
+        position:'absolute',top:44,right:215,fontSize:14,
+        fontWeight:700,letterSpacing:'.06em',
+      }}>PRODUCT VIDEOS, WITH TASTE.</div>
+      <div style={{
+        position:'absolute',bottom:22,left:215,fontSize:15,
+        fontWeight:800,letterSpacing:'.065em',
+      }}>MAKE SOFTWARE WORTH WATCHING.</div>
+      <div style={{
+        position:'absolute',bottom:19,right:215,
+        height:7,width:58,background:'#f1a11a',
+      }}/>
     </AbsoluteFill>;
   }
   if (background.preset === 'ink') {

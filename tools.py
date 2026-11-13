@@ -99,10 +99,12 @@ def _wait_for_expected_heading(page, heading):
 
 # Cursor rendering deliberately happens AFTER capture. Browser-screencast
 # footage is kept clean; hand-drawn DOM pointers are not acceptable artifacts.
-CAPTURE_VIEWPORT = {"width": 1440, "height": 810}
+# Playwright record_video_size determines the container size; it does not
+# scale the page. A smaller viewport creates grey padding around content.
+CAPTURE_VIEWPORT = {"width": 1920, "height": 1080}
 CAPTURE_SIZE = {"width": 1920, "height": 1080}
 CAPTURE_FPS = 30
-CAPTURE_DEVICE_SCALE = 1.5
+CAPTURE_DEVICE_SCALE = 1
 
 def _verify_recording(path):
     """Verify real frames were saved; a valid EBML header alone is not proof."""

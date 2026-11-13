@@ -22,7 +22,7 @@ visual-quality classifier. Inspect real source and output frames.
 
 ## Mandatory defaults
 
-1. **Capture:** Browser viewport 1440×810 CSS pixels, DPR 1.5,
+1. **Capture:** Browser viewport 1920×1080 CSS pixels, DPR 1,
    native recording 1920×1080, **30 real fps**, source VP9. Chromium
    must run with `--disable-dev-shm-usage` in the constrained worker.
    A live ffprobe check verifies the saved recording; an empty WebM is
@@ -89,3 +89,14 @@ limits or terminate other projects without explicit approval.
 - Playwright browser recording options: https://playwright.dev/python/docs/api/class-browser
 - Screen Studio separate cursor rendering: https://screen.studio/create/screen-recorder-with-audio
 - Screen Studio animation and cursor controls: https://preview.screen.studio/guide/animations
+
+## Capture alignment correction (November 13, 2026)
+
+A full-HD video container does not prove the page fills the frame. The
+initial v0.5 Brimble recording had a 1440×810 viewport inside a
+1920×1080 recording; the remainder of the browser surface was grey.
+Device scale factor 1.5 does not expand the CSS viewport inside
+Playwright video. The capture default now matches the viewport and video
+dimensions at 1920×1080 CSS pixels, DPR 1, 30 fps, to prevent padding.
+The 1920px responsive layout also requires deliberate framing to keep
+important software text legible; inspect real frames before release.
