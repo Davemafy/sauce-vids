@@ -78,13 +78,14 @@ function Hero() {
 
           <h1
             id="hero-heading"
-            className="relative mt-6 w-full font-display text-[clamp(5.2rem,15.5vw,17rem)] font-black uppercase leading-[.74] tracking-[-.042em] text-sauce-cream sm:mt-7 lg:mt-8 lg:text-[clamp(10rem,14vw,19rem)]"
+            className="relative mt-6 w-full font-display text-[clamp(5.2rem,15.5vw,17rem)] font-black uppercase leading-[.74] tracking-[-.042em] text-sauce-cream sm:mt-7 lg:mt-8 lg:text-[clamp(9.5rem,13.5vw,16.5rem)]"
           >
-            <span className="block">MAKE</span>
-            <span className="mt-[.045em] block sm:hidden">SOFTWARE</span>
-            <span className="mt-[.045em] hidden sm:block">SOFTWARE</span>
-            <span className="mt-[.045em] block">WORTH</span>
-            <span className="mt-[.045em] block">WATCHING.</span>
+            <span className="block lg:hidden">MAKE</span>
+            <span className="mt-[.045em] block lg:hidden">SOFTWARE</span>
+            <span className="mt-[.045em] block lg:hidden">WORTH</span>
+            <span className="mt-[.045em] block lg:hidden">WATCHING.</span>
+            <span className="hidden lg:block">MAKE SOFTWARE</span>
+            <span className="mt-[.065em] hidden lg:block">WORTH WATCHING.</span>
           </h1>
 
           <div
