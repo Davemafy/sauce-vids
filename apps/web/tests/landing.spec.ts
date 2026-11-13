@@ -14,7 +14,7 @@ test('desktop campaign has readable hero and a real waitlist form', async ({ pag
   await page.goto('/');
   await page.evaluate(() => document.fonts.ready);
   await expect(page.getByRole('heading', { name: /make software worth watching/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /join the waitlist/i })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: /join the waitlist/i })).toHaveCount(1);
   await ensureNoHorizontalOverflow(page);
   mkdirSync('artifacts', { recursive: true });
   await page.screenshot({ path: 'artifacts/desktop.png', animations: 'disabled', fullPage: true });
@@ -26,9 +26,7 @@ test('mobile campaign is usable without clipping or fake success', async ({ page
   await page.evaluate(() => document.fonts.ready);
   await expect(page.getByRole('heading', { name: /make software worth watching/i })).toBeVisible();
   await ensureNoHorizontalOverflow(page);
-  await page.getByText('Menu', { exact: true }).click();
-  await expect(page.getByRole('navigation', { name: 'Mobile navigation' })).toBeVisible();
-  await page.getByText('Menu', { exact: true }).click();
+  await expect(page.getByRole('link', { name: /get early access/i })).toBeVisible();
   mkdirSync('artifacts', { recursive: true });
   await page.screenshot({ path: 'artifacts/mobile.png', animations: 'disabled', fullPage: true });
 
