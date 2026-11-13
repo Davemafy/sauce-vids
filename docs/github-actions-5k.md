@@ -19,23 +19,23 @@ being uploaded; their dimensions and frame counts are verified with FFprobe.
 
 Open [Sauce 5K — hosted render benchmark](https://github.com/Davemafy/sauce-vids/actions/workflows/render-5k.yml)
 in GitHub Actions, choose **Run workflow** on **main**, or change
-\`scripts/render_github_5k.py\` or the workflow itself on main. The resulting
-artifact is \`sauce-brimble-native-5k\` and is retained for 14 days.
+`scripts/render_github_5k.py` or the workflow itself on main. The resulting
+artifact is `sauce-brimble-native-5k` and is retained for 14 days.
 
-This intentionally uses a GitHub-hosted \`ubuntu-24.04\` worker and no
+This intentionally uses a GitHub-hosted `ubuntu-24.04` worker and no
 privileged/self-hosted runner on Vultr. It requires no API keys or accounts
 for the public source website. GitHub Actions artifacts are downloads, not
 streaming-video URLs; users should play the 720p MP4 locally on Android.
 
 To reproduce the comparison on an existing Vultr development workspace:
 
-\`\`\`bash
+```bash
 python3 -m pip install 'playwright>=1.55,<2' 'pillow>=11,<13'
 python3 -m playwright install chromium
 python3 scripts/render_github_5k.py --out out/5k-benchmark-vultr --duration 12
-\`\`\`
+```
 
-Compare the \`timing.total_seconds\` fields in the two benchmark receipts.
+Compare the `timing.total_seconds` fields in the two benchmark receipts.
 Do not compare with earlier Sauce previews using different codecs, sources,
 frame dimensions, or capture logic. This measures pipeline runtime; it does
 not validate the aesthetics or storytelling of the resulting film.
@@ -43,7 +43,7 @@ not validate the aesthetics or storytelling of the resulting film.
 
 ## First measured run (November 13, 2026 UTC)
 
-Same \`scripts/render_github_5k.py\` script, identical 12-second input,
+Same `scripts/render_github_5k.py` script, identical 12-second input,
 288-frame output, H.264 master and Android-compatible preview:
 
 | Metric | GitHub-hosted Ubuntu 24.04 | Native Vultr VM |
