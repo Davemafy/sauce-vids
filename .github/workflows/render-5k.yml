@@ -1,0 +1,59 @@
+name: Sauce 5K — hosted render benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/render-5k.yml'
+      - 'scripts/render_github_5k.py'
+
+permissions:
+  contents: read
+
+jobs:
+  render-5k:
+    name: Native 5K capture and export
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install capture and image tools
+        run: |
+          python -m pip install --disable-pip-version-check 'playwright>=1.55,<2' 'pillow>=11,<13'
+          python -m playwright install --with-deps chromium
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y ffmpeg
+          fi
+          ffmpeg -version | head -2
+          python -m compileall -q scripts/render_github_5k.py
+
+      - name: Render actual 5K capture and Android preview
+        run: |
+          /usr/bin/time -v python scripts/render_github_5k.py \
+            --out out/5k-benchmark --duration 12
+          echo '=== BENCHMARK RESULT ==='
+          cat out/5k-benchmark/benchmark.json
+
+      - name: Publish verified MP4s, poster, and benchmark receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: sauce-brimble-native-5k
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+          path: |
+            out/5k-benchmark/benchmark.json
+            out/5k-benchmark/poster.jpg
+            out/5k-benchmark/brimble-5k-master.mp4
+            out/5k-benchmark/brimble-android-720p.mp4
