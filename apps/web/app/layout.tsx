@@ -1,27 +1,8 @@
 import type { Metadata, Viewport } from 'next';
-import { Big_Shoulders, Instrument_Sans, Lobster } from 'next/font/google';
+import '@fontsource-variable/big-shoulders-display/wght.css';
+import '@fontsource-variable/instrument-sans/wght.css';
+import '@fontsource/lobster/400.css';
 import './globals.css';
-
-const display = Big_Shoulders({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-big-shoulders',
-  adjustFontFallback: false,
-  weight: ['600', '700', '800', '900'],
-});
-
-const body = Instrument_Sans({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-instrument',
-});
-
-const script = Lobster({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-lobster',
-  weight: '400',
-});
 
 export const metadata: Metadata = {
   title: 'Sauce — Make software worth watching',
@@ -44,7 +25,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${display.variable} ${body.variable} ${script.variable} bg-sauce-cream text-sauce-ink antialiased`}>
+      <body className="bg-sauce-cream text-sauce-ink antialiased">
         {children}
       </body>
     </html>

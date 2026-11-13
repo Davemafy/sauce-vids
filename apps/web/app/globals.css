@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-display: var(--font-big-shoulders);
-  --font-body: var(--font-instrument);
-  --font-script: var(--font-lobster);
+  --font-display: "Big Shoulders Display Variable", Impact, sans-serif;
+  --font-body: "Instrument Sans Variable", Arial, sans-serif;
+  --font-script: Lobster, cursive;
   --color-sauce-red: #b30713;
   --color-sauce-red-deep: #8c0c14;
   --color-sauce-orange: #f1a11a;
@@ -13,7 +13,7 @@
 
 @layer base {
   html { scroll-behavior: smooth; }
-  body { font-family: var(--font-instrument), Arial, sans-serif; }
+  body { font-family: "Instrument Sans Variable", Arial, sans-serif; }
   ::selection { background: #b30713; color: #fff8e6; }
 }
 
