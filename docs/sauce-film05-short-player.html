@@ -7,25 +7,44 @@
 <meta property="og:type" content="video.other">
 <meta property="og:video" content="https://devmcp.davemafy.xyz/sauce-film-05/short/film-1080x1920.mp4">
 <style>
+:root{color-scheme:light}
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#eeede8;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
-main{position:fixed;inset:0;background:#eeede8}
-video{width:100%;height:100%;height:100dvh;display:block;object-fit:cover;object-position:center center;background:#eeede8}
-.controls{position:absolute;left:0;right:0;top:max(11px,env(safe-area-inset-top));z-index:3;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 12px;pointer-events:none}
-button,.compare{pointer-events:auto;appearance:none;border:1px solid #d0d0ca;border-radius:6px;padding:9px 12px;background:#fbfaf6;color:#30322e;font:500 12px/1.2 system-ui;box-shadow:none;cursor:pointer}
-.compare{text-decoration:none}
-button:focus-visible,.compare:focus-visible{outline:3px solid #727b8d;outline-offset:3px}
-.loading{position:absolute;top:12px;right:12px;background:#202320dd;color:#fff;border-radius:8px;font-size:12px;padding:6px 9px;z-index:4}
-@media(min-width:750px){video{object-fit:contain;max-width:510px;margin-inline:auto}.controls{top:18px;left:calc(50% - 240px);right:calc(50% - 240px)}}
+html,body{margin:0;min-height:100%;background:#eeede8;color:#292b28;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+body{overflow-x:hidden}
+main{min-height:100svh;min-height:100dvh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:13px;
+  padding:16px max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom))
+    max(16px,env(safe-area-inset-left))}
+.controls,.video-frame{width:min(calc(100vw - 32px),430px,calc(56.25dvh - 63px))}
+.controls{display:flex;align-items:center;justify-content:space-between;gap:12px}
+button,.compare{appearance:none;min-height:38px;display:inline-flex;align-items:center;
+  justify-content:center;text-decoration:none;cursor:pointer;border:1px solid #d5d5ce;
+  border-radius:9px;padding:8px 13px;background:#f7f7f3;color:#353733;
+  font:500 13px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif}
+button:hover,.compare:hover{border-color:#adada5}
+button:focus-visible,.compare:focus-visible,.video-frame:focus-within{
+  outline:2px solid #666e68;outline-offset:3px}
+.video-frame{aspect-ratio:9/16;overflow:hidden;border-radius:18px;
+  border:1px solid #d8d8d1;background:#e8e7e2;
+  box-shadow:0 12px 38px rgba(25,28,25,.12)}
+video{display:block;width:100%;height:100%;object-fit:contain;object-position:center}
+.loading{font-size:12px;color:#666962;text-align:center}
+@media(min-width:750px){
+  .controls,.video-frame{width:min(430px,calc(56.25dvh - 63px))}
+}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style></head>
 <body><main>
-<video id="short" poster="poster.jpg?v=4" autoplay muted playsinline loop preload="auto"
-aria-label="Real Brimble agent picker with Codex setup command">
-<source src="film-540x960.mp4?v=4" type="video/mp4">Your browser does not support video.
-</video>
 <div class="controls">
 <a class="compare" href="../?compare=1">Compare</a>
 <button id="sound" type="button" aria-label="Enable narration">Sound on</button>
+</div>
+<div class="video-frame">
+<video id="short" poster="poster.jpg?v=5" autoplay muted playsinline loop preload="auto"
+aria-label="Real Brimble agent picker with Codex setup command">
+<source src="film-540x960.mp4?v=5" type="video/mp4">Your browser cannot play this video.
+</video>
 </div>
 <div id="status" class="loading" hidden>Tap play to begin</div>
 </main>
