@@ -21,6 +21,19 @@ Instead of generating replacement interfaces, Sauce Vids works with **the live p
 
 The package also includes the **`sauce-director` skill**, which describes the capture–render–inspect iteration for Hermes.
 
+## Film 02 — one complete narrated workflow (actual release)
+
+[Watch the finished Sauce film with raw-vs-directed comparison](https://devmcp.davemafy.xyz/sauce-film-02/)
+and read the [production receipts and reproduction guide](docs/editorial-film-02.md).
+This 11.35-second film captures an actual MIT-licensed OpenSheets spreadsheet
+workflow: five amounts selected using native X11 input, a real Currency
+button action, and five verified changes to dollar formatting. Narration,
+per-word caption emphasis, audio mastering and two deliberate camera
+movements are built around the proven task rather than independent clicks.
+The public 1080p/60fps master and mobile 720p/30fps export have passed full
+decoding and mobile browser playback. This is a completed proof film, **not
+yet** a claim of unattended general-purpose video direction.
+
 ## Screen Studio camera study — two real product interactions
 
 [Watch the 12-second A/B comparison](https://devmcp.davemafy.xyz/sauce-autozoom/study01/)

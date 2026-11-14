@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f6f4ef">
+<title>Currency in one click — Sauce Films</title>
+<meta name="description" content="A real spreadsheet interaction, directed around narration. Watch the finished film and compare the untouched capture.">
+<style>
+:root{color-scheme:light;--ink:#161616;--muted:#62645f;--red:#b30713;--line:#dbd9d2;--paper:#f6f4ef}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+button,a{touch-action:manipulation}
+::selection{background:#eac0b9;color:#161616}
+.page{width:min(1110px,calc(100% - 48px));margin:0 auto}
+header{min-height:104px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);gap:12px}
+.mark{font-family:Georgia,"Times New Roman",serif;font-size:37px;font-weight:700;font-style:italic;letter-spacing:-.075em;color:var(--red);text-decoration:none}
+.headnote,.eyebrow{font-size:11px;letter-spacing:.13em;font-weight:780;text-transform:uppercase}
+.headnote{color:#767772;text-align:right}
+.top{padding:64px 0 35px}
+.eyebrow{color:var(--red);margin:0 0 22px}
+h1{font-size:clamp(43px,6.5vw,85px);font-weight:650;letter-spacing:-.068em;line-height:1.01;margin:0 0 25px;max-width:870px}
+.summary{font-size:clamp(16px,1.8vw,21px);line-height:1.55;color:#565751;max-width:690px;margin:0}
+.screen{background:#16191d;border-radius:17px;padding:7px;border:1px solid #242629;box-shadow:0 34px 65px -44px rgba(0,0,0,.52);overflow:hidden}
+video{display:block;width:100%;aspect-ratio:16/9;border-radius:11px;background:#e0e1df;object-fit:contain}
+.player-tools{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:19px;margin:18px 0 0}
+.switch{display:inline-flex;align-items:center;gap:3px;padding:4px;border-radius:9px;background:#e8e6e0;border:1px solid #dbdad4}
+.switch button{font-family:inherit;font-size:13px;font-weight:650;color:#676963;border:0;background:transparent;padding:12px 18px;border-radius:6px;cursor:pointer;min-height:44px}
+.switch button[aria-pressed=true]{color:#fff;background:#1b1c1a;box-shadow:0 1px 2px #0002}
+.switch button:hover:not([aria-pressed=true]){color:#171817}
+.download{font-size:13px;font-weight:680;text-underline-offset:5px;color:var(--red)}
+.video-note{font-size:13px;line-height:1.55;margin:11px 0 0;color:#73746e}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:85px 0 68px;border-top:1px solid #cccac3;border-bottom:1px solid #cccac3}
+.stat{padding:25px 21px 29px 0}
+.stat:not(:first-child){border-left:1px solid #cccac3;padding-left:24px}
+.stat .number{font-size:40px;font-weight:680;letter-spacing:-.06em;margin:15px 0 8px}
+.stat .desc{font-size:13px;color:#696a64;line-height:1.55;max-width:250px}
+.section{display:grid;grid-template-columns:1fr 1.2fr;gap:45px;padding:0 0 68px}
+h2{font-size:26px;font-weight:680;line-height:1.2;letter-spacing:-.035em;margin:0 0 13px}
+.section p{color:#5a5c55;line-height:1.7;font-size:15px;margin:0 0 16px}
+.steps{display:grid;gap:0;padding:0;margin:0;list-style:none;counter-reset:steps}
+.steps li{display:flex;justify-content:space-between;gap:15px;align-items:center;border-top:1px solid var(--line);padding:15px 0;color:#242623;font-size:14px}
+.steps li::before{counter-increment:steps;content:"0" counter(steps);color:#a7a69f;font-size:12px;letter-spacing:.05em;font-weight:700;flex:0 0 30px}
+.steps li span{margin-left:auto;text-align:right;color:#767771;font-size:12px;font-variant-numeric:tabular-nums}
+footer{display:flex;justify-content:space-between;gap:18px;padding:25px 0 40px;border-top:1px solid var(--line);color:#696a65;font-size:12px;line-height:1.6}
+footer a{color:inherit}
+:focus-visible{outline:3px solid var(--red);outline-offset:3px}
+@media(max-width:700px){
+.page{width:calc(100% - 30px)}header{min-height:76px}.mark{font-size:31px}.headnote{font-size:9px}
+.top{padding:43px 0 27px}h1{font-size:clamp(42px,11vw,65px);margin-bottom:18px}
+.screen{padding:3px;border-radius:10px}video{border-radius:6px}
+.player-tools{gap:13px}.switch{width:100%;display:flex}.switch button{flex:1;padding:11px 9px}
+.stats{grid-template-columns:1fr;margin:46px 0}
+.stat,.stat:not(:first-child){padding:20px 0;border-left:0}
+.stat:not(:last-child){border-bottom:1px solid var(--line)}
+.stat .number{margin-top:9px}.section{grid-template-columns:1fr;gap:22px;padding-bottom:44px}
+footer{display:block}
+}
+</style>
+</head>
+<body>
+<div class="page">
+<header><a class="mark" href="/" aria-label="Sauce home">Sauce.</a><div class="headnote">THE FILM LAB &nbsp; / &nbsp; 002</div></header>
+<main>
+<div class="top">
+<p class="eyebrow">Product film / OpenSheets</p>
+<h1>One real action.<br>A film that follows it.</h1>
+<p class="summary">Select five expenses. Format them as currency. Watch the difference in an uninterrupted recording—directed around the actual narration and verified interface changes.</p>
+</div>
+<section aria-label="Play the film">
+<div class="screen">
+<video id="film" controls playsinline preload="metadata" poster="poster.jpg" aria-label="Sauce narrated currency formatting film">
+<source src="final-720p30.mp4" type="video/mp4">
+Your browser does not support MP4 video.
+</video>
+</div>
+<div class="player-tools">
+<div class="switch" role="group" aria-label="Choose video treatment">
+<button type="button" data-variant="final" aria-pressed="true">Finished film</button>
+<button type="button" data-variant="raw" aria-pressed="false">Unedited capture</button>
+</div>
+<a id="master" class="download" href="final-1080p60.mp4">Watch the 1080p / 60fps master</a>
+</div>
+<p class="video-note" id="variant-note">Narrated, captioned and camera-directed. Switch to the raw recording to see what the production pipeline changed.</p>
+</section>
+<div class="stats">
+<div class="stat"><div class="eyebrow">Source</div><div class="number">100% real</div><div class="desc">An MIT-licensed spreadsheet editor running locally. No recreated product screen.</div></div>
+<div class="stat"><div class="eyebrow">Verified outcome</div><div class="number">5 / 5</div><div class="desc">All selected values changed from plain numbers to currency formatting.</div></div>
+<div class="stat"><div class="eyebrow">Master</div><div class="number">60 fps</div><div class="desc">1920 × 1080, actual system pointer, 11.35 seconds and a complete decode pass.</div></div>
+</div>
+<section class="section">
+<div>
+<h2>Why this one works</h2>
+<p>Every shot has a reason. The camera starts with context, approaches the selected values, follows the formatting action and holds the result long enough to understand it.</p>
+<p>The voice is generated locally. Caption emphasis is aligned to the recorded speech. The audio mix is mastered to approximately −16 LUFS, rather than leaving narration buried under music.</p>
+</div>
+<div>
+<h2>The actual sequence</h2>
+<ol class="steps">
+<li>Present the unformatted expenses <span>0:00–0:03</span></li>
+<li>Select five real spreadsheet cells <span>0:03–0:04</span></li>
+<li>Apply the native currency button <span>0:04–0:05</span></li>
+<li>Hold the verified new values <span>0:05–0:08</span></li>
+<li>Return to the complete sheet <span>0:08–0:11</span></li>
+</ol>
+</div>
+</section>
+</main>
+<footer><span>Independent Sauce study. Inspired by screen-recording filmmaking techniques, not an official Screen Studio or OpenSheets production.</span><span><a href="https://github.com/w0h1v/OpenSheets">OpenSheets source (MIT)</a> · <a href="https://github.com/Davemafy/sauce-vids">Sauce engineering</a></span></footer>
+</div>
+<script>
+(() => {
+ const video=document.getElementById('film');
+ const master=document.getElementById('master');
+ const note=document.getElementById('variant-note');
+ const buttons=[...document.querySelectorAll('[data-variant]')];
+ const files={final:{src:'final-720p30.mp4',master:'final-1080p60.mp4',
+   note:'Narrated, captioned and camera-directed. Switch to the raw recording to see what the production pipeline changed.'},
+   raw:{src:'raw-720p30.mp4',master:'raw-720p30.mp4',
+   note:'The same actual source clip, without narrated editing or music. Use the toggle to compare the treatment at the same point in the workflow.'}};
+ buttons.forEach(btn=>btn.addEventListener('click',()=>{
+  const key=btn.dataset.variant;
+  if(btn.getAttribute('aria-pressed')==='true')return;
+  const current=video.currentTime,playing=!video.paused;
+  video.pause();
+  video.src=files[key].src;
+  video.load();
+  video.addEventListener('loadedmetadata',()=>{
+   video.currentTime=Math.min(current,Math.max(0,video.duration-.1));
+   if(playing)video.play().catch(()=>{});
+  },{once:true});
+  master.href=files[key].master;
+  master.textContent=key==='raw'?'Open the unedited recording':'Watch the 1080p / 60fps master';
+  note.textContent=files[key].note;
+  buttons.forEach(b=>b.setAttribute('aria-pressed',String(b===btn)));
+ }));
+})();
+</script>
+</body>
+</html>
