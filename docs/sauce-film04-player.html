@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#121311"><title>Sauce / Cut 04</title>
+<style>
+*{box-sizing:border-box}
+:root{color-scheme:dark}
+body{margin:0;color:#f1f0ea;background:#121311;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1210px;margin:auto;padding:27px clamp(14px,4vw,50px) 72px}
+header{display:flex;align-items:center;justify-content:space-between;gap:15px;padding-bottom:25px;border-bottom:1px solid #353633}
+.logo{font:italic 700 31px Georgia,serif;letter-spacing:-.075em}
+.meta{color:#b2b1ab;letter-spacing:.18em;text-transform:uppercase;font-size:11px;font-weight:700}
+h1{font:400 clamp(42px,6vw,78px)/1.03 Georgia,serif;letter-spacing:-.055em;margin:57px 0 16px}
+.intro{color:#b8b7b0;font-size:17px;line-height:1.65;max-width:630px;margin:0 0 32px}
+.video-wrap{background:#060706;border:1px solid #42433f;padding:5px;border-radius:13px;overflow:hidden}
+video{width:100%;display:block;aspect-ratio:16/9;object-fit:contain;background:#000;border-radius:8px}
+.controlbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px;margin-top:20px}
+.tabs{display:flex;gap:3px;padding:4px;background:#242521;border:1px solid #42423e;border-radius:8px}
+button{background:transparent;border:0;border-radius:5px;color:#c3c2ba;padding:11px 15px;font-size:13px;font-weight:650;cursor:pointer}
+button[aria-pressed="true"]{background:#ece9df;color:#111210}
+a{color:#efede4;text-decoration-thickness:1px;text-underline-offset:4px}
+a:hover{color:#fff}
+.download{font-size:14px}
+.section{display:grid;grid-template-columns:1fr 1fr;gap:50px;border-top:1px solid #363735;margin-top:68px;padding-top:24px}
+h2{font-size:17px;font-weight:650;letter-spacing:-.02em;margin:0 0 10px}
+p.note{color:#aaa9a3;line-height:1.7;font-size:14px;max-width:460px;margin:0}
+footer{margin-top:63px;border-top:1px solid #353633;padding-top:20px;color:#8e9089;font-size:12px;line-height:1.7}
+:focus-visible{outline:3px solid #f2f0e6;outline-offset:3px}
+@media(max-width:720px){.wrap{padding:19px 13px 55px}
+h1{margin-top:39px}.intro{font-size:15px;margin-bottom:24px}.video-wrap{padding:2px;border-radius:8px}
+.tabs{width:100%;gap:2px}.tabs button{flex:1;padding:11px 5px;font-size:11px}
+.section{grid-template-columns:1fr;gap:23px;margin-top:42px}
+.controlbar{gap:17px}
+}
+</style></head><body><main class="wrap">
+<header><div class="logo">sauce.</div><div class="meta">FILM / 04</div></header>
+<h1>The price moves<br>with you.</h1>
+<p class="intro">One real interaction. A sharper, shorter cut. Compare the new film with the previous version and the original screen capture.</p>
+<div class="video-wrap">
+<video id="film" controls playsinline preload="metadata" poster="poster.jpg" aria-label="Resend pricing interface showing the Pro tier change from $20 to $35">
+<source src="new-720p30.mp4" type="video/mp4">
+Your browser cannot play this video.
+</video>
+</div>
+<div class="controlbar">
+<div class="tabs" role="group" aria-label="Choose a cut">
+<button data-version="new" aria-pressed="true">New cut</button>
+<button data-version="old" aria-pressed="false">Previous cut</button>
+<button data-version="raw" aria-pressed="false">Raw capture</button>
+</div>
+<a class="download" id="full" href="new-1080p60.mp4">Watch at 1080p / 60fps</a>
+</div>
+<div class="section">
+<div><h2>What's different</h2><p class="note">Rebuilt the film around two verified price updates, a moving zoom lens, an independently rendered cursor and tighter narration. The interface inside the film is actual captured software, not a reconstructed scene.</p></div>
+<div><h2>Reference</h2><p class="note">Camera movement and visual pacing were studied against <a href="https://screen.studio/4" rel="noopener noreferrer" target="_blank">Screen Studio</a>. The source app is <a href="https://resend.com/pricing" rel="noopener noreferrer" target="_blank">Resend</a>. This is an independent editing demonstration, not an endorsement by either company.</p></div>
+</div>
+<footer>Original recording, 60fps picture and local narration. Preview and comparison are hosted on the Sauce test environment.</footer>
+</main>
+<script>
+(function(){
+const el=document.getElementById('film'),full=document.getElementById('full');
+const clips={
+new:['new-720p30.mp4','new-1080p60.mp4'],
+old:['old-720p30.mp4','old-1080p60.mp4'],
+raw:['raw-720p30.mp4','raw-1080p60.mp4']
+};
+const buttons=Array.from(document.querySelectorAll('[data-version]'));
+buttons.forEach(b=>b.addEventListener('click',()=>{
+if(b.getAttribute('aria-pressed')==='true')return;
+const mode=b.dataset.version;
+el.pause();el.src=clips[mode][0];el.load();
+full.href=clips[mode][1];
+buttons.forEach(q=>q.setAttribute('aria-pressed',String(q===b)));
+el.currentTime=0;
+}));
+})();
+</script>
+</body></html>
