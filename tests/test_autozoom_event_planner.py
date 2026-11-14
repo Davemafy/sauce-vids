@@ -42,6 +42,23 @@ class CameraTests(unittest.TestCase):
   vel=[tuple(frames[i+1][j]-frames[i][j] for j in range(3)) for i in range(839)]
   accelerations=[tuple(vel[i+1][j]-vel[i][j] for j in range(3)) for i in range(838)]
   self.assertLess(max(abs(x) for row in accelerations for x in row),.002)
+ def test_offscreen_rect_does_not_trigger_zoom(self):
+  invalid=[EV[0],dict(EV[1],resultRect={"x":600,"y":97,"width":800,"height":616}),EV[2]]
+  self.assertEqual(plan(invalid,SCREEN,14),[])
+ def test_full_viewport_is_not_an_artificial_closeup(self):
+  whole=[EV[0],dict(EV[1],resultRect={"x":0,"y":0,"width":1320,"height":720}),EV[2]]
+  self.assertEqual(plan(whole,SCREEN,14),[])
+ def test_multiple_independent_real_events(self):
+  again=[
+   {"t":16.2,"kind":"click","label":"Next review","semanticGoal":"inspect next review"},
+   {"t":16.6,"kind":"state_change","evidence":"New real review loaded",
+    "resultRect":{"x":565,"y":97,"width":734,"height":600}},
+   {"t":21.0,"kind":"interaction_complete","label":"next review inspected"},
+  ]
+  shots=plan(EV+again,SCREEN,25)
+  self.assertEqual(len(shots),2)
+  self.assertLess(shots[0].end,shots[1].start)
+
  def test_invalid_region_rejected(self):
   invalid=[EV[0],dict(EV[1],resultRect={"x":0,"y":0,"width":0,"height":0}),EV[2]]
   self.assertEqual(plan(invalid,SCREEN,14),[])

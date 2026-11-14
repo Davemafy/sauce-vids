@@ -60,6 +60,12 @@ def plan(events:list, viewport:dict,duration:float)->list[Shot]:
         bounds=changed["resultRect"]
         if any(float(bounds[k])<=0 for k in ("width","height")):
             continue
+        # Evidence must describe visible screen pixels. Offscreen/infinite
+        # DOM rectangles are not valid camera targets.
+        if (float(bounds["x"]) < -2 or float(bounds["y"]) < -2
+                or float(bounds["x"]) + float(bounds["width"]) > w + 2
+                or float(bounds["y"]) + float(bounds["height"]) > h + 2):
+            continue
         # When result region is very tall, the meaningful top portion is what
         # deserves to be read first (header + first changed lines), not all rows.
         rw=float(bounds["width"])
@@ -71,6 +77,9 @@ def plan(events:list, viewport:dict,duration:float)->list[Shot]:
         readable_w=rw*.80
         readable_h=rh*.56
         max_zoom=min(w/(readable_w+180),h/(readable_h+155))*.97
+        if max_zoom < 1.15:
+            # A whole-screen update is not a close-up target.
+            continue
         zoom=clamp(max_zoom,1.16,1.36)
         end_evt=next((e for e in events if e.get("kind")=="interaction_complete"
                     and changed["t"]<e.get("t",-1)<duration),None)

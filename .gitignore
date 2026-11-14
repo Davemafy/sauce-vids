@@ -18,3 +18,5 @@ patch_v03.py
 package-lock.json
 
 .apt/
+
+.sauce-render-env/

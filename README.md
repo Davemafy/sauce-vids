@@ -21,6 +21,17 @@ Instead of generating replacement interfaces, Sauce Vids works with **the live p
 
 The package also includes the **`sauce-director` skill**, which describes the capture–render–inspect iteration for Hermes.
 
+## Event-based video renderer (verified technical preview)
+
+Sauce can render actual browser recordings using motion triggered by a timestamped
+**verified** click and corresponding DOM state change. The generalized CLI accepts
+arbitrary source dimensions and 24–60 fps capture, rejects mismatched manifests,
+keeps the camera wide when evidence is absent, and verifies decoded MP4 output.
+The first end-to-end proof is a 14-second official Linear interactive preview.
+This is a rendering primitive, **not yet** automatic premium creative direction
+or semantic voice-to-visual editing. See [docs/event-driven-video.md](docs/event-driven-video.md)
+for the full contract, commands, and limitations.
+
 ## v0.5 — source-quality baseline
 
 Sauce now records approved public websites as **1920×1080 / 30 fps VP9**
