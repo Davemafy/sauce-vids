@@ -25,6 +25,10 @@ parser.add_argument("--music",type=Path,help="Optional licensed audio recording"
 parser.add_argument("--preview",type=float)
 parser.add_argument("--seconds",type=float)
 parser.add_argument("--static",action="store_true")
+parser.add_argument("--camera-profile",choices=["standard","screenstudio"],default="standard",
+                    help="Timing/easing preset; all camera targets still require recorded DOM evidence")
+parser.add_argument("--presentation",choices=["window","fullscreen"],default="window",
+                    help="Window uses a licensed browser frame; fullscreen preserves raw product pixels without invented chrome")
 args=parser.parse_args()
 ROOT=(args.manifest.parent if args.manifest else DEFAULT_ROOT).resolve()
 SRC=(args.video or ROOT/"linear-official-preview-real-60.mp4").resolve()
@@ -72,11 +76,15 @@ SCREEN_W=WINDOW_W
 SCREEN_H=round(CONTENT_H*FRAME_SCALE)
 SCREEN_X=WINDOW_X
 SCREEN_Y=WINDOW_Y+round(FRAME_HEADER_H*FRAME_SCALE)
-SHOTS=plan(MANIFEST.get("events",[]),{"width":INPUT_W,"height":INPUT_H},DURATION)
+SHOTS=plan(MANIFEST.get("events",[]),{"width":INPUT_W,"height":INPUT_H},DURATION,profile=args.camera_profile)
+if args.presentation=="fullscreen":
+    SCREEN_W,SCREEN_H=MASTER_W,MASTER_H
+    SCREEN_X,SCREEN_Y=0,0
 WORKDIR=(args.output.resolve().parent if args.output else ROOT)
 WORKDIR.mkdir(parents=True,exist_ok=True)
 (WORKDIR/"camera-plan.json").write_text(json.dumps(
  {"source":str(MANIFEST_PATH),"algorithm":"event-driven camera planner, no authored cues",
+  "profile":args.camera_profile,"presentation":args.presentation,
   "shots":[s.dictionary() for s in SHOTS]},indent=2))
 
 def render_shotcandy_overlay():
@@ -109,6 +117,10 @@ def render_shotcandy_overlay():
     return np.asarray(overlay,dtype=np.uint8)[:,:,[2,1,0,3]].copy()
 
 def prepare_stage():
+    if args.presentation=="fullscreen":
+        return (np.full((MASTER_H,MASTER_W,3),18,dtype=np.uint8),
+                np.zeros((1,1,4),dtype=np.uint8),
+                np.ones((1,1,1),dtype=np.float32))
     frame=render_shotcandy_overlay()
     # Matte gray, restrained neutral. No invented macOS bar, gradient or fake desktop wallpaper.
     background=Image.new("RGB",(MASTER_W,MASTER_H),(231,230,228))
@@ -140,6 +152,19 @@ OVERLAY_RGB=OVERLAY[:,:,:3].astype(np.float32)
 
 def camera_matrix(t,static=False):
     zoom,fx,fy= (1,.5,.5) if static else sample_camera(t,SHOTS)
+    if args.presentation=="fullscreen":
+        # Pixel-perfect isotropic scaling. Preserve source aspect ratio.
+        # The target content region moves toward the optical center without
+        # exposing off-canvas or distorting a single source UI pixel.
+        factor=min(SCREEN_W/INPUT_W,SCREEN_H/INPUT_H)*zoom
+        crop_w,crop_h=INPUT_W*factor,INPUT_H*factor
+        dx=SCREEN_W/2-fx*crop_w
+        dy=SCREEN_H/2-fy*crop_h
+        dx=(max(SCREEN_W-crop_w,min(0.,dx)) if crop_w>=SCREEN_W
+            else (SCREEN_W-crop_w)/2)
+        dy=(max(SCREEN_H-crop_h,min(0.,dy)) if crop_h>=SCREEN_H
+            else (SCREEN_H-crop_h)/2)
+        return np.array([[factor,0.,dx],[0.,factor,dy]],dtype=np.float64)
     pan_x=max(0.,min(1.,.5+(fx-.5)*1.90))
     pan_y=max(0.,min(1.,.5+(fy-.5)*1.90))
     sx=(SCREEN_W/INPUT_W)*zoom
@@ -152,6 +177,20 @@ def apply(source,t,static=False):
     mat=camera_matrix(t,static=static)
     content=cv2.warpAffine(source,mat,(SCREEN_W,SCREEN_H),
            flags=cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
+    if args.presentation=="fullscreen":
+        # Blank bars only occur when source is not 16:9; no fake desktop.
+        if INPUT_W/INPUT_H!=SCREEN_W/SCREEN_H and mat[0,0]<=min(SCREEN_W/INPUT_W,SCREEN_H/INPUT_H)+1e-4:
+            cropped=content.copy()
+            if INPUT_W/INPUT_H>SCREEN_W/SCREEN_H:
+                h=round(INPUT_H*mat[1,1]); y=round((SCREEN_H-h)/2)
+                cropped[:max(0,y),:]=(18,18,18)
+                cropped[min(SCREEN_H,y+h):,:]=(18,18,18)
+            else:
+                width=round(INPUT_W*mat[0,0]);x=round((SCREEN_W-width)/2)
+                cropped[:,:max(0,x)]=(18,18,18)
+                cropped[:,min(SCREEN_W,x+width):]=(18,18,18)
+            return cropped
+        return content
     stage=BASE.copy()
     clip=stage[SCREEN_Y:SCREEN_Y+SCREEN_H,SCREEN_X:SCREEN_X+SCREEN_W]
     if SCREEN_MASK.min()>=1:
@@ -171,12 +210,13 @@ def diagnostics():
     accel=np.diff(vel,axis=0)
     metrics={
        "frames":len(rows),
-       "zoom_shots":len(SHOTS),
+       "zoom_shots":(0 if args.static else len(SHOTS)),
        "max_translation_per_frame_px":round(float(np.max(np.abs(vel[:,[2,5]]))),4),
        "max_translation_acceleration_px_per_frame_sq":
              round(float(np.max(np.abs(accel[:,[2,5]]))),4),
        "max_zoom_per_frame":round(float(np.max(np.abs(vel[:,0]))),8),
-       "frame_source":"Shotcandy MIT browser-dark.svg",
+       "frame_source":("unmodified browser recording" if args.presentation=="fullscreen" else "Shotcandy MIT browser-dark.svg"),
+       "camera_profile":args.camera_profile,"presentation":args.presentation,
        "source_capture":str(MANIFEST.get("source_kind",MANIFEST.get("capture","verified browser recording"))),
        "camera_plan_source":"recorded click and DOM state change",
        "browser_frame_not_handmade":True,

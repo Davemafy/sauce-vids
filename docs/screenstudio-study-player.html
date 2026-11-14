@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#121313">
+  <title>Sauce / Motion Study 01</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:#121313;color:#f3f0e8;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+    .wrap{max-width:1120px;margin:auto;padding:28px 28px 92px}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:15px;border-bottom:1px solid #41413e;padding-bottom:22px}
+    .brand{font-family:Georgia,serif;font-size:29px;letter-spacing:-.07em;font-weight:700;font-style:italic}
+    .eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#c1bdb4;font-weight:700}
+    h1{font-size:clamp(38px,6vw,74px);letter-spacing:-.065em;line-height:1.02;margin:65px 0 16px;font-weight:620;max-width:850px}
+    .lead{font-size:clamp(15px,2vw,19px);color:#bdbab2;max-width:650px;line-height:1.55;margin:0 0 42px}
+    .player{background:#090a0a;border:1px solid #363635;border-radius:14px;padding:6px;overflow:hidden}
+    video{width:100%;display:block;aspect-ratio:16/9;object-fit:contain;background:#090a0a;border-radius:9px}
+    .controls{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:15px;padding:19px 0 0}
+    .tabs{display:flex;gap:6px;background:#232424;border:1px solid #363735;border-radius:9px;padding:4px}
+    .tabs button{background:transparent;border:0;color:#bbbcb8;font-size:13px;padding:11px 17px;border-radius:6px;cursor:pointer;font-weight:650}
+    .tabs button[aria-pressed=true]{background:#e8e5dd;color:#141414}
+    a{color:#f1eee5;text-underline-offset:4px}
+    .download{font-size:13px;color:#e2ded5}
+    .facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;margin:64px 0 52px;background:#373735;border:1px solid #373735}
+    .fact{background:#1b1c1c;padding:22px}
+    .fact .num{font-size:31px;font-weight:630;letter-spacing:-.045em;margin-top:12px}
+    .fact .sub{font-size:13px;color:#bdbab2;line-height:1.45;margin-top:6px}
+    h2{font-size:22px;letter-spacing:-.035em;font-weight:630;margin:0 0 14px}
+    .columns{display:grid;grid-template-columns:1fr 1fr;gap:38px}
+    .columns p,.columns li{font-size:15px;color:#bdbab2;line-height:1.65}
+    ul{padding-left:19px}
+    .foot{border-top:1px solid #41413e;margin-top:58px;padding-top:20px;display:flex;justify-content:space-between;gap:22px;color:#99978f;font-size:12px;line-height:1.6}
+    :focus-visible{outline:3px solid #dd5f52;outline-offset:3px}
+    @media(max-width:700px){
+      .wrap{padding:20px 15px 60px}
+      .top{padding-bottom:16px}.eyebrow{font-size:9px}
+      h1{margin-top:42px}
+      .lead{margin-bottom:24px}
+      .player{padding:2px;border-radius:9px}
+      .tabs{width:100%}.tabs button{flex:1;padding:12px 9px;font-size:12px}
+      .download{display:block}
+      .facts{margin:39px 0 38px;grid-template-columns:1fr}
+      .fact{padding:17px}
+      .columns{grid-template-columns:1fr;gap:20px}
+      .foot{display:block}
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="top"><div class="brand">Sauce</div><div class="eyebrow">Motion study / 01</div></header>
+    <h1>Two actions.<br>One continuous take.</h1>
+    <p class="lead">A reverse-engineering exercise based on Screen Studio's camera language. The film shows genuine interactions in Linear's public interactive preview, not a simulated product or a customer account.</p>
+    <div class="player">
+      <video id="film" controls playsinline preload="metadata" poster="poster.jpg" aria-label="Sauce event-based product film">
+        <source src="auto-720p30.mp4" type="video/mp4">
+        Your browser cannot play this video.
+      </video>
+    </div>
+    <div class="controls">
+      <div class="tabs" role="group" aria-label="Choose camera treatment">
+        <button type="button" data-clip="auto" aria-pressed="true">Directed camera</button>
+        <button type="button" data-clip="locked" aria-pressed="false">Locked camera</button>
+      </div>
+      <a class="download" id="hd" href="auto-1080p60.mp4">Open full HD / 60fps ↗</a>
+    </div>
+    <div class="facts">
+      <div class="fact"><div class="eyebrow">Capture</div><div class="num">12.0s</div><div class="sub">One actual 60fps browser recording, original system pointer retained.</div></div>
+      <div class="fact"><div class="eyebrow">Verified actions</div><div class="num">02</div><div class="sub">Two real clicks, each followed by a measured DOM content change.</div></div>
+      <div class="fact"><div class="eyebrow">Camera scale</div><div class="num">1.62×</div><div class="sub">Reference-inspired push-in, evidence-directed framing, measured releases.</div></div>
+    </div>
+    <section class="columns" aria-label="Study notes">
+      <div>
+        <h2>What changes?</h2>
+        <p>Switch between the two versions at the same playback timestamp. Both use precisely the same source footage, click timing, mouse path and music. The only variable is the camera.</p>
+        <ul>
+          <li>First focus: code review, approximately 1.90–5.83s</li>
+          <li>Second focus: task details, approximately 6.02–10.56s</li>
+          <li>Stable holds while content is read; no arbitrary cursor chase</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Source and limits</h2>
+        <p>Camera timing was studied against <a href="https://screen.studio/4" target="_blank" rel="noopener noreferrer">Screen Studio's official product demos</a>. This is an independently rendered technique study, not a recreation of their copyrighted video or product UI.</p>
+        <p>Original application: <a href="https://linear.app/" target="_blank" rel="noopener noreferrer">Linear</a>, public interactive website preview. Sauce has not verified an authenticated customer workflow or automated narration editing in this experiment.</p>
+      </div>
+    </section>
+    <footer class="foot"><div>Sauce / Film engineering study. No fabricated product screens.</div><div>Real capture · Verified edits · Reproducible 60fps export</div></footer>
+  </main>
+  <script>
+    (() => {
+      const video=document.getElementById('film');
+      const buttons=Array.from(document.querySelectorAll('[data-clip]'));
+      const hd=document.getElementById('hd');
+      const clips={auto:['auto-720p30.mp4','auto-1080p60.mp4'],
+                   locked:['locked-720p30.mp4','locked-1080p60.mp4']};
+      for(const b of buttons){
+        b.addEventListener('click',()=>{
+          const id=b.dataset.clip;
+          if(b.getAttribute('aria-pressed')==='true')return;
+          const t=video.currentTime;
+          video.pause();
+          video.src=clips[id][0];
+          video.load();
+          video.addEventListener('loadedmetadata',()=>{
+            video.currentTime=Math.min(t,Math.max(0,video.duration-0.1));
+          },{once:true});
+          hd.href=clips[id][1];
+          buttons.forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

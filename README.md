@@ -21,6 +21,15 @@ Instead of generating replacement interfaces, Sauce Vids works with **the live p
 
 The package also includes the **`sauce-director` skill**, which describes the capture–render–inspect iteration for Hermes.
 
+## Screen Studio camera study — two real product interactions
+
+[Watch the 12-second A/B comparison](https://devmcp.davemafy.xyz/sauce-autozoom/study01/)
+and read [the frame-by-frame reverse-engineering report](docs/screenstudio-study.md).
+Two real Linear preview interactions drive a pair of measured 1.62× camera
+pushes, stable holds and releases; the same input is available with a locked
+camera. This is a verified motion technique study, not a polished autonomous
+launch film.
+
 ## Event-based video renderer (verified technical preview)
 
 Sauce can render actual browser recordings using motion triggered by a timestamped

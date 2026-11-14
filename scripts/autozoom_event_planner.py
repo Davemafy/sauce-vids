@@ -45,7 +45,10 @@ class Shot:
     def dictionary(self):
         return vars(self)
 
-def plan(events:list, viewport:dict,duration:float)->list[Shot]:
+def plan(events:list, viewport:dict,duration:float, profile:str="standard")->list[Shot]:
+    """Camera profile affects motion timing, never the evidence requirements."""
+    if profile not in ("standard", "screenstudio"):
+        raise ValueError("Unsupported camera profile")
     shots=[]
     w,h=viewport["width"],viewport["height"]
     meaningful=[e for e in events if e.get("kind")=="click" and e.get("semanticGoal")]
@@ -80,16 +83,24 @@ def plan(events:list, viewport:dict,duration:float)->list[Shot]:
         if max_zoom < 1.15:
             # A whole-screen update is not a close-up target.
             continue
-        zoom=clamp(max_zoom,1.16,1.36)
+        zoom=(clamp(max_zoom*1.16,1.36,1.62) if profile=="screenstudio"
+              else clamp(max_zoom,1.16,1.36))
         end_evt=next((e for e in events if e.get("kind")=="interaction_complete"
                     and changed["t"]<e.get("t",-1)<duration),None)
-        if end_evt is not None:
-            release=min(duration-1.15,end_evt["t"]+.18)
+        if profile=="screenstudio":
+            release=(min(duration-1.15,end_evt["t"]+.08) if end_evt is not None
+                     else min(duration-1.15,changed["t"]+2.2))
+            start=max(0.0,ct-.34)
+            settle=min(release-.55,changed["t"]+.24)
+            end=min(duration-.08,release+1.0)
         else:
-            release=min(duration-1.15,changed["t"]+3.3)
-        start=max(0.0,ct-.32)
-        settle=min(release-.7,changed["t"]+1.20)
-        end=min(duration-.14,release+2.05)
+            if end_evt is not None:
+                release=min(duration-1.15,end_evt["t"]+.18)
+            else:
+                release=min(duration-1.15,changed["t"]+3.3)
+            start=max(0.0,ct-.32)
+            settle=min(release-.7,changed["t"]+1.20)
+            end=min(duration-.14,release+2.05)
         if settle<=start or end<=release:continue
         shots.append(Shot(
             action=str(click.get("label","interaction")),click=float(ct),

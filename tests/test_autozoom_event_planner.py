@@ -59,6 +59,31 @@ class CameraTests(unittest.TestCase):
   self.assertEqual(len(shots),2)
   self.assertLess(shots[0].end,shots[1].start)
 
+ def test_reference_profile_two_verified_events(self):
+  real=[
+   {"t":2.238,"kind":"click","label":"Reviews","semanticGoal":"inspect code"},
+   {"t":2.587,"kind":"state_change","evidence":"code diff visible",
+    "resultRect":{"x":559.9,"y":97,"width":750.6,"height":616}},
+   {"t":4.75,"kind":"interaction_complete","label":"code read"},
+   {"t":6.361,"kind":"click","label":"Faster app launch","semanticGoal":"inspect task"},
+   {"t":6.655,"kind":"state_change","evidence":"task body visible",
+    "resultRect":{"x":296.4,"y":97,"width":661.7,"height":614}},
+   {"t":9.48,"kind":"interaction_complete","label":"task read"}
+  ]
+  shots=plan(real,SCREEN,12.0,profile="screenstudio")
+  self.assertEqual(len(shots),2)
+  self.assertTrue(all(1.55<=s.zoom<=1.62 for s in shots))
+  self.assertTrue(all(s.settle-s.start<1.05 for s in shots))
+  self.assertTrue(all(.9<=s.end-s.release<=1.02 for s in shots))
+  self.assertLess(shots[0].end,shots[1].start)
+  self.assertAlmostEqual(sample_camera(3.3,shots)[0],shots[0].zoom)
+  self.assertAlmostEqual(sample_camera(8,shots)[0],shots[1].zoom)
+  self.assertEqual(sample_camera(11.3,shots),(1,.5,.5))
+ def test_reference_profile_requires_real_evidence(self):
+  self.assertEqual(plan(EV[:1],SCREEN,12.0,profile="screenstudio"),[])
+  with self.assertRaises(ValueError):
+   plan(EV,SCREEN,12.0,profile="unverified")
+
  def test_invalid_region_rejected(self):
   invalid=[EV[0],dict(EV[1],resultRect={"x":0,"y":0,"width":0,"height":0}),EV[2]]
   self.assertEqual(plan(invalid,SCREEN,14),[])
