@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f6f5f1">
+<title>Sauce — Brimble landscape</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+html{background:#f6f5f1}
+body{margin:0;color:#262825;background:#f6f5f1;
+ font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1260px;padding:24px clamp(16px,4vw,46px) 70px;margin:auto}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding-bottom:19px;border-bottom:1px solid #d9d8d0}
+.logo{font:italic 700 32px/1 Georgia,serif;letter-spacing:-.075em}
+header span{color:#777a74;font-size:13px}
+.player{margin:28px 0 0;padding:7px;border:1px solid #d7d7d0;
+ border-radius:20px;background:#e9e8e2;
+ box-shadow:0 17px 50px rgba(22,26,22,.08)}
+video{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:contain;
+ overflow:hidden;border-radius:14px;background:#e9e8e2}
+.actions{display:flex;justify-content:space-between;align-items:center;
+ gap:12px;flex-wrap:wrap;margin:18px 0 0}
+.versions{display:inline-flex;gap:4px;border:1px solid #d5d6ce;
+ background:#eaeae4;padding:4px;border-radius:10px}
+button,.open{cursor:pointer;font:600 13px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif}
+.versions button{border:0;border-radius:7px;padding:11px 15px;color:#696b65;background:transparent}
+.versions button[aria-pressed=true]{background:#292d29;color:#fafbf7}
+.aux{display:flex;align-items:center;gap:15px}
+.aux button{border:1px solid #d4d5cf;background:#f7f6f2;color:#333632;
+ border-radius:8px;padding:10px 13px}
+.open{color:#323632;text-underline-offset:3px}
+.details{margin:45px 0 0;border-top:1px solid #dadad2;padding-top:21px;
+ display:flex;align-items:start;justify-content:space-between;gap:35px}
+.details h1{font-size:20px;letter-spacing:-.025em;font-weight:600;margin:0 0 8px}
+.details p{font-size:14px;color:#777a73;line-height:1.65;margin:0;max-width:650px}
+.details .aside{max-width:290px}
+a{color:inherit}
+a:focus-visible,button:focus-visible{outline:3px solid #515750;outline-offset:3px}
+@media(max-width:700px){
+ main{padding:14px 16px 50px}
+ header{padding-bottom:13px}.logo{font-size:28px}
+ .player{margin-top:17px;padding:3px;border-radius:13px}
+ video{border-radius:10px}
+ .actions{margin-top:15px;gap:14px}
+ .versions{width:100%}.versions button{flex:1;padding:10px 6px;font-size:12px}
+ .aux{width:100%;justify-content:space-between}
+ .details{display:block;margin-top:33px}
+ .details .aside{margin-top:17px}
+}
+</style>
+</head>
+<body><main>
+<header><div class="logo">sauce.</div></header>
+<section class="player" aria-label="Landscape film player">
+ <video id="film" controls playsinline preload="metadata" poster="poster.jpg"
+ aria-label="Brimble Codex setup, captured in a live browser and edited at high resolution">
+ <source src="new-720p30.mp4" type="video/mp4">Your browser cannot play the film.
+ </video>
+</section>
+<div class="actions">
+ <div class="versions" role="group" aria-label="Compare footage">
+   <button data-mode="new" aria-pressed="true">New landscape</button>
+   <button data-mode="previous" aria-pressed="false">Previous cut</button>
+   <button data-mode="source" aria-pressed="false">Source capture</button>
+ </div>
+ <div class="aux"><button type="button" id="expand">Fullscreen</button>
+   <a id="master" class="open" href="new-1080p60.mp4">1080p / 60fps MP4</a>
+ </div>
+</div>
+<div class="details">
+ <div><h1>Brimble · Codex setup</h1>
+  <p>The public Brimble flow: open the agent picker, choose Codex and copy the actual setup command.
+  The new cut uses high-resolution Chromium-rendered states, verified interaction timing and
+  a separately composited cursor.</p>
+ </div>
+ <p class="aside">No account authorization or deployment is shown. This is an independent Sauce production exercise, not affiliated with Brimble.</p>
+</div>
+<script>
+(()=>{
+ const film=document.getElementById('film'),master=document.getElementById('master');
+ const modes={
+  new:['new-720p30.mp4','new-1080p60.mp4','poster.jpg'],
+  previous:['../sauce-film-05/landscape-preview.mp4','../sauce-film-05/landscape-1080p60.mp4','poster.jpg'],
+  source:['../sauce-film-05/raw-1080p60.mp4','../sauce-film-05/raw-1080p60.mp4','poster.jpg']
+ };
+ const buttons=[...document.querySelectorAll('[data-mode]')];
+ function change(mode){
+  const files=modes[mode];if(!files)return;
+  if(buttons.find(b=>b.dataset.mode===mode)?.getAttribute('aria-pressed')==='true')return;
+  film.pause();film.src=files[0];film.poster=files[2];film.load();master.href=files[1];
+  buttons.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===mode)));
+ }
+ buttons.forEach(b=>b.addEventListener('click',()=>change(b.dataset.mode)));
+ document.getElementById('expand').addEventListener('click',()=>{
+  if(film.requestFullscreen)film.requestFullscreen().catch(()=>{});
+  else if(film.webkitEnterFullscreen)film.webkitEnterFullscreen();
+ });
+})();
+</script>
+</main></body>
+</html>
