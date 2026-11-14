@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#eeede8"><title>Sauce — Connect your agent · Short</title>
+<meta property="og:title" content="Connect your agent · Sauce Film">
+<meta property="og:description" content="A real 8-second agent setup walkthrough.">
+<meta property="og:type" content="video.other">
+<meta property="og:video" content="https://devmcp.davemafy.xyz/sauce-film-05/short/film-1080x1920.mp4">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#eeede8;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+main{position:fixed;inset:0;background:#eeede8}
+video{width:100%;height:100%;height:100dvh;display:block;object-fit:cover;object-position:center center;background:#eeede8}
+.controls{position:absolute;left:0;right:0;bottom:max(15px,env(safe-area-inset-bottom));z-index:3;display:flex;align-items:center;justify-content:center;gap:12px;pointer-events:none}
+button,.compare{pointer-events:auto;appearance:none;border:1px solid #2f312e;border-radius:100px;padding:12px 18px;background:#202320;color:#fff;font:650 14px/1.1 system-ui;box-shadow:0 5px 25px #0002;cursor:pointer}
+.compare{background:#ffffff;color:#242724;text-decoration:none;border-color:#d1d0cb}
+button:focus-visible,.compare:focus-visible{outline:3px solid #727b8d;outline-offset:3px}
+.loading{position:absolute;top:12px;right:12px;background:#202320dd;color:#fff;border-radius:8px;font-size:12px;padding:6px 9px;z-index:4}
+@media(min-width:750px){video{object-fit:contain;max-width:510px;margin-inline:auto}.controls{bottom:22px}}
+</style></head>
+<body><main>
+<video id="short" poster="poster.jpg?v=2" autoplay muted playsinline loop preload="auto"
+aria-label="Real Brimble agent picker with Codex setup command">
+<source src="film-540x960.mp4?v=2" type="video/mp4">Your browser does not support video.
+</video>
+<div class="controls">
+<button id="sound" type="button"> <span aria-hidden="true">♫</span> Hear narration</button>
+<a class="compare" href="../?compare=1">Compare formats</a>
+</div>
+<div id="status" class="loading" hidden>Tap play to begin</div>
+</main>
+<script>
+(()=>{
+const video=document.getElementById('short');
+const sound=document.getElementById('sound');
+const status=document.getElementById('status');
+const attempt=video.play();
+if(attempt&&typeof attempt.catch==='function')attempt.catch(()=>{
+ status.hidden=false;
+ status.textContent='Tap to play';
+});
+sound.addEventListener('click',async()=>{
+ if(video.muted){
+  video.muted=false;video.currentTime=0;
+  sound.textContent='Mute narration';
+  try{await video.play();status.hidden=true}catch{status.hidden=false}
+ }else{
+  video.muted=true;sound.textContent='Hear narration';
+  try{await video.play()}catch{}
+ }
+});
+video.addEventListener('click',()=>{
+ if(video.paused)video.play().catch(()=>{});
+ else video.pause();
+});
+})();
+</script>
+</body></html>

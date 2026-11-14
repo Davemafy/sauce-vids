@@ -68,7 +68,11 @@ video.vertical{max-height:70svh}
 <footer>Independent Sauce production exercise. The captured product belongs to <a href="https://www.brimble.io/" target="_blank" rel="noopener noreferrer">Brimble</a>; no partnership or endorsement is implied.</footer>
 </main>
 <script>
+if(window.matchMedia('(max-width: 700px)').matches && new URLSearchParams(location.search).get('compare')!=='1'){
+ location.replace('/sauce-film-05/short/');
+}
 (()=>{
+
 const v=document.getElementById('film');
 const master=document.getElementById('master');
 const buttons=Array.from(document.querySelectorAll('[data-mode]'));
