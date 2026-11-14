@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#e8e7e4">
+<title>Sauce — Linear auto-focus test</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:#171819;background:#e8e7e4}
+*{box-sizing:border-box}body{margin:0;padding:clamp(18px,4vw,56px)}main{max-width:1160px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:44px}
+.brand{font-size:14px;font-weight:700;letter-spacing:-.04em}.mark{font-size:11px;text-transform:uppercase;letter-spacing:.13em;color:#777774}
+h1{font-weight:600;letter-spacing:-.052em;line-height:1.08;font-size:clamp(32px,5vw,62px);margin:0 0 14px}
+.lead{color:#676965;font-size:15px;line-height:1.55;margin:0 0 30px;max-width:710px}
+video{display:block;width:100%;aspect-ratio:16/9;border-radius:8px;background:#d7d6d3;border:1px solid #cdcdca}
+.controls{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:18px}
+button,a.action,select{font:inherit;color:#242625;background:#f7f7f4;border:1px solid #c8c9c5;border-radius:7px;min-height:44px;font-size:13px;font-weight:560;padding:10px 14px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+button.active{color:#fff;background:#222524;border-color:#222524}
+button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #334dcb;outline-offset:2px}
+select{appearance:auto}.status{font-size:12px;color:#636763;margin-top:14px;min-height:19px}
+.meta{font-size:13px;color:#747773;line-height:1.6;max-width:820px;margin:26px 0 0}
+footer{border-top:1px solid #cbc9c4;margin-top:54px;padding:20px 0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;color:#797c79;font-size:12px}
+footer a,.meta a{color:#3c403e;text-underline-offset:3px}@media(max-width:700px){header{margin-bottom:24px}.controls select{flex-grow:1}}
+</style></head><body><main>
+<header><div class="brand">Sauce / Motion lab</div><div class="mark">Study 01 · 14 seconds</div></header>
+<h1>One recorded click.<br>One camera move.</h1>
+<p class="lead">Linear's real interactive product preview. The camera is generated from recorded click and interface-change events, rather than manually authored zoom times.</p>
+<video id="film" poster="/sauce-autozoom/linear-poster.jpg" controls playsinline webkit-playsinline preload="metadata"><source src="/sauce-autozoom/linear-auto-720p60.mp4" type="video/mp4"></video>
+<div class="controls">
+<button class="active" id="auto" aria-pressed="true">Automatic focus</button>
+<button id="static" aria-pressed="false">Locked camera</button>
+<button id="raw" aria-pressed="false">Raw capture</button>
+<select id="quality" aria-label="Video quality"><option value="720p60">720p · 60fps</option><option value="720p30">720p · 30fps (phone)</option><option value="1080p60">1080p · 60fps</option></select>
+<button id="play">Play video</button>
+<a id="download" class="action" href="/sauce-autozoom/linear-auto-720p60.mp4" download="linear-auto-720p60.mp4">Download MP4</a>
+</div><div id="status" class="status" role="status" aria-live="polite">Ready · 14 seconds</div>
+<p class="meta">The interface and operating-system cursor were captured live. The browser frame is adapted from the established <a href="https://github.com/btahir/shotcandy" target="_blank" rel="noopener">Shotcandy</a> SVG under its MIT license. This is Linear's public interactive marketing preview, not a signed-in customer account. No UI was invented.</p>
+<footer><span>Independent technical experiment · Not affiliated with Linear or Screen Studio</span><span><a href="https://linear.app/" target="_blank" rel="noopener">Original preview</a> · <a href="/sauce-autozoom/SHOTCANDY-LICENSE.txt">Frame license</a></span></footer>
+</main><script>
+const v=document.getElementById('film'),s=document.getElementById('status'),quality=document.getElementById('quality'),dl=document.getElementById('download');
+const buttons={auto:document.getElementById('auto'),static:document.getElementById('static'),raw:document.getElementById('raw')};
+let mode='auto',revision=0,lastVideoTime=0,lastWanted=false;
+function file(){if(mode==='raw')return '/sauce-autozoom/linear-raw-60.mp4';if(mode==='static')return '/sauce-autozoom/linear-static-720p30.mp4';return '/sauce-autozoom/linear-auto-'+quality.value+'.mp4'}
+function choose(next){
+ const pos=v.currentTime>.05?v.currentTime:lastVideoTime;const playing=!v.paused||(v.readyState===0&&lastWanted);lastVideoTime=pos;lastWanted=playing;v.pause();mode=next;const request=++revision;
+ for(const key of Object.keys(buttons)){buttons[key].classList.toggle('active',key===mode);buttons[key].setAttribute('aria-pressed',String(key===mode))}
+ quality.disabled=mode!=='auto';const src=file();v.src=src;v.load();dl.href=src;dl.download=src.split('/').pop();
+ s.textContent='Loading '+mode+'…';
+ v.addEventListener('loadedmetadata',async function restore(){
+ v.removeEventListener('loadedmetadata',restore);if(request!==revision)return;v.currentTime=Math.min(pos,Math.max(0,v.duration-.1));
+ if(playing)try{await v.play()}catch(err){s.textContent='Try the 720p · 30fps option on this device.'}
+ },{once:true});
+}
+for(const key of Object.keys(buttons))buttons[key].onclick=()=>{if(mode!==key)choose(key)};
+quality.onchange=()=>choose('auto');
+document.getElementById('play').onclick=()=>v.play().catch(err=>s.textContent='Playback blocked: '+err.name);
+v.addEventListener('timeupdate',()=>{if(v.currentTime>.1){lastVideoTime=v.currentTime;s.textContent=mode+' · '+v.currentTime.toFixed(1)+' / '+v.duration.toFixed(1)+'s'}});
+v.addEventListener('error',()=>s.textContent='Unable to decode. Try 720p · 30fps.');
+</script></body></html>
