@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><meta name="theme-color" content="#131414"/><title>Sauce — Pricing in motion</title><style>
+*{box-sizing:border-box}body{margin:0;background:#131414;color:#f3f1eb;font:15px/1.6 Inter,system-ui,-apple-system,Arial,sans-serif}
+main{max-width:1230px;padding:28px clamp(14px,4vw,52px) 70px;margin:auto}
+header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #383938;padding-bottom:20px}
+.logo{font:italic bold 30px Georgia,serif;letter-spacing:-2px}.label{font-size:11px;color:#9d9e99;letter-spacing:2px;text-transform:uppercase}
+h1{font:normal clamp(38px,6vw,78px)/1.04 Georgia,serif;letter-spacing:-.05em;margin:58px 0 18px}
+.desc{color:#abaca7;max-width:620px;margin-bottom:30px}
+.player{padding:5px;border:1px solid #353635;border-radius:14px;background:#090909;box-shadow:0 25px 65px #0005}
+video{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;border-radius:9px;background:#050505}
+.controls{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;margin-top:20px}
+.tabs{display:flex;gap:4px;border:1px solid #393a39;border-radius:9px;background:#222423;padding:4px}
+button{border:0;border-radius:6px;background:transparent;color:#c1c2be;padding:11px 19px;font:600 13px system-ui;cursor:pointer}
+button[aria-pressed=true]{background:#e9e7df;color:#141515}
+a{color:#eae8e0;text-underline-offset:4px}a:hover{color:white}
+.link{font-size:13px}
+footer{display:flex;justify-content:space-between;gap:24px;margin-top:70px;border-top:1px solid #343533;padding-top:19px}
+footer p{color:#93948f;max-width:560px;font-size:12px;margin:0;line-height:1.65}
+:focus-visible{outline:3px solid #e9dac2;outline-offset:3px}
+@media(max-width:650px){main{padding:19px 13px 60px}h1{margin-top:43px}.player{padding:2px;border-radius:9px}
+.tabs{width:100%}.tabs button{flex:1;padding:12px 6px}footer{display:block}footer p+ p{margin-top:15px}}
+</style></head><body><main><header><div class="logo">sauce.</div><div class="label">Film 03 / real interaction</div></header>
+<h1>The price moves<br>with you.</h1>
+<p class="desc">A real product, real cursor and verified price changes. Watch an email pricing decision from beginning to end.</p>
+<div class="player"><video id="vid" playsinline controls preload="metadata" poster="poster.jpg"><source src="film-720p30.mp4" type="video/mp4"/>Your browser does not support video.</video></div>
+<div class="controls"><div class="tabs" role="group" aria-label="Choose version">
+<button type="button" data-ver="film" aria-pressed="true">Finished film</button>
+<button type="button" data-ver="original" aria-pressed="false">Original capture</button>
+</div><a class="link" id="hd" href="film-1080p60.mp4">Watch 1080p / 60fps</a></div>
+<footer><p>Filmed in <a href="https://resend.com/pricing" rel="noopener noreferrer" target="_blank">Resend's public pricing interface</a>. Independent filmmaking demonstration, not affiliated with or endorsed by Resend. All UI and pricing are from real application footage.</p><p>Original narration and editing by Sauce.</p></footer>
+</main><script>
+const v=document.getElementById("vid"),hd=document.getElementById("hd");
+const clips={film:["film-720p30.mp4","film-1080p60.mp4"],original:["raw-720p30.mp4","raw-1080p60.mp4"]};
+document.querySelectorAll("[data-ver]").forEach(b=>b.addEventListener("click",()=>{
+if(b.getAttribute("aria-pressed")==="true")return;
+let t=v.currentTime,k=b.dataset.ver;v.pause();v.src=clips[k][0];v.load();
+v.addEventListener("loadedmetadata",()=>{v.currentTime=Math.min(t,Math.max(0,v.duration-.15))},{once:true});
+hd.href=clips[k][1];
+document.querySelectorAll("[data-ver]").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));
+}));
+</script></body></html>
