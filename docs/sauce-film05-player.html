@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f3f2ed"><title>Sauce — Connect your agent / Film 05</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f2ed;color:#20221f;font:16px/1.55 Inter,system-ui,-apple-system,Segoe UI,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1200px;padding:26px clamp(17px,4vw,56px) 85px;margin:auto}
+header{display:flex;align-items:center;justify-content:space-between;padding:0 0 24px;border-bottom:1px solid #d8d7d1}
+.brand{font:bold italic 32px Georgia,serif;letter-spacing:-.08em}
+.tag{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#777973}
+.title-wrap{display:flex;justify-content:space-between;align-items:end;gap:25px;margin:52px 0 27px}
+h1{font:normal clamp(38px,5.5vw,75px)/1.04 Georgia,serif;letter-spacing:-.053em;margin:0}
+.intro{max-width:310px;margin:0;color:#686b65;font-size:14px;line-height:1.6}
+.player-shell{background:#dfdfda;border:1px solid #d1d0c9;padding:8px;border-radius:17px;box-shadow:0 25px 65px #1618160c;display:flex;justify-content:center;align-items:center}
+video{display:block;width:100%;object-fit:contain;border-radius:10px;background:#dfe0db;aspect-ratio:16/9}
+video.vertical{width:min(100%,410px);aspect-ratio:9/16;max-height:78svh}
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:17px;flex-wrap:wrap;padding:19px 0}
+.switch{display:flex;gap:5px;padding:4px;background:#e1e1da;border:1px solid #cdcec6;border-radius:9px}
+button{background:transparent;color:#5f625c;font:650 13px system-ui;border:0;padding:11px 18px;border-radius:6px;cursor:pointer}
+button[aria-pressed="true"]{color:#f5f4ed;background:#242521;box-shadow:0 2px 7px #0002}
+a{color:#252724;text-decoration-thickness:1px;text-underline-offset:4px}
+.download{font-size:13px;font-weight:650}
+.divider{height:1px;background:#d7d6d0;margin:64px 0 18px}
+.meta-row{display:grid;grid-template-columns:1fr 1fr;gap:45px}
+.meta-row strong{display:block;font-weight:650;font-size:15px;margin:0 0 7px}
+.meta-row p{margin:0;color:#666963;font-size:14px;line-height:1.66}
+footer{margin-top:52px;color:#7c7e78;font-size:12px}
+:focus-visible{outline:3px solid #262821;outline-offset:4px}
+@media(max-width:700px){
+.wrap{padding:16px 13px 60px}
+header{padding-bottom:15px}.brand{font-size:29px}
+.title-wrap{display:block;margin:36px 0 23px}
+.intro{margin-top:14px;max-width:none}
+.player-shell{padding:4px;border-radius:12px}
+video.vertical{max-height:70svh}
+.toolbar{gap:14px}
+.switch{width:100%}.switch button{flex:1}
+.meta-row{grid-template-columns:1fr;gap:22px}
+.divider{margin-top:46px}
+}
+</style></head>
+<body><main class="wrap">
+<header><div class="brand">sauce.</div><div class="tag">FILM LAB / 05</div></header>
+<div class="title-wrap">
+<h1>Connect your agent.</h1>
+<p class="intro">A real Brimble interaction, captured in one take. Directed twice: a widescreen film and a native vertical Short.</p>
+</div>
+<div class="player-shell">
+<video id="film" controls playsinline preload="metadata" poster="landscape-poster.jpg" aria-label="Brimble agent connection demo">
+<source src="landscape-preview.mp4" type="video/mp4">Your browser does not support video.
+</video>
+</div>
+<div class="toolbar">
+<div class="switch" role="group" aria-label="Video aspect ratio">
+<button data-mode="landscape" type="button" aria-pressed="true">Landscape · 16:9</button>
+<button data-mode="vertical" type="button" aria-pressed="false">Short · 9:16</button>
+</div>
+<a class="download" id="master" href="landscape-1080p60.mp4">Watch full-resolution MP4</a>
+</div>
+<div class="divider"></div>
+<div class="meta-row">
+<div><strong>What happens</strong>
+<p>Open Brimble's real agent picker, select Codex, and copy its setup command. The actual page and pointer positions drive every shot.</p></div>
+<div><strong>What doesn't happen</strong>
+<p>This is a public setup walkthrough, not an authenticated connection or deployment. Account authorization would be a separate step.</p></div>
+</div>
+<footer>Independent Sauce production exercise. The captured product belongs to <a href="https://www.brimble.io/" target="_blank" rel="noopener noreferrer">Brimble</a>; no partnership or endorsement is implied.</footer>
+</main>
+<script>
+(()=>{
+const v=document.getElementById('film');
+const master=document.getElementById('master');
+const buttons=Array.from(document.querySelectorAll('[data-mode]'));
+const files={
+ landscape:{preview:'landscape-preview.mp4',master:'landscape-1080p60.mp4',poster:'landscape-poster.jpg'},
+ vertical:{preview:'portrait-preview.mp4',master:'portrait-1080x1920.mp4',poster:'portrait-poster.jpg'}
+};
+function change(mode){
+ const f=files[mode];if(!f)return;
+ v.pause();v.src=f.preview;v.poster=f.poster;
+ v.classList.toggle('vertical',mode==='vertical');v.load();
+ master.href=f.master;
+ buttons.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===mode)));
+}
+buttons.forEach(b=>b.addEventListener('click',()=>change(b.dataset.mode)));
+if(window.matchMedia('(max-width: 700px)').matches)change('vertical');
+})();
+</script></body></html>
