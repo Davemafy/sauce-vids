@@ -15,7 +15,7 @@ VO=json.loads((P/"short-voice.json").read_text())["lines"]
 MUSIC=P.parents[3]/"sauce-demo-assets"/"digital-clouds-mixkit.mp3"
 W,H,SW,SH,FPS=1080,1920,1600,900,60
 DUR=8.4
-PX,PY,PW,PH=45,235,990,1320
+PX,PY,PW,PH=30,108,1020,1500
 BORDER=21
 assert PH/SH>1
 assert [e['action'] for e in REC['events']][:2]==['connect-modal-visible','setup-command-visible']
@@ -37,30 +37,26 @@ def between(t,a,b,x,y):
 
 def camera(t):
  # Begin in the real Brimble dialog, not a distant landing page.
- if t<1.9:return (1.36,800.,470.)
- if t<3.25:return (between(t,1.9,3.25,1.36,1.52),
-                    800.,between(t,1.9,3.25,470.,497.))
- return (1.52,800.,497.)
+ if t<1.9:return (1.20,800.,470.)
+ if t<3.25:return (between(t,1.9,3.25,1.20,1.23),
+                    800.,between(t,1.9,3.25,470.,481.))
+ return (1.23,800.,481.)
 
 def stage():
- # No gradient/glass; a light neutral canvas like the product itself.
- img=Image.new("RGB",(W,H),(238,237,232))
+ # Unadorned product stage. The app already has its own identity and heading.
+ # Previous header eyebrow, duplicate marketing headline, and explanatory
+ # microcopy were redundant and undermined the film's perceived quality.
+ img=Image.new("RGB",(W,H),(242,241,237))
  shadow=Image.new("L",(W,H),0)
  d=ImageDraw.Draw(shadow)
- d.rounded_rectangle((PX,PY,PX+PW,PY+PH),radius=BORDER,fill=240)
- blurred=shadow.filter(ImageFilter.GaussianBlur(26))
- img.paste((79,81,79),(0,19),blurred.point(lambda x:int(x*.33)))
+ d.rounded_rectangle((PX,PY,PX+PW-1,PY+PH-1),radius=18,fill=210)
+ blurred=shadow.filter(ImageFilter.GaussianBlur(20))
+ img.paste((117,118,114),(0,13),blurred.point(lambda a:int(a*.26)))
  d=ImageDraw.Draw(img)
- d.rounded_rectangle((PX-1,PY-1,PX+PW,PY+PH),radius=BORDER,
-   fill=(252,252,250),outline=(185,185,181),width=2)
- # Native portrait title, not a letterboxed landscape video.
- dm=str(P/"fonts"/"DMSans.ttf")
- title=ImageFont.truetype(dm,56)
- micro=ImageFont.truetype(dm,28)
- d.text((185,62),"BRIMBLE  /  AGENT SETUP",font=micro,fill=(95,97,93))
- d.text((185,117),"Connect your agent.",font=title,fill=(36,38,35))
- d.text((185,184),"Real interface. Real setup command.",font=micro,fill=(111,113,108))
+ d.rounded_rectangle((PX-1,PY-1,PX+PW,PY+PH),radius=18,
+                     fill=(252,252,250),outline=(199,199,193),width=2)
  return np.asarray(img)[:,:,::-1].copy()
+
 BASE=stage()
 # Clip dynamic browser pixels to rounded-corner window. No fake browser chrome.
 shape=Image.new("L",(PW,PH),0)
@@ -94,8 +90,8 @@ def pointer(src,t):
  return out
 
 FONTFILE=P/"fonts"/"DMSans.ttf"
-FONT=ImageFont.truetype(str(FONTFILE),68)
-try:FONT.set_variation_by_name("SemiBold")
+FONT=ImageFont.truetype(str(FONTFILE),49)
+try:FONT.set_variation_by_name("Medium")
 except Exception:pass
 def caption_cache():
  cache={}
@@ -104,19 +100,39 @@ def caption_cache():
   lines=[];line=""
   for word in words:
    candidate=(line+" "+word).strip()
-   if line and FONT.getlength(candidate)>W-260:
+   if line and FONT.getlength(candidate)>W-290:
     lines.append(line);line=word
    else:line=candidate
   if line:lines.append(line)
-  img=Image.new("RGBA",(W,215),(0,0,0,0))
+  img=Image.new("RGBA",(W,174),(0,0,0,0))
   d=ImageDraw.Draw(img)
   for i,line in enumerate(lines[:3]):
    width=d.textlength(line,font=FONT)
-   d.text(((W-width)/2,12+i*78),line,font=FONT,fill=(39,42,39,255))
+   d.text(((W-width)/2,9+i*65),line,font=FONT,fill=(39,42,39,255))
   rgba=np.asarray(img,dtype=np.uint8)
   cache[item["id"]]=(rgba[:,:,[2,1,0]],rgba[:,:,3:4].astype(np.float32)/255)
  return cache
 CAPTION=caption_cache()
+
+# Selective depth-of-focus on ORIGINAL browser pixels.
+# Keep the actual verified Brimble dialog unaltered while reducing unrelated
+# background-page text that would otherwise appear clipped on narrow screens.
+def focus_mask(top,bottom):
+ layer=Image.new("L",(SW,SH),0)
+ ImageDraw.Draw(layer).rounded_rectangle((592,top,1002,bottom),radius=15,fill=255)
+ return np.asarray(layer.filter(ImageFilter.GaussianBlur(5)),
+                   dtype=np.float32)[:,:,None]/255.
+
+FOCUS_EARLY=focus_mask(267,640)
+FOCUS_LATE=focus_mask(207,698)
+
+def focus_source(src,t):
+ background=cv2.GaussianBlur(src,(0,0),sigmaX=17,sigmaY=17)
+ # The real dialog grows after selecting Codex. Expand the preserved
+ # region with it, rather than revealing unrelated text behind the modal.
+ k=ease((t-2.03)/.35)
+ mask=FOCUS_EARLY*(1-k)+FOCUS_LATE*k
+ return np.uint8(background*(1-mask)+src*mask)
 
 def make_frame(src,t):
  z,fx,fy=camera(t)
@@ -126,7 +142,7 @@ def make_frame(src,t):
  xx=max(PW-SW*scale,min(0,xx))
  yy=max(PH-SH*scale,min(0,yy))
  mat=np.array([[scale,0,xx],[0,scale,yy]],dtype=np.float32)
- video=cv2.warpAffine(pointer(src,t+5.60),mat,(PW,PH),
+ video=cv2.warpAffine(pointer(focus_source(src,t),t+5.60),mat,(PW,PH),
    flags=cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
  out=BASE.copy()
  area=out[PY:PY+PH,PX:PX+PW]
@@ -134,7 +150,7 @@ def make_frame(src,t):
  row=next((row for row in VO if row["start"]<=t<=row["end"]+.15),None)
  if row:
   rgb,a=CAPTION[row["id"]]
-  low=out[1600:1600+215,0:W]
+  low=out[1660:1660+174,0:W]
   ht=min(low.shape[0],rgb.shape[0])
   low[:ht]=np.uint8(low[:ht].astype(np.float32)*(1-a[:ht])+rgb[:ht]*a[:ht])
  return out

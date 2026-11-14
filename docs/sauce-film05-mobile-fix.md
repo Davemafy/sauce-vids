@@ -60,3 +60,33 @@ python scripts/render_brimble_short05.py
 
 Do not share the landscape MP4 as the phone-first link. Share the
 `/short/` webpage or the native portrait MP4.
+
+## Second visual review: remove template typography (November 14)
+
+A real user's portrait screenshot exposed additional unnecessary overlays:
+
+- `BRIMBLE / AGENT SETUP`: uppercase metadata eyebrow, not part of the story.
+- `Connect your agent.`: redundant headline already visible inside the Brimble dialog.
+- `Real interface. Real setup command.`: self-explanatory filler.
+- Full-width bold captions and oversized sound/compare pills.
+- Clipped snippets of background webpage text above the actual dialog.
+
+The replacement short removes the complete editorial title stack and treats
+Brimble's own serif modal heading as the display typography. It uses a larger
+picture stage, a subtle camera push that keeps the full dialog in the mobile
+safe area, a smaller medium-weight sentence-case caption, and compact top
+controls that do not cover the subtitles.
+
+A purposefully blurred version of the *same recorded page* sits behind an
+unmodified modal area, with the focus matte expanding when the real
+dialog grows after the Codex action. Source UI, cursor and copied command
+remain the actual recorded content. This does not reconstruct the product.
+
+The rendered 1080×1920/60fps master and 540×960/30fps mobile version
+passed full decode. The public player was checked in Chromium at 390×844:
+autoplay works while muted, tapping sound unmutes and plays, no horizontal
+or vertical document overflow, and no JavaScript errors. The final
+6.2-second screen was inspected at actual phone aspect ratio.
+
+This is a visual-direction correction, **not a claim of full parity with
+Screen Studio**.
