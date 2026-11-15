@@ -1,0 +1,9 @@
+# Python dependencies for Sauce's high-DPI offscreen Chromium rendering.
+# Versions validated on the Vultr worker on 2026-11-15:
+# CairoSVG 2.9.1, Pillow 13.0.0, OpenCV-headless 4.14.0.94,
+# NumPy 2.5.4, Playwright 1.65.2.
+CairoSVG>=2.7,<3
+Pillow>=11,<14
+opencv-python-headless>=4.10,<5
+numpy>=2,<3
+playwright>=1.55,<2

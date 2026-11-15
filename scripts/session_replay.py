@@ -20,6 +20,7 @@ from session_contract import validate_actions,verify_package
 from spring_motion import cursor_track
 from cinematic_tracks import cinematic_camera
 from cinematic_composite import background_focus
+from cinematic_presentation_v13 import (make_dark_stage,paint_svg_pointer,paint_click_ripple)
 from cinematic_presentation_v12 import (draw_stage,compose_cursor,click_feedback,
     modal_spring_scale,WINDOW_X as PRESENT_X,WINDOW_Y as PRESENT_Y,
     WINDOW_W as PRESENT_W,WINDOW_H as PRESENT_H)
@@ -191,7 +192,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            screenshot_step:int=45,expected_text:str|None=None,
            click_effect:bool=False,backdrop_focus:bool=False,
            presentation_v12:bool=False,
-           presentation_hide_selector:str|None=None) -> dict:
+           presentation_hide_selector:str|None=None,
+           presentation_v13:bool=False) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -208,6 +210,9 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     length=seconds if seconds is not None else (last_ms-start_ms)/1000.+.35
     if not 0<length<=10:raise ValueError('Limit this proof renderer to <=10s')
     total=round(length*fps)
+    film_mode=presentation_v12 or presentation_v13
+    if presentation_v13 and info['dpr']<2:
+        raise ValueError('SVG film mode requires deviceScaleFactor >= 2')
     camera,camera_cues=cinematic_camera(
         session['events'],start_ms,length,fps,tuple(info['viewport']))
     dialog_events=[event for event in session['events']
@@ -222,9 +227,11 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 error=math.dist(cursor[idx],(action['x'],action['y']))
                 if error>3.:
                     raise RuntimeError(f'Cursor would miss recorded click: {error:.2f}px')
-    base,clip=(draw_stage() if presentation_v12 else draw_frame_base())
+    base,clip=(make_dark_stage() if presentation_v13 else
+               draw_stage() if presentation_v12 else draw_frame_base())
     assert (WINDOW_X,WINDOW_Y,WINDOW_W,WINDOW_H)==(PRESENT_X,PRESENT_Y,PRESENT_W,PRESENT_H)
-    cursor_art=extract_native_cursors(display=':121',scale=2)
+    # V13 deliberately never opens Xvfb or reads X11/native cursor glyphs.
+    cursor_art=None if presentation_v13 else extract_native_cursors(display=':121',scale=2)
     source_w,source_h=info['viewport']
     source_px_w=source_w*info['dpr']
     source_px_h=source_h*info['dpr']
@@ -238,8 +245,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
       'ffmpeg','-hide_banner','-loglevel','error','-y',
       '-f','rawvideo','-pix_fmt','bgr24','-video_size',f'{MASTER_W}x{MASTER_H}',
       '-framerate',str(fps),'-i','pipe:0','-an',
-      '-c:v','libx264','-preset','medium' if presentation_v12 else 'veryfast',
-      '-crf','14' if presentation_v12 else '16',
+      '-c:v','libx264','-preset','medium' if film_mode else 'veryfast',
+      '-crf','14' if film_mode else '16',
       '-pix_fmt','yuv420p','-g',str(fps*2),'-threads','7',
       '-movflags','+faststart',str(tmp)
     ],stdin=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=10*1024*1024)
@@ -280,7 +287,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             page.wait_for_timeout(260)
         page.clock.pause_at(datetime(2026,1,1,1,0,tzinfo=timezone.utc))
         hidden_decoration_count=0
-        if presentation_v12 and presentation_hide_selector:
+        if film_mode and presentation_hide_selector:
             # Strictly opt-in for specific decorative elements. Raw capture
             # evidence is unmodified; film-mode replay may hide the element
             # ONLY when the operator explicitly requests it.
@@ -294,6 +301,15 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                     "e=>getComputedStyle(e).visibility")=='hidden'
             else:
                 raise RuntimeError('Requested presentation element not found: '+selector)
+        if presentation_v13:
+            # Chromium only renders the REAL app; SVG cursor is composited
+            # in the video layer. Hide every native/DOM CSS cursor state.
+            page.add_style_tag(content='html,body,html *,html *::before,html *::after {cursor:none !important;}')
+            if page.locator('button').count():
+                actual=page.locator('button').first.evaluate(
+                    '(e)=>getComputedStyle(e).cursor')
+                if actual!='none':
+                    raise RuntimeError('Native cursor suppression failed: '+actual)
         page.evaluate(ANIMATION_DRIVER)
         page.evaluate('window.__sauceAnimationControls.settleInitial()')
         animated_frames=0
@@ -312,7 +328,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 execute_action(page,actions[next_action])
                 next_action+=1
             animated_frames+=int(page.evaluate('(ms)=>window.__sauceAnimationControls.step(ms)',wanted_ms))
-            if presentation_v12:
+            if film_mode:
                 # Independent CSS scale multiplies the site's native
                 # Web Animations. A physically damped 0.95 -> 1.0 emphasis
                 # only runs while the REAL modal has just opened.
@@ -353,7 +369,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             dy=max(WINDOW_H-source_px_h*factor,min(0.,dy))
             matrix=np.array([[factor,0,dx],[0,factor,dy]],dtype=np.float32)
             source=cv2.warpAffine(decoded,matrix,(WINDOW_W,WINDOW_H),
-                   flags=cv2.INTER_LANCZOS4 if presentation_v12 else cv2.INTER_LINEAR,
+                   flags=cv2.INTER_LANCZOS4 if film_mode else cv2.INTER_LINEAR,
                    borderMode=cv2.BORDER_REPLICATE)
             if backdrop_focus and first_dialog_ms is not None:
                 age_ms=wanted_ms-(first_dialog_ms-start_ms)
@@ -375,7 +391,15 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             output_image=base.copy()
             area=output_image[WINDOW_Y:WINDOW_Y+WINDOW_H,WINDOW_X:WINDOW_X+WINDOW_W]
             area[:]=np.uint8(area.astype(np.float32)*(1-clip)+source*clip)
-            if presentation_v12:
+            if presentation_v13:
+                # Render SVG-sourced ring first, custom pointer second.
+                # The pointer is the ONLY visible cursor in the final frame.
+                paint_click_ripple(output_image,session['events'],start_ms,
+                                   index/fps,info['dpr']*factor,dx,dy)
+                if cursor:
+                    paint_svg_pointer(output_image,cursor[index],session['events'],
+                                       start_ms,index/fps,info['dpr']*factor,dx,dy)
+            elif presentation_v12:
                 # Perceived click must remain visible. Draw feedback first,
                 # pointer second; CSS cursor:none NEVER hides this overlay.
                 click_feedback(output_image,session['events'],start_ms,index/fps,
@@ -427,14 +451,18 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'camera_cues':camera_cues,
             'editorial_background_focus':bool(backdrop_focus),
             'presentation_v12':bool(presentation_v12),
-            'cursor_visibility':'persistent' if presentation_v12 else 'respect-site-css',
-            'click_feedback':'physical press+ring' if presentation_v12 else ('ring' if click_effect else 'disabled'),
-            'presentation_only_hidden_selector':presentation_hide_selector if presentation_v12 else None,
+            'presentation_v13':bool(presentation_v13),
+            'cursor_asset':'assets/cursors/sauce-pointer.svg' if presentation_v13 else 'native-x11',
+            'native_cursor_suppressed':bool(presentation_v13),
+            'stage':'dark-ambient-multilayer' if presentation_v13 else 'light',
+            'cursor_visibility':'svg-overlay-always-visible' if presentation_v13 else ('persistent' if presentation_v12 else 'respect-site-css'),
+            'click_feedback':'svg-pointer-contract-0.85+svg-ripple' if presentation_v13 else ('physical press+ring' if presentation_v12 else ('ring' if click_effect else 'disabled')),
+            'presentation_only_hidden_selector':presentation_hide_selector if film_mode else None,
             'presentation_only_hidden_count':hidden_decoration_count,
-            'pixel_resampling':'Lanczos4' if presentation_v12 else 'linear',
+            'pixel_resampling':'Lanczos4' if film_mode else 'linear',
             'source_dpr':info['dpr'],
-            'encoder_profile':{'crf':14 if presentation_v12 else 16,
-                               'preset':'medium' if presentation_v12 else 'veryfast'},
+            'encoder_profile':{'crf':14 if film_mode else 16,
+                               'preset':'medium' if film_mode else 'veryfast'},
             'semantic_checks':checks,
             'animated_frame_effects':animated_frames,
             'visual_region_checks':visuals,
@@ -461,6 +489,8 @@ def main():
     cli.add_argument('--click-effect',action='store_true')
     cli.add_argument('--presentation-hide-selector',
        help='Optional decorative selector to suppress only in presentation replay')
+    cli.add_argument('--presentation-v13',action='store_true',
+       help='Dark cinematic SVG-only pointer film renderer')
     cli.add_argument('--presentation-v12',action='store_true',
         help='Persistent native cursor, press feedback, layered shadows, ambient glow, Lanczos source resampling, subtle native-modal spring emphasis')
     cli.add_argument('--backdrop-focus',action='store_true',
@@ -470,6 +500,7 @@ def main():
                   args.har,expected_text=args.expect_text,
                   click_effect=args.click_effect,backdrop_focus=args.backdrop_focus,
                   presentation_v12=args.presentation_v12,
-                  presentation_hide_selector=args.presentation_hide_selector)
+                  presentation_hide_selector=args.presentation_hide_selector,
+                  presentation_v13=args.presentation_v13)
     print(json.dumps(result,indent=2))
 if __name__=='__main__':main()
