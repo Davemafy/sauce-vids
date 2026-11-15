@@ -1,6 +1,7 @@
 # Sauce Motion Engine — Phase 2 production integration
 
 **Public Brimble render (3D Launch):** https://devmcp.davemafy.xyz/sauce-motion-phase2/
+**Fresh independently regenerated proof:** https://devmcp.davemafy.xyz/sauce-motion-phase2-verified/
 
 **1080p/60fps master:** https://devmcp.davemafy.xyz/sauce-motion-phase2/master-1080p60.mp4
 
@@ -81,8 +82,14 @@ Source 4.2 seconds; 3D Launch output 197 frames at 60fps (3.2833 seconds).
 - Browser capture privacy test, WAV/OGG fallback tests, mute, ducking,
   projection and encoded-stream tests pass via pytest.
 
+The independently regenerated proof was decoded end to end. A direct
+48kHz waveform-to-AAC correlation measured **0 samples of alignment
+offset**, compared with a permitted maximum of 800 samples (one 60fps
+frame). The new pytest regression additionally muxes procedural Foley
+into a synthetic 60fps H.264 film and verifies decoded AAC timing.
+
 **Testing**: `SAUCE_BROWSER_TEST=1 ../.sauce-render-env/bin/python -m
-pytest tests/phase2/test_sauce_motion_phase2.py -q` (9 passing on
+pytest tests/phase2/test_sauce_motion_phase2.py -q` (10 passing on
 worker). Python legacy suite: 156 tests passing, 11 skipped. TypeScript
 planner: 18/18 passing.
 

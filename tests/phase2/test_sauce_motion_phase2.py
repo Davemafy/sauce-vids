@@ -55,6 +55,39 @@ def test_procedural_audio_deterministic_and_sample_accurate(tmp_path):
     assert np.max(np.abs(pcm.astype('int32')))<=int(.951*32767)
 
 
+def test_48khz_aac_mux_retains_event_sample_alignment(tmp_path):
+    """Actual encode/decode regression, not merely FoleyPlan arithmetic."""
+    from scipy.signal import correlate, correlation_lags
+
+    wav=tmp_path/'foley.wav'
+    render_foley_plan(_plan(),wav,target_duration_ms=1000.)
+    master=tmp_path/'test-60fps.mp4'
+    subprocess.run([
+        'ffmpeg','-hide_banner','-v','error','-nostdin','-y',
+        '-f','lavfi','-i','color=c=black:s=320x180:r=60:d=1',
+        '-i',str(wav),'-map','0:v:0','-map','1:a:0',
+        '-c:v','libx264','-pix_fmt','yuv420p',
+        '-c:a','aac','-ar','48000','-b:a','192k','-t','1',
+        str(master)],check=True,timeout=50)
+    audio=subprocess.run([
+        'ffmpeg','-v','error','-nostdin','-i',str(master),
+        '-map','0:a:0','-f','f32le','-ac','2','-ar','48000','-'
+    ],capture_output=True,check=True,timeout=30)
+    decoded=np.frombuffer(audio.stdout,dtype='<f4').reshape(-1,2)
+    expected=_read_pcm(wav).astype(np.float32)/32768.
+    assert len(decoded)>=RATE-2048
+    # Correlate the first 700ms, including the scheduled click and pop,
+    # after AAC decode; true A/V alignment must be better than 1 frame.
+    reference=expected[:int(.70*RATE),0]
+    observed=decoded[:int(.75*RATE),0]
+    score=correlate(observed,reference,mode='full',method='fft')
+    shifts=correlation_lags(len(observed),len(reference),mode='full')
+    bounded=(shifts>=-1000)&(shifts<=1000)
+    lag=int(shifts[bounded][np.argmax(score[bounded])])
+    assert abs(lag)<=RATE//60, f'AAC audio shifted by {lag/RATE*1000:.2f}ms'
+    assert np.max(np.abs(decoded))>0
+
+
 def test_mute_generates_real_zero_pcm_track(tmp_path):
     file=tmp_path/'mute.wav'
     receipt=render_foley_plan(_plan(muted=True),file)
