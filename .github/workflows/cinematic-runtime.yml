@@ -1,0 +1,40 @@
+name: Sauce Cinematic Runtime
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'assets/shaders/**'
+      - 'tests/test_nextgen_cinematic.py'
+      - '.github/workflows/cinematic-runtime.yml'
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'assets/shaders/**'
+      - 'tests/test_nextgen_cinematic.py'
+      - '.github/workflows/cinematic-runtime.yml'
+  workflow_dispatch:
+
+jobs:
+  cinematic-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Python scientific/video dependencies
+        run: python -m pip install "numpy>=1.26,<3" "opencv-python-headless>=4.9,<5" "pillow>=10,<12"
+      - name: Install pinned Babel AST parser
+        run: npm ci --prefix scripts --ignore-scripts --no-audit --no-fund
+      - name: Confirm FFmpeg availability
+        run: ffmpeg -version | head -1
+      - name: Verify cinematic behavior with actual code and audio fixtures
+        run: python -m unittest tests.test_nextgen_cinematic -v
+      - name: Compile semantic, optical and compositing modules
+        run: python -m compileall -q scripts

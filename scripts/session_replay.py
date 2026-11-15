@@ -23,6 +23,9 @@ from cinematic_composite import background_focus
 from cinematic_presentation_v13 import (make_dark_stage,paint_svg_pointer,paint_click_ripple)
 from online_cursor_assets import render_cursor as render_tabler_cursor
 from cinematic_stage import CinematicStage,CinematicCursor
+from spatial_parallax import inertial_tilt_track
+from code_semantics import (plan_focus_cues,semantic_camera_track,
+                            active_code_focus,highlight_code_region)
 from cinematic_spec import CURSOR_FILM_SCALE,enforce_hidpi,MASTER_SIZE
 from cinematic_presentation_v12 import (draw_stage,compose_cursor,click_feedback,
     modal_spring_scale,WINDOW_X as PRESENT_X,WINDOW_Y as PRESENT_Y,
@@ -198,7 +201,9 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            presentation_hide_selector:str|None=None,
            presentation_v13:bool=False,
            presentation_v14:bool=False,cursor_style:str='ink',
-           presentation_v15:bool=False,cursor_scale:float=CURSOR_FILM_SCALE) -> dict:
+           presentation_v15:bool=False,cursor_scale:float=CURSOR_FILM_SCALE,
+           spatial_parallax:bool=False,audio_levels:list[float]|None=None,
+           code_root:Path|None=None) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -227,6 +232,16 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         if event['type']=='dialog-visible' and event.get('box')]
     first_dialog_ms=dialog_events[0]['t'] if dialog_events else None
     cursor,samples=cursor_motion(session['events'],start_ms,length,fps)
+    if any(e.get('type')=='code-focus' for e in session['events']) and code_root is None:
+        raise ValueError('Code-focus events require --code-root for AST source verification')
+    code_foci=plan_focus_cues(session['events'],code_root)
+    if code_foci:
+        camera=semantic_camera_track(camera,code_foci,start_ms,fps,tuple(info['viewport']))
+    tilt_track=(inertial_tilt_track(cursor,fps=fps) if spatial_parallax and cursor
+                else [(0.,0.)]*total)
+    if audio_levels is not None:
+        if len(audio_levels)!=total or any(not 0<=x<=1 for x in audio_levels):
+            raise ValueError('Audio RMS envelope must match full frame count, values 0..1')
     if cursor:
         for action in (e for e in session['events'] if e['type']=='pointerdown'
                        and e.get('x') is not None):
@@ -407,13 +422,21 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                           'height':bounds['height']*info['dpr']*factor,
                         }
                         source=background_focus(source,projected,1,mix=.37*smooth)
+            if code_foci:
+                current=active_code_focus(code_foci,start_ms+wanted_ms)
+                if current:
+                    source=highlight_code_region(source,current,z,dx,dy,
+                                                 info['dpr'],factor)
             if root_stage:
                 # One root export, not website CSS: compose window on
                 # #090a0f with 140px ambient blur, then top-layer pointer.
+                frame_tilt=tilt_track[index]
                 draw_cursor=(lambda final:root_cursor.draw(
                     final,cursor[index] if cursor else None,index/fps,
-                    info['dpr']*factor,dx,dy))
-                output_image=root_stage.render(source,cinematic_cursor=draw_cursor)
+                    info['dpr']*factor,dx,dy,tilt=frame_tilt))
+                output_image=root_stage.render(
+                    source,cinematic_cursor=draw_cursor,tilt=frame_tilt,
+                    glow=audio_levels[index] if audio_levels is not None else 0.)
             else:
                 output_image=base.copy()
                 area=output_image[wy:wy+wh,wx:wx+ww]
@@ -493,6 +516,13 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'presentation_v14':bool(presentation_v14),
             'presentation_v15':bool(presentation_v15),
             'cinematic_stage_root':bool(root_stage),
+            'spatial_parallax':bool(spatial_parallax and root_stage),
+            'max_abs_tilt_degrees':round(max(
+                max(abs(t[0]),abs(t[1])) for t in tilt_track),4),
+            'semantic_ast_foci':[{'file':f.file,'symbol':f.name,
+               'type':f.kind,'line_start':f.line_start,'line_end':f.line_end}
+               for f in code_foci],
+            'audio_reactive_frames':len(audio_levels) if audio_levels is not None else 0,
             'cinematic_stage_window':list(root_stage.window) if root_stage else None,
             'cinematic_stage_background':root_stage.background_hex if root_stage else None,
             'cinematic_stage_glow_blur':140 if root_stage else None,

@@ -78,6 +78,32 @@ CAPTURE_JS=r"""
         if(prev && e.target===prev)return;
       }
       push(type,e);
+      if(type==='pointerdown' && e.target instanceof Element){
+        // Opt-in, evidence-backed AST context from editor integration.
+        // A plain web button must never be mislabeled as a code action.
+        const editor=e.target.closest('[data-sauce-code-file],[data-code-file]');
+        if(editor){
+          const file=editor.getAttribute('data-sauce-code-file')||editor.getAttribute('data-code-file');
+          const el=e.target.closest('[data-line-number],[data-sauce-line]');
+          const line=Number(el?.getAttribute('data-sauce-line')||el?.getAttribute('data-line-number')||
+                            editor.getAttribute('data-sauce-line'));
+          const region=editor.getBoundingClientRect();
+          if(file && /^[\w.\/-]{1,220}$/.test(file) && Number.isInteger(line)&&line>0){
+            push('code-focus',e,{
+              file,line,first_visible_line:Number(editor.getAttribute('data-first-visible-line'))||1,
+              line_height:Number(editor.getAttribute('data-line-height'))||20,
+              box:{x:region.x,y:region.y,width:region.width,height:region.height}
+            });
+          }
+        } else {
+          const terminal=e.target.closest('[data-sauce-terminal],[role="terminal"],.xterm');
+          if(terminal){
+            const region=terminal.getBoundingClientRect();
+            push('terminal-focus',e,{box:{x:region.x,y:region.y,
+                           width:region.width,height:region.height}});
+          }
+        }
+      }
    },true);
  document.addEventListener('input',e=>{
    const el=e.target;

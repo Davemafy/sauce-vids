@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Callable
 import numpy as np
+import cv2
+from spatial_parallax import window_homography,map_pointer
 from PIL import Image, ImageDraw, ImageFilter
 
 MASTER_WIDTH,MASTER_HEIGHT=1920,1080
@@ -35,7 +37,7 @@ def _mix_color(base:Image.Image,mask:Image.Image,color:tuple[int,int,int])->None
 
 
 @lru_cache(maxsize=1)
-def _stage_base()->tuple[np.ndarray,np.ndarray]:
+def _stage_base()->tuple[np.ndarray,np.ndarray,np.ndarray]:
     """Build the stage once; every output frame shares identical typography-safe background."""
     image=Image.new('RGB',(MASTER_WIDTH,MASTER_HEIGHT),STAGE_BACKGROUND)
     # Two broad, blurred gradient blooms below the frame. No color is
@@ -49,6 +51,7 @@ def _stage_base()->tuple[np.ndarray,np.ndarray]:
         ImageDraw.Draw(mask).ellipse((x-rx,y-ry,x+rx,y+ry),fill=alpha)
         _mix_color(image,mask.filter(ImageFilter.GaussianBlur(GLOW_BLUR)),color)
 
+    ambient=np.asarray(image,dtype=np.uint8)[:,:,::-1].copy()
     left,top=WINDOW_X,WINDOW_Y
     right,bottom=left+WINDOW_WIDTH,top+WINDOW_HEIGHT
     # Render wide-diffusion shadows before drawing the window surface.
@@ -88,7 +91,47 @@ def _stage_base()->tuple[np.ndarray,np.ndarray]:
         radius=WINDOW_RADIUS-1,fill=255)
     bgr=np.asarray(image,dtype=np.uint8)[:,:,::-1].copy()
     alpha=np.asarray(clip,dtype=np.float32)[:,:,None]/255.
-    return bgr,alpha
+    return bgr,alpha,ambient
+
+
+@lru_cache(maxsize=1)
+def _tilt_mask()->np.ndarray:
+    # Preserve window and broad shadow while moving the entire group
+    # (not just the product screenshot) in projected 3D.
+    mask=Image.new('L',(MASTER_WIDTH,MASTER_HEIGHT),0)
+    x,y=WINDOW_X,WINDOW_Y
+    d=ImageDraw.Draw(mask)
+    d.rounded_rectangle((x,y,x+WINDOW_WIDTH,y+WINDOW_HEIGHT),
+                        radius=WINDOW_RADIUS,fill=255)
+    for offset,blur,spread,opacity in SHADOWS:
+        layer=Image.new('L',(MASTER_WIDTH,MASTER_HEIGHT),0)
+        ImageDraw.Draw(layer).rounded_rectangle(
+            (x-spread,y+offset-spread,x+WINDOW_WIDTH+spread,
+             y+WINDOW_HEIGHT+offset+spread),
+            radius=max(1,WINDOW_RADIUS+spread),fill=255)
+        layer=layer.filter(ImageFilter.GaussianBlur(blur))
+        blend=Image.fromarray(np.maximum(
+            np.asarray(mask,dtype=np.uint8),
+            np.uint8(np.asarray(layer,dtype=np.float32)*opacity*.75)))
+        mask=blend
+    return np.asarray(mask,dtype=np.float32)[:,:,None]/255.
+
+
+@lru_cache(maxsize=1)
+def _ambient_pulse_field()->np.ndarray:
+    # An inexpensive cached, blurred light map used only when RMS audio
+    # is supplied; no audio means a static stage, never fake beats.
+    field=Image.new('RGB',(MASTER_WIDTH,MASTER_HEIGHT),(0,0,0))
+    for x,y,r,color in (
+        (470,610,415,(36,44,78)),
+        (1535,405,365,(65,29,66))):
+        mask=Image.new('L',(MASTER_WIDTH,MASTER_HEIGHT),0)
+        ImageDraw.Draw(mask).ellipse((x-r,y-r,x+r,y+r),fill=205)
+        mask=mask.filter(ImageFilter.GaussianBlur(GLOW_BLUR))
+        field.paste(color,(0,0),mask)
+    return np.asarray(field,dtype=np.uint8)[:,:,::-1].copy()
+
+
 
 
 @dataclass(frozen=True)
@@ -114,16 +157,45 @@ class CinematicStage:
         return self.window_x,self.window_y,self.window_w,self.window_h
 
     def render(self,website_frame:np.ndarray,
-               cinematic_cursor:Callable[[np.ndarray],None]|None=None)->np.ndarray:
-        """Wrap the real site pixels, then draw the cursor in the TOPMOST layer."""
+               cinematic_cursor:Callable[[np.ndarray],None]|None=None,
+               tilt:tuple[float,float]=(0.,0.),glow:float=0.)->np.ndarray:
+        """Outer composition: ambient -> 3D window -> final SVG pointer.
+
+        tilt and glow are deterministic frame-indexed inputs. The source
+        website array is never modified.
+        """
         if website_frame.shape!=(self.window_h,self.window_w,3):
             raise ValueError('Source must be resized to the root window before wrapping')
-        base,alpha=_stage_base()
-        output=base.copy()
+        if not 0.<=glow<=1.:raise ValueError('RMS-driven glow must be normalized 0..1')
+        base,alpha,ambient=_stage_base()
+        flat=base.copy()
         x,y,w,h=self.window
-        region=output[y:y+h,x:x+w]
+        region=flat[y:y+h,x:x+w]
         region[:]=np.uint8(np.clip(
             region.astype(np.float32)*(1-alpha)+website_frame.astype(np.float32)*alpha,0,255))
+        if abs(tilt[0])+abs(tilt[1])>1e-5:
+            homography=window_homography(x,y,w,h,*tilt)
+            warped=cv2.warpPerspective(flat,homography,(self.width,self.height),
+                     flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT,
+                     borderValue=(0,0,0))
+            mask=cv2.warpPerspective(_tilt_mask()[:,:,0],homography,
+                      (self.width,self.height),flags=cv2.INTER_LINEAR,
+                      borderMode=cv2.BORDER_CONSTANT)[:,:,None]
+            output=np.uint8(np.clip(
+                ambient.astype(np.float32)*(1-mask)+warped.astype(np.float32)*mask,
+                0,255))
+        else:
+            output=flat
+        if glow>0:
+            extra=_ambient_pulse_field()
+            # Glow must never overpower or re-color the content.
+            # Modulate outside the transformed window only.
+            area=cv2.warpPerspective(_tilt_mask()[:,:,0],
+                     window_homography(x,y,w,h,*tilt),
+                     (self.width,self.height))[:,:,None] if (
+                      abs(tilt[0])+abs(tilt[1])>1e-5) else _tilt_mask()
+            output=np.uint8(np.clip(output.astype(np.float32)+
+                  extra.astype(np.float32)*(glow*.68)*(1-area),0,255))
         if cinematic_cursor is not None:
             cinematic_cursor(output)
         return output
@@ -139,19 +211,26 @@ class CinematicCursor:
             stage,events,start_ms,style,scale)
 
     def draw(self,output:np.ndarray,position:tuple[float,float]|None,
-             t:float,source_factor:float,shift_x:float,shift_y:float)->None:
+             t:float,source_factor:float,shift_x:float,shift_y:float,
+             tilt:tuple[float,float]=(0.,0.))->None:
         from cinematic_presentation_v13 import _blend,click_ring_frames
         from reference_cursor_v15 import load_cursor,press_scale
         if position is None:return
         ox,oy=self.stage.window[:2]
+        homography=(window_homography(*self.stage.window,*tilt)
+                    if abs(tilt[0])+abs(tilt[1])>1e-5 else None)
+        def point(px:float,py:float)->tuple[int,int]:
+            if homography is not None:
+                px,py=map_pointer(homography,px,py)
+            return round(px),round(py)
         # Click ripple under pointer, tied to actual pointerdown timestamp.
         rings=click_ring_frames()
         for ev in self.events:
             if ev['type']!='pointerdown' or ev.get('x') is None:continue
             age=t-(ev['t']-self.start_ms)/1000.
             if not 0<=age<.33:continue
-            px=round(ox+shift_x+ev['x']*source_factor)
-            py=round(oy+shift_y+ev['y']*source_factor)
+            px,py=point(ox+shift_x+ev['x']*source_factor,
+                        oy+shift_y+ev['y']*source_factor)
             k=min(len(rings)-1,int(age/.33*len(rings)))
             _blend(output,rings[k],px-36,py-36)
 
@@ -169,7 +248,7 @@ class CinematicCursor:
             height=max(2,round(art.shape[0]*scale))
             art=np.asarray(PILImage.fromarray(art,'RGBA').resize(
                 (width,height),PILImage.Resampling.LANCZOS),dtype=np.uint8)
-        x=round(ox+shift_x+position[0]*source_factor)
-        y=round(oy+shift_y+position[1]*source_factor)
+        x,y=point(ox+shift_x+position[0]*source_factor,
+                  oy+shift_y+position[1]*source_factor)
         _blend(output,art,round(x-image.hotspot[0]*scale),
                   round(y-image.hotspot[1]*scale))
