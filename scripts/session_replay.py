@@ -23,6 +23,7 @@ from cinematic_composite import background_focus
 from cinematic_presentation_v13 import (make_dark_stage,paint_svg_pointer,paint_click_ripple)
 from online_cursor_assets import render_cursor as render_tabler_cursor
 from reference_cursor_v15 import paint_cursor as paint_reference_cursor
+from cinematic_spec import CURSOR_FILM_SCALE,enforce_hidpi,MASTER_SIZE
 from cinematic_presentation_v12 import (draw_stage,compose_cursor,click_feedback,
     modal_spring_scale,WINDOW_X as PRESENT_X,WINDOW_Y as PRESENT_Y,
     WINDOW_W as PRESENT_W,WINDOW_H as PRESENT_H)
@@ -197,7 +198,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            presentation_hide_selector:str|None=None,
            presentation_v13:bool=False,
            presentation_v14:bool=False,cursor_style:str='ink',
-           presentation_v15:bool=False,cursor_scale:float=.56) -> dict:
+           presentation_v15:bool=False,cursor_scale:float=CURSOR_FILM_SCALE) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -218,8 +219,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     vector_mode=presentation_v13 or presentation_v14 or presentation_v15
     if (presentation_v14 or presentation_v15) and cursor_style not in ('ink','outline'):
         raise ValueError('Select ink or outline cursor style')
-    if vector_mode and info['dpr']<2:
-        raise ValueError('SVG film mode requires deviceScaleFactor >= 2')
+    if vector_mode:
+        enforce_hidpi(info['dpr'])
     camera,camera_cues=cinematic_camera(
         session['events'],start_ms,length,fps,tuple(info['viewport']))
     dialog_events=[event for event in session['events']
@@ -522,7 +523,7 @@ def main():
        help='Reference-shaped rounded pointer with deep drop shadow (default)')
     cli.add_argument('--presentation-v14',action='store_true',
        help='MIT Tabler SVG cursor, fixed hotspot, click ripple and dark stage')
-    cli.add_argument('--cursor-scale',type=float,default=.56,
+    cli.add_argument('--cursor-scale',type=float,default=CURSOR_FILM_SCALE,
        help='Size of the reference cursor relative to its vector master; default 0.56 (about 32x39px)')
     cli.add_argument('--cursor-style',choices=('ink','outline'),default='ink',
        help='Black body with white rim, or white body with black outline')

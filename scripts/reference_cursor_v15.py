@@ -12,6 +12,7 @@ from math import exp
 import numpy as np
 from PIL import Image, ImageFilter
 
+from cinematic_spec import CURSOR_FILM_SCALE
 from cinematic_presentation_v13 import (
     _blend, _click_age, raster_svg, WINDOW_X, WINDOW_Y,
 )
@@ -77,7 +78,7 @@ def load_cursor(style:str)->PointerSprite:
 def paint_cursor(frame:np.ndarray,position:tuple[float,float],
                  events:list[dict],start_ms:float,elapsed_s:float,
                  factor:float,dx:float,dy:float,style:str,
-                 film_scale:float=.56)->tuple[int,int]:
+                 film_scale:float=CURSOR_FILM_SCALE)->tuple[int,int]:
     if not .35<=film_scale<=1.:
         raise ValueError('Film cursor scale must be between 0.35 and 1.0')
     sprite=load_cursor(style)

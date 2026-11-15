@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 import cairosvg
+from cinematic_spec import AMBIENT_BLUR,SHADOW_LAYERS
 
 MASTER_W,MASTER_H=1920,1080
 WINDOW_X,WINDOW_Y,WINDOW_W,WINDOW_H=160,50,1600,900
@@ -27,7 +28,7 @@ def _blurred_ellipse(im:Image.Image,cx:int,cy:int,rx:int,ry:int,
                      color:tuple[int,int,int],strength:int)->None:
     a=Image.new('L',(MASTER_W,MASTER_H),0)
     ImageDraw.Draw(a).ellipse((cx-rx,cy-ry,cx+rx,cy+ry),fill=strength)
-    a=a.filter(ImageFilter.GaussianBlur(120))
+    a=a.filter(ImageFilter.GaussianBlur(AMBIENT_BLUR))
     im.paste(color,(0,0),a)
 
 
@@ -48,11 +49,7 @@ def make_dark_stage()->tuple[np.ndarray,np.ndarray]:
     _blurred_ellipse(canvas,960,945,355,180,(66,94,151),106)
     x,y,w,h=WINDOW_X,WINDOW_Y,WINDOW_W,WINDOW_H
     # Wide-diffusion CSS tiers, plus a short contact shadow.
-    for offset,blur,spread,opacity in (
-        (50,100,-20,.30),
-        (25,50,-12,.50),
-        (8,17,0,.28),
-    ):
+    for offset,blur,spread,opacity in SHADOW_LAYERS:
         mask=Image.new('L',(MASTER_W,MASTER_H),0)
         b=(x-spread,y+offset-spread,x+w+spread,y+h+offset+spread)
         ImageDraw.Draw(mask).rounded_rectangle(b,radius=RADIUS+3,fill=255)

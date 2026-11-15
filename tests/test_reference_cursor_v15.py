@@ -51,9 +51,9 @@ class ReferenceCursorV15Tests(unittest.TestCase):
     def test_film_cursor_is_proportional_not_oversized(self):
         src=(ROOT/'scripts/reference_cursor_v15.py').read_text()
         replay=(ROOT/'scripts/session_replay.py').read_text()
-        self.assertIn('film_scale:float=.56',src)
+        self.assertIn('film_scale:float=CURSOR_FILM_SCALE',src)
         self.assertIn('scale=film_scale*press_scale(age)',src)
-        self.assertIn('cursor_scale:float=.56',replay)
+        self.assertIn('cursor_scale:float=CURSOR_FILM_SCALE',replay)
         self.assertIn('--cursor-scale',replay)
         self.assertEqual(tuple(round(v*.56) for v in (58,70)),(32,39))
         self.assertEqual(tuple(round(v*.56) for v in (62,64)),(35,36))

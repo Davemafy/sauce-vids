@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse,hashlib,json,os,re,time
 from pathlib import Path
 from session_contract import SCHEMA,safe_url,validate_actions
+from cinematic_spec import enforce_hidpi,DPR_CHOICES,DEFAULT_DPR
 from playwright.sync_api import sync_playwright
 
 CAPTURE_JS=r"""
@@ -183,11 +184,12 @@ def run_workflow(page,actions:list[dict],images:Path,trace:list[dict]) -> list[d
     return phases
 
 def record(url:str, actions:list[dict],output:Path,
-           width:int=1280,height:int=720,dpr:int=2,
+           width:int=1280,height:int=720,dpr:int=DEFAULT_DPR,
            capture_har:bool=False,browser_binary:str|None=None) -> dict:
     validate_actions(actions)
-    if not (320<=width<=2560 and 240<=height<=1440 and 1<=dpr<=3):
-        raise ValueError('Viewport/DPR outside safe bounds')
+    if not (320<=width<=2560 and 240<=height<=1440):
+        raise ValueError('Viewport outside safe bounds')
+    enforce_hidpi(dpr)
     output.mkdir(parents=True,exist_ok=True)
     images=output/'states';images.mkdir(exist_ok=True)
     opts={'viewport':{'width':width,'height':height},'device_scale_factor':dpr,
@@ -247,7 +249,7 @@ def main():
     p.add_argument('--out',type=Path,required=True)
     p.add_argument('--width',type=int,default=1280)
     p.add_argument('--height',type=int,default=720)
-    p.add_argument('--dpr',type=int,default=2)
+    p.add_argument('--dpr',type=int,choices=DPR_CHOICES,default=DEFAULT_DPR)
     p.add_argument('--har',action='store_true')
     args=p.parse_args()
     actions=json.loads(args.workflow.read_text())
