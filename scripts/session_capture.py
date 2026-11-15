@@ -37,9 +37,25 @@ CAPTURE_JS=r"""
    const el=e?.target instanceof Element ? e.target : null;
    const box=el?.getBoundingClientRect();
    const css=el?getComputedStyle(el):null;
+   // Keep event semantics small, public-facing and non-sensitive.
+   // Never capture input values, terminal contents, passwords or tokens.
+   const semantic=(type==='pointerdown'||type==='click'||type==='focusin'
+       ||type==='dialog-visible') && el;
+   const semanticEl=semantic && el.closest('button,[role="button"],[role="dialog"],a[href]');
+   const safeLabel=(text)=>{
+     const value=(text||'').replace(/\s+/g,' ').trim();
+     if(!value || value.length>66 || sensitive.test(value) ||
+        /[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/.test(value))return null;
+     return value;
+   };
    const entry={
      t:Math.max(0,+(performance.now()-start).toFixed(3)),
      type,selector:safeSelector(el),
+     eventType:type,
+     tag:el?.tagName?.toLowerCase()||null,
+     role:el?.getAttribute('role')||null,
+     ariaLabel:semantic?safeLabel(semanticEl?.getAttribute('aria-label')):null,
+     innerText:semantic?safeLabel(semanticEl?.innerText):null,
      box:box?{x:+box.x.toFixed(2),y:+box.y.toFixed(2),
        width:+box.width.toFixed(2),height:+box.height.toFixed(2)}:null,
      cursor:css?.cursor||'default',

@@ -30,7 +30,7 @@ class CinematicStageRootTests(unittest.TestCase):
         pos=src.index('output_image=root_stage.render(')
         emit=src.index('encoder.stdin.write(output_image.tobytes())',pos)
         self.assertLess(pos,emit)
-        self.assertIn('root_stage=CinematicStage() if presentation_v15 else None',src)
+        self.assertIn('root_stage=(CinematicStage(',src)
         self.assertIn('root_cursor=(CinematicCursor(root_stage',src)
         self.assertIn('if root_stage:\n                # CinematicStage has already drawn',src)
         self.assertIn('cursor_art=None if vector_mode',src)

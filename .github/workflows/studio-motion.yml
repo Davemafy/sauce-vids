@@ -1,0 +1,36 @@
+name: StudioMotion TypeScript + Python
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/studio-motion/**'
+      - 'scripts/studio_motion_*.py'
+      - 'scripts/cinematic_stage.py'
+      - 'scripts/session_capture.py'
+      - 'scripts/session_replay.py'
+      - 'scripts/produce_cinematic_demo.py'
+      - 'tests/test_studio_motion_runtime.py'
+      - 'tests/fixtures/studio-motion-trace.json'
+      - '.github/workflows/studio-motion.yml'
+  workflow_dispatch:
+jobs:
+  strict-typecheck-and-plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: scripts/studio-motion/package-lock.json
+      - name: Install deterministic TypeScript dependencies
+        working-directory: scripts/studio-motion
+        run: npm ci --ignore-scripts --no-audit
+      - name: Compile with strict typing and run plan tests
+        working-directory: scripts/studio-motion
+        run: npm test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Python planner contract tests
+        run: python -m unittest tests.test_studio_motion_runtime -v

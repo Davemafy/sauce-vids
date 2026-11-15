@@ -75,7 +75,11 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             webgl_optics:bool=True,spatial_parallax:bool=True,
             audio_track:Path|None=None,code_root:Path|None=None,
             editorial_closeup:bool=False,
-            editorial_geometry:Path|None=None)->dict:
+            editorial_geometry:Path|None=None,
+            enable_time_warp:bool=False,max_warp_speed:float=4.,
+            enable_studio_floor:bool=False,floor_reflection_intensity:float=.25,
+            enable_callouts:bool=False,callout_cooldown_ms:int=2500,
+            deterministic_frame_cache:Path|None=None)->dict:
     enforce_hidpi(dpr)
     if cursor_style not in ('ink','outline'):raise ValueError('Unsupported pointer style')
     if not .35<=cursor_scale<=1:raise ValueError('Invalid cursor scale')
@@ -98,6 +102,27 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
     master=out_dir/'master-1080p60.mp4'
     real_duration=(seconds if seconds is not None
         else (session['states'][-1]['at_ms']-session['states'][0]['at_ms'])/1000.+.35)
+    studio_enabled=enable_time_warp or enable_studio_floor or enable_callouts
+    if deterministic_frame_cache is not None:
+        if not studio_enabled:raise ValueError('Frame cache requires StudioMotion')
+        ensure_private_capture_separate(deterministic_frame_cache,out_dir)
+    if studio_enabled and audio_track is not None:
+        raise ValueError('StudioMotion test excludes all audio tracks and processing')
+    if not 1<=max_warp_speed<=4:raise ValueError('maxWarpSpeed must be between 1 and 4')
+    if not 0<=floor_reflection_intensity<=.5:
+        raise ValueError('floorReflectionIntensity must be between 0 and .5')
+    if callout_cooldown_ms<0:raise ValueError('calloutCooldownMs must be nonnegative')
+    studio_plan=None
+    if studio_enabled:
+        from studio_motion_bridge import plan_studio_motion
+        studio_plan=plan_studio_motion(session,real_duration,FPS,{
+            'enableTimeWarp':enable_time_warp,
+            'maxWarpSpeed':max_warp_speed,
+            'enableStudioFloor':enable_studio_floor,
+            'floorReflectionIntensity':floor_reflection_intensity,
+            'enableCallouts':enable_callouts,
+            'calloutCooldownMs':callout_cooldown_ms,
+            'maxCalloutLifetimeMs':1800})
     if audio_track is not None:
         # Keep importable contract and player utilities dependency-free in
         # standard Python CI. Scientific audio dependencies are only needed
@@ -113,7 +138,8 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         cursor_scale=cursor_scale,
         presentation_hide_selector=presentation_hide_selector,
         spatial_parallax=spatial_parallax,audio_levels=rms,code_root=code_root,
-        editorial_closeup=editorial_closeup,editorial_geometry=editorial_geometry)
+        editorial_closeup=editorial_closeup,editorial_geometry=editorial_geometry,
+        studio_motion_plan=studio_plan,raster_cache_dir=deterministic_frame_cache)
     if not report['verified_semantics'] or not report['visual_region_checks']:
         raise RuntimeError('Replay must pass semantic and visual-region checks')
     if (not report.get('cinematic_stage_root') or
@@ -182,7 +208,11 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         'max_tilt_degrees':report.get('max_abs_tilt_degrees',0),
         'semantic_ast_foci':report.get('semantic_ast_foci',[]),
         'audio_reactive':{'frames':len(rms),'max_intensity':max(rms,default=0)}
-            if rms is not None else None
+            if rms is not None else None,
+        'studio_motion':report.get('studio_motion'),
+        'studio_config':(studio_plan.get('config') if studio_plan else None),
+        'studio_output_frames':report['frames'],
+        'deterministic_raster_cache':report.get('raster_cache')
     }
     (out_dir/'release.json').write_text(json.dumps(receipt,indent=2))
     return receipt
@@ -211,6 +241,20 @@ def main():
                    help='Verified post-click dialog geometry for safe editorial framing')
     p.add_argument('--editorial-closeup',action='store_true',
                    help='Tight evidence-led shot framing for a 4s narrated test')
+    p.add_argument('--enable-time-warp',action='store_true',
+                   help='Monotonic 1–4x idle compression with protected action windows')
+    p.add_argument('--max-warp-speed',type=float,default=4.,
+                   help='Peak idle speed, 1–4 (default 4)')
+    p.add_argument('--enable-studio-floor',action='store_true',
+                   help='Perspective floor reflection, contact and ambient cast shadows')
+    p.add_argument('--floor-reflection-intensity',type=float,default=.25,
+                   help='Studio floor reflection, 0–0.5 (default .25)')
+    p.add_argument('--enable-callouts',action='store_true',
+                   help='Show trace-verified, cooldown-constrained kinetic pills')
+    p.add_argument('--callout-cooldown-ms',type=int,default=2500,
+                   help='Minimum output-time interval between callouts')
+    p.add_argument('--deterministic-frame-cache',type=Path,
+                   help='Private lossless source frames for bitwise-reproducible exports')
     p.add_argument('--audio-track',type=Path,
                    help='Licensed source soundtrack; drives RMS glow and is muxed into MP4')
     p.add_argument('--code-root',type=Path,
@@ -227,7 +271,14 @@ def main():
         spatial_parallax=not args.no_parallax,
         audio_track=args.audio_track,code_root=args.code_root,
         editorial_closeup=args.editorial_closeup,
-        editorial_geometry=args.editorial_geometry),indent=2))
+        editorial_geometry=args.editorial_geometry,
+        enable_time_warp=args.enable_time_warp,
+        max_warp_speed=args.max_warp_speed,
+        enable_studio_floor=args.enable_studio_floor,
+        floor_reflection_intensity=args.floor_reflection_intensity,
+        enable_callouts=args.enable_callouts,
+        callout_cooldown_ms=args.callout_cooldown_ms,
+        deterministic_frame_cache=args.deterministic_frame_cache),indent=2))
 
 
 if __name__=='__main__':main()

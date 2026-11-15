@@ -134,6 +134,70 @@ def _ambient_pulse_field()->np.ndarray:
 
 
 
+def _studio_floor(output:np.ndarray,source:np.ndarray,
+                  tilt:tuple[float,float],intensity:float)->None:
+    """Projection-grounded virtual floor: diffused reflection and two shadows.
+
+    The floor is applied ONLY below the projected browser bottom. Roughened
+    reflected pixels are actual website pixels, not a fabricated UI duplicate.
+    """
+    if intensity<=0:return
+    matrix=window_homography(WINDOW_X,WINDOW_Y,WINDOW_WIDTH,WINDOW_HEIGHT,*tilt)
+    corners=[map_pointer(matrix,float(x),float(y)) for x,y in (
+        (WINDOW_X,WINDOW_Y+WINDOW_HEIGHT),
+        (WINDOW_X+WINDOW_WIDTH,WINDOW_Y+WINDOW_HEIGHT))]
+    floor_y=max(0,min(MASTER_HEIGHT-6,int(np.ceil(max(q[1] for q in corners)))+1))
+    floor_h=MASTER_HEIGHT-floor_y
+    if floor_h<8:return
+    floor=output[floor_y:,:,:]
+    x_center=(corners[0][0]+corners[1][0])*.5
+    # Stage floor is intentionally near-black, with an increasingly
+    # invisible horizon; never a second neon/gradient visual gimmick.
+    ys=np.arange(floor_h,dtype=np.float32)[:,None]
+    xs=np.arange(MASTER_WIDTH,dtype=np.float32)[None,:]
+    taper=np.clip(1-ys/max(18.,float(floor_h)),0,1)
+    lateral=np.exp(-((xs-x_center)/730.)**2)
+    plane=(taper*lateral).astype(np.float32)
+    floor[:]=np.uint8(np.clip(
+        floor.astype(np.float32)*(1-plane[:,:,None]*.13),0,255))
+
+    # Two independent directional floor shadows: dark contact under base,
+    # broader cast shifted slightly away from a 35-degree virtual key light.
+    contact=np.zeros((floor_h,MASTER_WIDTH),np.float32)
+    ambient=np.zeros_like(contact)
+    lean=float(tilt[1])*8.
+    cv2.ellipse(contact,(round(x_center+lean),9),
+                (max(1,round(WINDOW_WIDTH*.37)),15),0,0,360,.56,-1,cv2.LINE_AA)
+    cv2.ellipse(ambient,(round(x_center+45+lean),30),
+                (max(1,round(WINDOW_WIDTH*.54)),65),0,0,360,.24,-1,cv2.LINE_AA)
+    contact=cv2.GaussianBlur(contact,(0,0),9)
+    ambient=cv2.GaussianBlur(ambient,(0,0),26)
+    dark=np.clip(contact+ambient,0,.72)*plane
+    floor[:]=np.uint8(np.clip(floor.astype(np.float32)*(1-dark[:,:,None]),0,255))
+
+    # True reflective pixels from the window base. Horizontal plane
+    # contracts with depth; Gaussian convolution simulates roughness .35.
+    ref_h=min(110,source.shape[0])
+    sample=cv2.flip(source[-ref_h:].copy(),0)
+    src=np.float32([[0,0],[WINDOW_WIDTH-1,0],
+                    [WINDOW_WIDTH-1,ref_h-1],[0,ref_h-1]])
+    near_l,near_r=corners[0][0],corners[1][0]
+    far_l=near_l+160
+    far_r=near_r-160
+    dst=np.float32([[near_l,0],[near_r,0],
+                    [far_r,floor_h-1],[far_l,floor_h-1]])
+    homography=cv2.getPerspectiveTransform(src,dst)
+    reflected=cv2.warpPerspective(sample,homography,(MASTER_WIDTH,floor_h),
+                flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
+    reflected=cv2.GaussianBlur(reflected,(0,0),4.5)
+    fade=(np.clip(1-ys/max(1,floor_h),0,1)**2
+          *np.exp(-((xs-x_center)/690.)**2)).astype(np.float32)
+    strength=np.clip(fade*intensity,0,.5)[:,:,None]
+    floor[:]=np.uint8(np.clip(
+        floor.astype(np.float32)*(1-strength)
+        +reflected.astype(np.float32)*strength,0,255))
+
+
 @dataclass(frozen=True)
 class CinematicStage:
     """Absolute root video wrapper, never an optional nested UI decoration."""
@@ -144,10 +208,14 @@ class CinematicStage:
     window_w:int=WINDOW_WIDTH
     window_h:int=WINDOW_HEIGHT
     background_hex:str='#090a0f'
+    enable_studio_floor:bool=False
+    floor_reflection_intensity:float=.25
 
     def __post_init__(self):
         if (self.width,self.height)!=(MASTER_WIDTH,MASTER_HEIGHT):
             raise ValueError('Production stage is fixed to 1920x1080')
+        if not 0<=self.floor_reflection_intensity<=.5:
+            raise ValueError('Floor intensity must be between 0 and .5')
         if (self.window_x,self.window_y,self.window_w,self.window_h)!=(
             WINDOW_X,WINDOW_Y,WINDOW_WIDTH,WINDOW_HEIGHT):
             raise ValueError('Window must be centered and 1480px wide')
@@ -196,6 +264,8 @@ class CinematicStage:
                       abs(tilt[0])+abs(tilt[1])>1e-5) else _tilt_mask()
             output=np.uint8(np.clip(output.astype(np.float32)+
                   extra.astype(np.float32)*(glow*.68)*(1-area),0,255))
+        if self.enable_studio_floor:
+            _studio_floor(output,website_frame,tilt,self.floor_reflection_intensity)
         if cinematic_cursor is not None:
             cinematic_cursor(output)
         return output

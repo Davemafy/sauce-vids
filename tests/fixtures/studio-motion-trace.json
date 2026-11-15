@@ -1,0 +1,65 @@
+{
+  "schema": "sauce-test-trace-v1",
+  "states": [
+    {
+      "at_ms": 0
+    }
+  ],
+  "events": [
+    {
+      "t": 1000,
+      "type": "pointerdown",
+      "tag": "button",
+      "role": "button",
+      "innerText": "Connect your agent",
+      "box": {
+        "x": 210,
+        "y": 290,
+        "width": 230,
+        "height": 40
+      }
+    },
+    {
+      "t": 1050,
+      "type": "click",
+      "tag": "button",
+      "role": "button",
+      "innerText": "Connect your agent",
+      "box": {
+        "x": 210,
+        "y": 290,
+        "width": 230,
+        "height": 40
+      }
+    },
+    {
+      "t": 2150,
+      "type": "loading",
+      "durationMs": 720,
+      "isLoading": true
+    },
+    {
+      "t": 3500,
+      "type": "scroll",
+      "scrollMode": "static",
+      "durationMs": 550,
+      "scroll": {
+        "x": 0,
+        "y": 550
+      }
+    },
+    {
+      "t": 7000,
+      "type": "submit",
+      "tag": "button",
+      "role": "button",
+      "ariaLabel": "Publish site",
+      "box": {
+        "x": 780,
+        "y": 270,
+        "width": 180,
+        "height": 46
+      }
+    }
+  ]
+}

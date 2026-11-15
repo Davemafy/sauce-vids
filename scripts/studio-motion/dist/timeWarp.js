@@ -1,0 +1,171 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.isHighIntent = isHighIntent;
+exports.buildTimeWarp = buildTimeWarp;
+/** Monotonic offline time remapping, rather than changing wall-clock playback rate.
+ * Protected windows have exactly 1x source speed; idle spans use cubic Hermite
+ * ramps with zero slope at both boundaries. Source time never runs backward.
+ */
+const types_1 = require("./types");
+function kindOf(e) { return (e.eventType || e.type || "").toLowerCase().replaceAll("_", "-"); }
+function isHighIntent(e) {
+    const k = kindOf(e);
+    if (["click", "pointerdown", "submit", "modal-open", "dialog-visible", "modal-opened"].includes(k))
+        return true;
+    if (["focus", "focusin"].includes(k))
+        return e.isInitial === true || e.role === "textbox" || e.tag === "input";
+    return false;
+}
+function unify(rows) {
+    const sorted = rows.filter(r => r.end > r.start).sort((a, b) => a.start - b.start);
+    const out = [];
+    for (const r of sorted) {
+        const last = out[out.length - 1];
+        if (last && r.start <= last.end)
+            last.end = Math.max(last.end, r.end);
+        else
+            out.push({ ...r });
+    }
+    return out;
+}
+function smoothstep(u) {
+    const t = (0, types_1.clamp)(u, 0, 1);
+    return t * t * (3 - 2 * t);
+}
+function sourceSpeed(t, dead, maxSpeed) {
+    const d = dead.find(g => t >= g.start && t <= g.end);
+    if (!d)
+        return 1;
+    const duration = d.end - d.start;
+    const ramp = Math.min(360, duration * .28);
+    const head = smoothstep((t - d.start) / ramp);
+    const tail = smoothstep((d.end - t) / ramp);
+    // cubic Hermite at both boundaries, 1x exactly before protected actions
+    return 1 + (maxSpeed - 1) * Math.min(head, tail);
+}
+function buildTimeWarp(events, startMs, sourceDurationMs, fps, maxWarpSpeed = 4, enabled = true) {
+    if (!(0, types_1.finite)(startMs) || !(0, types_1.finite)(sourceDurationMs) || sourceDurationMs <= 0 || sourceDurationMs > 600000)
+        throw new Error("Invalid source duration or trace origin");
+    if (!(0, types_1.finite)(fps) || fps < 1 || fps > 120)
+        throw new Error("FPS outside supported interval");
+    if (!(0, types_1.finite)(maxWarpSpeed) || maxWarpSpeed < 1 || maxWarpSpeed > 4)
+        throw new Error("maxWarpSpeed must be 1–4");
+    const locks = unify(events.filter(e => (0, types_1.finite)(e.t) && isHighIntent(e)).map(e => ({
+        start: (0, types_1.clamp)(e.t - startMs - 400, 0, sourceDurationMs),
+        end: (0, types_1.clamp)(e.t - startMs + 300, 0, sourceDurationMs),
+    })));
+    let cursor = 0;
+    const gaps = [];
+    for (const protectedWindow of locks) {
+        if (protectedWindow.start - cursor > 800)
+            gaps.push({ start: cursor, end: protectedWindow.start });
+        cursor = Math.max(cursor, protectedWindow.end);
+    }
+    if (sourceDurationMs - cursor > 800)
+        gaps.push({ start: cursor, end: sourceDurationMs });
+    // Explicitly observed loading states and continuous static scrolls are
+    // compressible even when shorter than 800ms. They NEVER override action
+    // windows, and must have a trustworthy start and duration in the trace.
+    const evidence = events.filter(e => (0, types_1.finite)(e.t) && (0, types_1.finite)(e.durationMs)
+        && (e.durationMs ?? 0) >= 180 && (["loading", "loading-state", "loading_start"].includes(kindOf(e))
+        || e.isLoading === true || (kindOf(e) === "scroll" && e.scrollMode === "static"))).map(e => ({
+        start: (0, types_1.clamp)(e.t - startMs, 0, sourceDurationMs),
+        end: (0, types_1.clamp)(e.t - startMs + (e.durationMs ?? 0), 0, sourceDurationMs)
+    }));
+    // Also derive continuous static scroll intervals directly from captured
+    // scroll samples; no special client instrumentation is required. This
+    // groups real wheel movement, never click/submit focus windows.
+    const rawScrolls = events.filter(e => kindOf(e) === "scroll" && e.scroll
+        && (0, types_1.finite)(e.scroll.x) && (0, types_1.finite)(e.scroll.y) && (0, types_1.finite)(e.t))
+        .sort((a, b) => a.t - b.t);
+    const scrollRuns = [];
+    let runStart = 0;
+    function finishRun(endIndex) {
+        if (endIndex - runStart < 3)
+            return;
+        const begin = rawScrolls[runStart], end = rawScrolls[endIndex];
+        const duration = end.t - begin.t;
+        const traveled = Math.hypot((end.scroll?.x ?? 0) - (begin.scroll?.x ?? 0), (end.scroll?.y ?? 0) - (begin.scroll?.y ?? 0));
+        if (duration >= 350 && traveled >= 75)
+            scrollRuns.push({ start: (0, types_1.clamp)(begin.t - startMs, 0, sourceDurationMs),
+                end: (0, types_1.clamp)(end.t - startMs, 0, sourceDurationMs) });
+    }
+    for (let i = 1; i < rawScrolls.length; i++) {
+        const previous = rawScrolls[i - 1], current = rawScrolls[i];
+        if (current.t - previous.t > 180) {
+            finishRun(i - 1);
+            runStart = i;
+        }
+    }
+    if (rawScrolls.length)
+        finishRun(rawScrolls.length - 1);
+    const candidates = unify([...gaps, ...evidence, ...scrollRuns]);
+    let pieces = candidates;
+    for (const guard of locks) {
+        const next = [];
+        for (const piece of pieces) {
+            if (piece.end <= guard.start || piece.start >= guard.end) {
+                next.push(piece);
+                continue;
+            }
+            if (guard.start > piece.start)
+                next.push({ start: piece.start, end: guard.start });
+            if (guard.end < piece.end)
+                next.push({ start: guard.end, end: piece.end });
+        }
+        pieces = next;
+    }
+    const dead = enabled && maxWarpSpeed > 1 ? pieces.filter(x => x.end - x.start >= 180) : [];
+    const step = 8;
+    const source = [0], output = [0];
+    let t = 0, total = 0;
+    while (t < sourceDurationMs - 1e-8) {
+        const next = Math.min(sourceDurationMs, t + step);
+        const dt = next - t;
+        const v1 = sourceSpeed(t, dead, maxWarpSpeed);
+        const v2 = sourceSpeed(next, dead, maxWarpSpeed);
+        total += dt * (1 / v1 + 1 / v2) * .5;
+        source.push(next);
+        output.push(total);
+        t = next;
+    }
+    function invert(outMs) {
+        const x = (0, types_1.clamp)(outMs, 0, total);
+        let lo = 0, hi = output.length - 1;
+        while (lo + 1 < hi) {
+            const m = (lo + hi) >> 1;
+            if ((output[m] ?? 0) < x)
+                lo = m;
+            else
+                hi = m;
+        }
+        const a = output[lo] ?? 0, b = output[hi] ?? total;
+        const frac = (b - a) > 1e-9 ? (x - a) / (b - a) : 0;
+        return (source[lo] ?? 0) + ((source[hi] ?? sourceDurationMs) - (source[lo] ?? 0)) * frac;
+    }
+    function sourceToOutput(srcMs) {
+        const x = (0, types_1.clamp)(srcMs, 0, sourceDurationMs);
+        let lo = 0, hi = source.length - 1;
+        while (lo + 1 < hi) {
+            const m = (lo + hi) >> 1;
+            if ((source[m] ?? 0) < x)
+                lo = m;
+            else
+                hi = m;
+        }
+        const a = source[lo] ?? 0, b = source[hi] ?? sourceDurationMs;
+        const u = b > a ? (x - a) / (b - a) : 0;
+        return (output[lo] ?? 0) + u * ((output[hi] ?? total) - (output[lo] ?? 0));
+    }
+    const count = Math.max(1, Math.ceil(total * fps / 1000));
+    const frameMap = [];
+    for (let i = 0; i < count; i++) {
+        const s = invert(i * 1000 / fps);
+        frameMap.push({ sourceMs: +s.toFixed(5), speed: +sourceSpeed(s, dead, maxWarpSpeed).toFixed(5) });
+    }
+    for (let i = 1; i < count; i++)
+        if (frameMap[i].sourceMs <= frameMap[i - 1].sourceMs)
+            throw new Error("Time map is not strictly increasing at requested fps");
+    return { sourceDurationMs, outputDurationMs: +total.toFixed(5),
+        frameMap, actionWindows: locks, deadZones: dead, sourceToOutput };
+}

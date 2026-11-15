@@ -24,6 +24,8 @@ from cinematic_composite import background_focus
 from cinematic_presentation_v13 import (make_dark_stage,paint_svg_pointer,paint_click_ripple)
 from online_cursor_assets import render_cursor as render_tabler_cursor
 from cinematic_stage import CinematicStage,CinematicCursor
+from studio_motion_blur import directional_blur
+from studio_motion_callouts import KineticCalloutRenderer
 from spatial_parallax import inertial_tilt_track
 from code_semantics import (plan_focus_cues,semantic_camera_track,
                             active_code_focus,highlight_code_region)
@@ -194,6 +196,20 @@ def execute_action(page,action:dict):
         page.mouse.wheel(float(action.get('dx',0)),float(action.get('dy',0)))
     elif k=='wait':pass
 
+def _raster_cache_identity(session:dict,workflow:list[dict],
+                           times:list[float],hide_selector:str|None)->str:
+    """Bind private canonical raster frames to recorded events and source time."""
+    stable={'source_url':session['source_url'],
+            'states':[(v['name'],v['at_ms'],v['sha256']) for v in session['states']],
+            'events':session['events'],
+            'workflow':workflow,
+            'source_frame_times_ms':times,
+            'hidden_decorative_selector':hide_selector,
+            'capture_dpr':session['page'].get('dpr',2)}
+    return hashlib.sha256(json.dumps(stable,sort_keys=True,
+               ensure_ascii=True,separators=(',',':')).encode()).hexdigest()
+
+
 def replay(session_dir:Path,workflow_file:Path,output:Path,
            fps:int=60,seconds:float|None=None,har:bool=False,
            screenshot_step:int=45,expected_text:str|None=None,
@@ -205,7 +221,9 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            presentation_v15:bool=False,cursor_scale:float=CURSOR_FILM_SCALE,
            spatial_parallax:bool=False,audio_levels:list[float]|None=None,
            code_root:Path|None=None,editorial_closeup:bool=False,
-           editorial_geometry:Path|None=None) -> dict:
+           editorial_geometry:Path|None=None,
+           studio_motion_plan:dict|None=None,
+           raster_cache_dir:Path|None=None) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -221,7 +239,19 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     last_ms=session['states'][-1]['at_ms']
     length=seconds if seconds is not None else (last_ms-start_ms)/1000.+.35
     if not 0<length<=10:raise ValueError('Limit this proof renderer to <=10s')
-    total=round(length*fps)
+    source_total=round(length*fps)
+    if studio_motion_plan is not None:
+        if studio_motion_plan.get('schema')!='sauce-studio-motion-v1':
+            raise ValueError('Unrecognized studio motion schema')
+        if studio_motion_plan['fps']!=fps or abs(studio_motion_plan['sourceDurationMs']/1000-length)>.01:
+            raise ValueError('StudioMotion source time or fps mismatch')
+        frame_map=studio_motion_plan['frameMap']
+        total=len(frame_map)
+        if not total:raise ValueError('StudioMotion mapping is empty')
+        if audio_levels is not None:raise ValueError('StudioMotion mode excludes all audio')
+    else:
+        frame_map=None
+        total=source_total
     film_mode=presentation_v12 or presentation_v13 or presentation_v14 or presentation_v15
     vector_mode=presentation_v13 or presentation_v14 or presentation_v15
     if (presentation_v14 or presentation_v15) and cursor_style not in ('ink','outline'):
@@ -260,7 +290,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     tilt_track=(inertial_tilt_track(cursor,fps=fps) if spatial_parallax and cursor
                 else [(0.,0.)]*total)
     if audio_levels is not None:
-        if len(audio_levels)!=total or any(not 0<=x<=1 for x in audio_levels):
+        if len(audio_levels)!=source_total or any(not 0<=x<=1 for x in audio_levels):
             raise ValueError('Audio RMS envelope must match full frame count, values 0..1')
     if cursor:
         for action in (e for e in session['events'] if e['type']=='pointerdown'
@@ -272,7 +302,15 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                     raise RuntimeError(f'Cursor would miss recorded click: {error:.2f}px')
     # Film frames are ALWAYS wrapped by the root compositor in production.
     # Older v12-v14 renderers are retained for deliberate A/B only.
-    root_stage=CinematicStage() if presentation_v15 else None
+    floor_config=(studio_motion_plan['stage'] if studio_motion_plan else {})
+    if studio_motion_plan and not presentation_v15:
+        raise ValueError('StudioMotion requires root CinematicStage')
+    root_stage=(CinematicStage(
+        enable_studio_floor=bool(floor_config.get('enabled',False)),
+        floor_reflection_intensity=float(floor_config.get('reflectionIntensity',.25))
+    ) if presentation_v15 else None)
+    callout_renderer=(KineticCalloutRenderer(
+        studio_motion_plan.get('callouts',[]),fps=fps) if studio_motion_plan else None)
     root_cursor=(CinematicCursor(root_stage,session['events'],start_ms,
                   cursor_style,cursor_scale) if root_stage else None)
     if root_stage:
@@ -294,6 +332,27 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     if (source_w,source_h)!=(1280,720):
         raise ValueError('Current 16:9 proof compositor requires a 1280x720 CSS viewport')
     if output.parent:output.parent.mkdir(parents=True,exist_ok=True)
+    cache_manifest=None
+    cache_hit=False
+    cache_key=None
+    cached_files=[]
+    if raster_cache_dir is not None:
+        raw=raster_cache_dir.resolve();dst=output.parent.resolve()
+        if raw==dst or raw.is_relative_to(dst) or dst.is_relative_to(raw):
+            raise ValueError('Private raster cache cannot be inside published output')
+        raster_cache_dir.mkdir(parents=True,exist_ok=True)
+        times=[(float(row['sourceMs']) if frame_map else i*1000./fps)
+               for i,row in enumerate(frame_map or [])] if frame_map else [
+                   i*1000./fps for i in range(total)]
+        cache_key=_raster_cache_identity(session,actions,times,presentation_hide_selector)
+        cache_manifest=raster_cache_dir/'manifest.json'
+        if cache_manifest.is_file():
+            cached_manifest=json.loads(cache_manifest.read_text())
+            if cached_manifest.get('identity')!=cache_key or cached_manifest.get('count')!=total:
+                raise RuntimeError('Existing private raster cache does not match this trace')
+            cached_files=cached_manifest.get('hashes',[])
+            if len(cached_files)!=total:raise RuntimeError('Incomplete private raster manifest')
+            cache_hit=True
     tmp=output.with_suffix('.video-only.mp4')
     encoder=subprocess.Popen([
       'ffmpeg','-hide_banner','-loglevel','error','-y',
@@ -305,6 +364,23 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
       '-movflags','+faststart',str(tmp)
     ],stdin=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=10*1024*1024)
     timestamps=[float(e['t']) for e in session['events']]
+    # Verified viewport scroll positions are a second directional motion
+    # signal; a fast manual scroll receives a shutter even at 1x speed.
+    initial_scroll=session['states'][0].get('visible',{})
+    scroll_samples=[(0.,float(initial_scroll.get('x',0)),
+                     float(initial_scroll.get('y',0)))]
+    for event in session['events']:
+        if event.get('type')!='scroll' or not isinstance(event.get('scroll'),dict):
+            continue
+        rel=float(event['t'])-start_ms
+        if rel<0:continue
+        scroll_samples.append((rel,float(event['scroll'].get('x',0)),
+                               float(event['scroll'].get('y',0))))
+    scroll_samples.sort(key=lambda q:q[0])
+    scroll_times=[row[0] for row in scroll_samples]
+    def scroll_at(ms:float)->tuple[float,float]:
+        ix=max(0,bisect_right(scroll_times,ms)-1)
+        return scroll_samples[ix][1:]
     clock_ms=0
     next_action=0
     next_check=0
@@ -368,15 +444,21 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         page.evaluate('window.__sauceAnimationControls.settleInitial()')
         animated_frames=0
         for index in range(total):
-            wanted_ms=round(index*1000/fps)
+            wanted_ms=(round(float(frame_map[index]['sourceMs']))
+                       if frame_map else round(index*1000/fps))
+            source_index=min(source_total-1,max(0,round(wanted_ms*fps/1000)))
+            last_source_index=(min(source_total-1,max(0,round(
+                float(frame_map[index-1]['sourceMs'])*fps/1000)))
+                if frame_map and index>0 else max(0,source_index-1))
+            if wanted_ms<clock_ms:raise RuntimeError('Studio time mapping reversed')
             delta=wanted_ms-clock_ms
             if delta>0:page.clock.run_for(delta)
             clock_ms=wanted_ms
             # Real mouse movement is replayed at the output frame rate,
             # unlike Playwright's eager mouse.move(steps=N) loop. The DOM's
             # hover treatment and the visible cursor use the same spring path.
-            if cursor and samples and index/fps>=samples[0][0]:
-                mx,my=cursor[index]
+            if cursor and samples and wanted_ms/1000.>=samples[0][0]:
+                mx,my=cursor[source_index]
                 page.mouse.move(mx,my)
             while next_action<len(actions) and stored[next_action]['at_ms']-start_ms<=wanted_ms:
                 execute_action(page,actions[next_action])
@@ -411,11 +493,22 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                     proof=compare_verified_region(session_dir,session['states'][next_check+1],page,info['dpr'])
                     if proof:visuals.append(proof)
                 next_check+=1
-            png=page.screenshot(scale='device',animations='allow',caret='hide')
-            decoded=cv2.imdecode(np.frombuffer(png,dtype=np.uint8),cv2.IMREAD_COLOR)
+            if cache_hit:
+                raw=raster_cache_dir/f'{index:05d}.png'
+                if not raw.is_file() or hashlib.sha256(raw.read_bytes()).hexdigest()!=cached_files[index]:
+                    raise RuntimeError('Canonical source frame hash mismatch: '+str(raw))
+                decoded=cv2.imread(str(raw),cv2.IMREAD_COLOR)
+            else:
+                png=page.screenshot(scale='device',animations='allow',caret='hide')
+                decoded=cv2.imdecode(np.frombuffer(png,dtype=np.uint8),cv2.IMREAD_COLOR)
             if decoded is None or decoded.shape[:2]!=(source_px_h,source_px_w):
                 raise RuntimeError(f'Invalid Chromium frame {index}')
-            z,fx,fy=camera[index]
+            if raster_cache_dir is not None and not cache_hit:
+                raw=raster_cache_dir/f'{index:05d}.png'
+                if not cv2.imwrite(str(raw),decoded,[cv2.IMWRITE_PNG_COMPRESSION,3]):
+                    raise RuntimeError('Could not write private canonical source')
+                cached_files.append(hashlib.sha256(raw.read_bytes()).hexdigest())
+            z,fx,fy=camera[source_index]
             factor=(ww/source_px_w)*z
             dx=ww/2-fx*info['dpr']*factor
             dy=wh/2-fy*info['dpr']*factor
@@ -447,16 +540,34 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 if current:
                     source=highlight_code_region(source,current,z,dx,dy,
                                                  info['dpr'],factor)
+            if frame_map:
+                speed=float(frame_map[index]['speed'])
+                prev_z,prev_cx,prev_cy=camera[last_source_index]
+                # Blur only follows observed camera/scroll displacement.
+                # Static UI remains sharp even when idle time is accelerated.
+                vx=(prev_cx-fx)*z*(ww/source_w)
+                vy=(prev_cy-fy)*z*(wh/source_h)
+                last_ms=(float(frame_map[index-1]['sourceMs']) if index else 0.)
+                sx0,sy0=scroll_at(last_ms)
+                sx1,sy1=scroll_at(wanted_ms)
+                vx+=(sx0-sx1)*factor*info['dpr']
+                vy+=(sy0-sy1)*factor*info['dpr']
+                if math.hypot((sx1-sx0),(sy1-sy0))>15:
+                    speed=max(speed,2.2)
+                source=directional_blur(source,vx,vy,speed)
             if root_stage:
-                # One root export, not website CSS: compose window on
-                # #090a0f with 140px ambient blur, then top-layer pointer.
-                frame_tilt=tilt_track[index]
-                draw_cursor=(lambda final:root_cursor.draw(
-                    final,cursor[index] if cursor else None,index/fps,
-                    info['dpr']*factor,dx,dy,tilt=frame_tilt))
+                # One root export with perspective studio floor and overlays.
+                frame_tilt=tilt_track[source_index]
+                def draw_overlays(final):
+                    if callout_renderer is not None:
+                        callout_renderer.draw(final,index,
+                            info['dpr']*factor,dx,dy,frame_tilt,root_stage.window)
+                    root_cursor.draw(final,
+                        cursor[source_index] if cursor else None,wanted_ms/1000.,
+                        info['dpr']*factor,dx,dy,tilt=frame_tilt)
                 output_image=root_stage.render(
-                    source,cinematic_cursor=draw_cursor,tilt=frame_tilt,
-                    glow=audio_levels[index] if audio_levels is not None else 0.)
+                    source,cinematic_cursor=draw_overlays,tilt=frame_tilt,
+                    glow=audio_levels[source_index] if audio_levels is not None else 0.)
             else:
                 output_image=base.copy()
                 area=output_image[wy:wy+wh,wx:wx+ww]
@@ -468,36 +579,36 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             elif presentation_v14:
                 # MIT Tabler SVG assets, black fill / outline variants.
                 paint_click_ripple(output_image,session['events'],start_ms,
-                                   index/fps,info['dpr']*factor,dx,dy)
+                                   wanted_ms/1000.,info['dpr']*factor,dx,dy)
                 if cursor:
-                    render_tabler_cursor(output_image,cursor[index],
-                        session['events'],start_ms,index/fps,
+                    render_tabler_cursor(output_image,cursor[source_index],
+                        session['events'],start_ms,wanted_ms/1000.,
                         info['dpr']*factor,dx,dy,cursor_style)
             elif presentation_v13:
                 # Preserve previous SVG treatment for A/B.
                 paint_click_ripple(output_image,session['events'],start_ms,
-                                   index/fps,info['dpr']*factor,dx,dy)
+                                   wanted_ms/1000.,info['dpr']*factor,dx,dy)
                 if cursor:
-                    paint_svg_pointer(output_image,cursor[index],session['events'],
-                                       start_ms,index/fps,info['dpr']*factor,dx,dy)
+                    paint_svg_pointer(output_image,cursor[source_index],session['events'],
+                                       start_ms,wanted_ms/1000.,info['dpr']*factor,dx,dy)
             elif presentation_v12:
                 # Perceived click must remain visible. Draw feedback first,
                 # pointer second; CSS cursor:none NEVER hides this overlay.
                 click_feedback(output_image,session['events'],start_ms,index/fps,
                                info['dpr']*factor,dx,dy)
                 if cursor:
-                    t=start_ms+index*1000/fps
+                    t=start_ms+wanted_ms
                     k=max(0,bisect_right(timestamps,t)-1)
                     pointer_css=session['events'][k].get('cursor','default')
-                    compose_cursor(output_image,cursor_art,pointer_css,cursor[index],
+                    compose_cursor(output_image,cursor_art,pointer_css,cursor[source_index],
                                    info['dpr']*factor,dx,dy,actionable_boxes,
-                                   index/fps,start_ms,session['events'])
+                                   wanted_ms/1000.,start_ms,session['events'])
             else:
-                if cursor and samples and index/fps>=samples[0][0]:
-                    t=start_ms+index*1000/fps
+                if cursor and samples and wanted_ms/1000.>=samples[0][0]:
+                    t=start_ms+wanted_ms
                     k=max(0,bisect_right(timestamps,t)-1)
                     pointer_css=session['events'][k].get('cursor','default')
-                    overlay_native_cursor(output_image,cursor_art,cursor[index],
+                    overlay_native_cursor(output_image,cursor_art,cursor[source_index],
                                 pointer_css,info['dpr']*factor,dx,dy)
                 if click_effect:
                     overlay_click(output_image,session['events'],start_ms,index/fps,
@@ -513,6 +624,12 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         if expected_text:
             page.get_by_text(expected_text,exact=True).first.wait_for(state='visible',timeout=3000)
         context.close();browser.close()
+        if raster_cache_dir is not None and not cache_hit:
+            manifest={'schema':1,'identity':cache_key,'count':total,
+                      'hashes':cached_files,'private':True}
+            tmp_manifest=raster_cache_dir/'manifest.tmp.json'
+            tmp_manifest.write_text(json.dumps(manifest,indent=2))
+            tmp_manifest.replace(cache_manifest)
     finally:
         if encoder.stdin:
             try:encoder.stdin.close()
@@ -525,7 +642,20 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                     '-f','null','-'],check=True,timeout=90)
     report={'mode':'replayed-real-dom','source':session['source_url'],
             'video':str(output),'width':MASTER_W,'height':MASTER_H,
-            'fps':fps,'frames':rendered,'seconds':length,
+            'fps':fps,'frames':rendered,
+            'seconds':rendered/fps,
+            'source_seconds':length,
+            'raster_cache':({'private':True,'reused':cache_hit,'frames':total}
+                             if raster_cache_dir is not None else None),
+            'studio_motion':({'enabled':True,
+                'output_duration_ms':studio_motion_plan['outputDurationMs'],
+                'source_duration_ms':studio_motion_plan['sourceDurationMs'],
+                'speed_peak':max(t['speed'] for t in frame_map),
+                'dead_zones':len(studio_motion_plan['deadZones']),
+                'protected_actions':len(studio_motion_plan['actionWindows']),
+                'callouts':len(studio_motion_plan['callouts']),
+                'studio_floor':root_stage.enable_studio_floor}
+                if studio_motion_plan else None),
             'capture_state_hashes_checked':len(session['states']),
             'events':len(session['events']),
             'applied_actions':next_action,
