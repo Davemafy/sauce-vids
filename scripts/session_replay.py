@@ -17,7 +17,9 @@ import numpy as np
 from PIL import Image,ImageDraw,ImageFilter
 from playwright.sync_api import sync_playwright
 from session_contract import validate_actions,verify_package
-from spring_motion import Spring1D,Spring2D,cursor_track
+from spring_motion import cursor_track
+from cinematic_tracks import cinematic_camera
+from cinematic_composite import background_focus
 from system_cursors import extract_native_cursors,cursor_class
 
 MASTER_W,MASTER_H,FPS_DEFAULT=1920,1080,60
@@ -64,25 +66,6 @@ def cursor_motion(events:Sequence[dict],start_ms:float,duration:float,fps:int):
             else:picked.append((t,float(e['x']),float(e['y'])))
     if len(picked)<2:return None,picked
     return cursor_track(samples=picked,fps=fps,duration=duration,stiffness=900,damping=60),picked
-
-def camera_motion(events:Sequence[dict],start_ms:float,duration:float,fps:int):
-    clicks=[e for e in events if e['type']=='pointerdown' and e.get('box')]
-    # No pointer/click evidence means camera stays wide. Never invent zoom.
-    scale=Spring1D(1.,stiffness=100,damping=20)
-    pan=Spring2D(640.,360.,stiffness=144,damping=24)
-    frames=[]
-    for frame in range(round(duration*fps)):
-        t=frame/fps
-        visible=[e for e in clicks if (e['t']-start_ms)/1000.-.12 <= t]
-        if visible:
-            event=visible[-1]
-            box=event['box'];cx=box['x']+box['width']/2;cy=box['y']+box['height']/2
-            target=(1.18,640.+.35*(cx-640.),360.+.25*(cy-360.))
-        else:target=(1.,640.,360.)
-        if frame:
-            scale.step(target[0],1/fps);pan.step(target[1],target[2],1/fps)
-        frames.append((scale.position,pan.x.position,pan.y.position))
-    return frames
 
 def draw_frame_base():
     pic=Image.new('RGB',(MASTER_W,MASTER_H),(243,242,238))
@@ -182,6 +165,10 @@ VISIBLE_PIXELS_JS=r"""element=>{
 
 def execute_action(page,action:dict):
     k=action['action']
+    if k=='approach':
+        # Recorded pointer samples are played one frame at a time below.
+        # Do not execute the entire trajectory instantaneously.
+        return
     if k in ('click','hover'):
         loc=page.locator(action['selector']).first
         loc.wait_for(state='visible',timeout=9000)
@@ -199,7 +186,7 @@ def execute_action(page,action:dict):
 def replay(session_dir:Path,workflow_file:Path,output:Path,
            fps:int=60,seconds:float|None=None,har:bool=False,
            screenshot_step:int=45,expected_text:str|None=None,
-           click_effect:bool=False) -> dict:
+           click_effect:bool=False,backdrop_focus:bool=False) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -216,8 +203,20 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     length=seconds if seconds is not None else (last_ms-start_ms)/1000.+.35
     if not 0<length<=10:raise ValueError('Limit this proof renderer to <=10s')
     total=round(length*fps)
-    camera=camera_motion(session['events'],start_ms,length,fps)
+    camera,camera_cues=cinematic_camera(
+        session['events'],start_ms,length,fps,tuple(info['viewport']))
+    dialog_events=[event for event in session['events']
+        if event['type']=='dialog-visible' and event.get('box')]
+    first_dialog_ms=dialog_events[0]['t'] if dialog_events else None
     cursor,samples=cursor_motion(session['events'],start_ms,length,fps)
+    if cursor:
+        for action in (e for e in session['events'] if e['type']=='pointerdown'
+                       and e.get('x') is not None):
+            idx=round((action['t']-start_ms)*fps/1000)
+            if 0<=idx<len(cursor):
+                error=math.dist(cursor[idx],(action['x'],action['y']))
+                if error>3.:
+                    raise RuntimeError(f'Cursor would miss recorded click: {error:.2f}px')
     base,clip=draw_frame_base()
     cursor_art=extract_native_cursors(display=':121',scale=2)
     source_w,source_h=info['viewport']
@@ -267,6 +266,9 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         # Hydrate React/Vue/event listeners and load fonts before freezing time.
         page.wait_for_timeout(1200 if session['source_url'].startswith('https://') else 200)
         page.evaluate('document.fonts.ready')
+        if actions and actions[0]['action']=='approach':
+            page.locator(actions[0]['selector']).first.scroll_into_view_if_needed()
+            page.wait_for_timeout(260)
         page.clock.pause_at(datetime(2026,1,1,1,0,tzinfo=timezone.utc))
         page.evaluate(ANIMATION_DRIVER)
         page.evaluate('window.__sauceAnimationControls.settleInitial()')
@@ -276,6 +278,12 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             delta=wanted_ms-clock_ms
             if delta>0:page.clock.run_for(delta)
             clock_ms=wanted_ms
+            # Real mouse movement is replayed at the output frame rate,
+            # unlike Playwright's eager mouse.move(steps=N) loop. The DOM's
+            # hover treatment and the visible cursor use the same spring path.
+            if cursor and samples and index/fps>=samples[0][0]:
+                mx,my=cursor[index]
+                page.mouse.move(mx,my)
             while next_action<len(actions) and stored[next_action]['at_ms']-start_ms<=wanted_ms:
                 execute_action(page,actions[next_action])
                 next_action+=1
@@ -309,6 +317,23 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             matrix=np.array([[factor,0,dx],[0,factor,dy]],dtype=np.float32)
             source=cv2.warpAffine(decoded,matrix,(WINDOW_W,WINDOW_H),
                    flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_REPLICATE)
+            if backdrop_focus and first_dialog_ms is not None:
+                age_ms=wanted_ms-(first_dialog_ms-start_ms)
+                if age_ms>0:
+                    progress=min(1.,age_ms/280.)
+                    smooth=progress*progress*(3-2*progress)
+                    dialog=page.get_by_role('dialog').first
+                    bounds=dialog.bounding_box() if dialog.count() else None
+                    if bounds:
+                        # Depth separation happens at the 1600x900 final
+                        # browser size, preserving full-res source and speed.
+                        projected={
+                          'x':dx+bounds['x']*info['dpr']*factor,
+                          'y':dy+bounds['y']*info['dpr']*factor,
+                          'width':bounds['width']*info['dpr']*factor,
+                          'height':bounds['height']*info['dpr']*factor,
+                        }
+                        source=background_focus(source,projected,1,mix=.37*smooth)
             output_image=base.copy()
             area=output_image[WINDOW_Y:WINDOW_Y+WINDOW_H,WINDOW_X:WINDOW_X+WINDOW_W]
             area[:]=np.uint8(area.astype(np.float32)*(1-clip)+source*clip)
@@ -348,6 +373,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'capture_state_hashes_checked':len(session['states']),
             'events':len(session['events']),
             'applied_actions':next_action,
+            'camera_cues':camera_cues,
+            'editorial_background_focus':bool(backdrop_focus),
             'semantic_checks':checks,
             'animated_frame_effects':animated_frames,
             'visual_region_checks':visuals,
@@ -372,9 +399,11 @@ def main():
     cli.add_argument('--har',action='store_true')
     cli.add_argument('--expect-text')
     cli.add_argument('--click-effect',action='store_true')
+    cli.add_argument('--backdrop-focus',action='store_true',
+       help='Blur only real pixels behind the verified modal; never alters the modal itself')
     args=cli.parse_args()
     result=replay(args.session,args.workflow,args.output,args.fps,args.seconds,
                   args.har,expected_text=args.expect_text,
-                  click_effect=args.click_effect)
+                  click_effect=args.click_effect,backdrop_focus=args.backdrop_focus)
     print(json.dumps(result,indent=2))
 if __name__=='__main__':main()

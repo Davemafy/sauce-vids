@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import urlsplit,urlunsplit
 
 SCHEMA='sauce.session.v1'
-ALLOWED_ACTIONS=frozenset({'click','hover','move','fill','scroll','wait'})
+ALLOWED_ACTIONS=frozenset({'click','hover','move','approach','fill','scroll','wait'})
 
 
 def safe_url(url:str)->str:
@@ -24,7 +24,7 @@ def validate_actions(actions:list[dict]) -> None:
     for a in actions:
         if not isinstance(a,dict) or a.get('action') not in ALLOWED_ACTIONS:
             raise ValueError('Unsupported action: '+str(a))
-        if a['action'] in ('click','hover','fill') and not a.get('selector'):
+        if a['action'] in ('click','hover','fill','approach') and not a.get('selector'):
             raise ValueError('Missing action selector')
         if a['action']=='fill' and a.get('secret'):
             raise ValueError('Sensitive values require a separate authorized input channel')

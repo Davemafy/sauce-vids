@@ -16,6 +16,8 @@ CAPTURE_JS=r"""
 (() => {
  if (window.__sauceCapture) return;
  const timeline=[],start=performance.now();
+ let currentPointer={x:0,y:0};
+ const dialogs=new WeakSet();
  const sensitive=/password|token|secret|api.?key|credit|card|otp/i;
  const safeSelector=(e)=>{
    if(!(e instanceof Element)) return '';
@@ -49,9 +51,25 @@ CAPTURE_JS=r"""
  };
  let lastMove=-100;
  document.addEventListener('pointermove',e=>{
+   currentPointer={x:e.clientX,y:e.clientY};
    const now=performance.now();
    if(now-lastMove>=24){lastMove=now;push('pointermove',e);}
  },true);
+ function watchDialog(){
+   try {
+     for(const d of document.querySelectorAll('[role="dialog"]')){
+       if(dialogs.has(d))continue;
+       const rect=d.getBoundingClientRect(),style=getComputedStyle(d);
+       if(rect.width>0&&rect.height>0&&style.visibility==='visible'&&
+         Number(style.opacity)>.07){
+         dialogs.add(d);
+         push('dialog-visible',{target:d});
+       }
+     }
+   }catch{}
+   requestAnimationFrame(watchDialog);
+ }
+ requestAnimationFrame(watchDialog);
  for(const type of ['pointerdown','pointerup','click','mouseover','focusin'])
    document.addEventListener(type,e=>{
       if(type==='mouseover'){
@@ -67,9 +85,49 @@ CAPTURE_JS=r"""
        (sensitive.test(el.name||'')||el.type==='password' ? null:el.value.length):null});
  },true);
  document.addEventListener('scroll',e=>push('scroll',e),true);
- window.__sauceCapture={version:1,entries:timeline,flush:()=>timeline.splice(0),elapsed:()=>performance.now()-start};
+ window.__sauceCapture={version:1,entries:timeline,flush:()=>timeline.splice(0),elapsed:()=>performance.now()-start,
+   pointer:()=>currentPointer};
 })();
 """
+
+def approach_element(page,selector:str,duration_ms:int=640) -> None:
+    """Record a real Bezier hand approach to a visible control, not teleport.
+
+    The pointer must physically move through intermediate browser events.
+    Quintic timing accelerates and decelerates; the small perpendicular
+    curvature prevents an uncanny axis-aligned trajectory. No random noise.
+    """
+    import math
+    locator=page.locator(selector).first
+    locator.wait_for(state='visible',timeout=12000)
+    locator.scroll_into_view_if_needed(timeout=12000)
+    rect=locator.bounding_box()
+    if not rect:raise RuntimeError('Approach target has no visible bounds')
+    target_x=rect['x']+rect['width']/2.
+    target_y=rect['y']+rect['height']/2.
+    previous=page.evaluate('window.__sauceCapture.pointer()')
+    x0,y0=float(previous['x']),float(previous['y'])
+    dx,dy=target_x-x0,target_y-y0
+    distance=math.hypot(dx,dy)
+    if distance<6:return
+    seconds=max(320,min(1100,int(duration_ms)))/1000.
+    steps=max(22,min(32,round(seconds*33)))
+    perp_x,perp_y=-dy/distance,dx/distance
+    curve=min(42.,distance*.085)
+    # Draw the real pointer path while the browser runs in real wall time.
+    for index in range(1,steps+1):
+        u=index/steps
+        p=u*u*u*(u*(u*6-15)+10)
+        bend=curve*math.sin(math.pi*p)
+        x=x0+dx*p+perp_x*bend
+        y=y0+dy*p+perp_y*bend
+        page.mouse.move(x,y)
+        # Chromium pointer dispatch itself has nonzero wall-clock cost.
+        # Account for it to avoid turning a ~700ms gesture into 1.8s.
+        page.wait_for_timeout(max(6,round(1000*seconds/steps*.42)))
+    # Ensure a precise endpoint for clicking even after scroll events.
+    page.mouse.move(target_x,target_y)
+
 
 def run_workflow(page,actions:list[dict],images:Path,trace:list[dict]) -> list[dict]:
     phases=[]
@@ -99,7 +157,9 @@ def run_workflow(page,actions:list[dict],images:Path,trace:list[dict]) -> list[d
         kind=action['action']
         phase={'index':i,'action':kind,
                'at_ms':round(page.evaluate('window.__sauceCapture.elapsed()'),3)}
-        if kind in ('click','hover'):
+        if kind=='approach':
+            approach_element(page,action['selector'],int(action.get('duration_ms',640)))
+        elif kind in ('click','hover'):
             loc=page.locator(action['selector']).first
             loc.wait_for(state='visible',timeout=12000)
             if kind=='click':loc.click(timeout=12000)
@@ -146,6 +206,13 @@ def record(url:str, actions:list[dict],output:Path,
         if response and response.status>=400:raise RuntimeError('Page returned '+str(response.status))
         page.evaluate(CAPTURE_JS)
         page.wait_for_timeout(500)
+        # The opening composition is the relevant product surface, not an
+        # unrelated homepage above the clicked UI. Stage this before t=0.
+        if actions and actions[0]['action']=='approach':
+            page.locator(actions[0]['selector']).first.scroll_into_view_if_needed()
+            page.wait_for_timeout(260)
+        page.mouse.move(round(width*.78),round(height*.73))
+        page.wait_for_timeout(70)
         actions_meta=[]
         states=[]
         started=time.monotonic()

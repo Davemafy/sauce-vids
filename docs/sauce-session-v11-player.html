@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f7f7f4">
+<meta name="description" content="Sauce offscreen browser replay with human-paced cursor and action-led camera.">
+<title>Sauce | Follow the action</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+html,body{margin:0;background:#f7f7f4;color:#242823}
+body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-underline-offset:4px}
+button{font:inherit;cursor:pointer}
+main{max-width:1360px;margin:0 auto;padding:22px clamp(16px,4.2vw,58px) 68px}
+nav{display:flex;align-items:center;justify-content:space-between;gap:18px;
+ padding-bottom:18px;border-bottom:1px solid #e0e2db}
+.logo{font:italic 700 32px Georgia,serif;letter-spacing:-.073em}
+nav a{font-size:13px;color:#636a60;text-decoration:none}
+nav a:hover{text-decoration:underline}
+h1{font:normal clamp(42px,5.2vw,72px)/1.08 Georgia,serif;letter-spacing:-.052em;
+ margin:39px 0 12px}
+.description{font-size:15px;line-height:1.65;color:#686d66;margin:0 0 28px;max-width:760px}
+.stage{padding:7px;border:1px solid #d3d6ce;border-radius:20px;background:#e8e8e2;
+ box-shadow:0 22px 60px #2a312713}
+video{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:contain;
+ border-radius:13px;background:#e8e8e2}
+.controls{display:flex;justify-content:space-between;align-items:center;gap:16px;
+ margin:19px 0 0;flex-wrap:wrap}
+.switches{display:flex;align-items:center;border:1px solid #d9dbd4;border-radius:9px;
+ background:#eeefea;padding:4px;gap:3px}
+.switches button{border:0;border-radius:6px;background:transparent;color:#697068;
+ font-size:13px;font-weight:600;padding:11px 15px}
+.switches button[aria-pressed=true]{background:#303932;color:#fff}
+.exports{display:flex;gap:16px;align-items:center}
+.exports a{font-size:13px;font-weight:600;color:#3a413a}
+.details{display:grid;grid-template-columns:1fr auto;align-items:start;gap:25px;
+ margin-top:45px;padding-top:22px;border-top:1px solid #dee0d8}
+.details h2{font-size:16px;margin:0 0 9px;font-weight:600;letter-spacing:-.02em}
+.details p{font-size:14px;max-width:760px;color:#71776e;line-height:1.7;margin:0}
+.details aside{font-size:13px;color:#74796f;max-width:275px;line-height:1.6}
+footer{margin-top:42px;padding-top:18px;border-top:1px solid #e1e2dc;
+ color:#848a81;font-size:12px;line-height:1.6}
+button:focus-visible,a:focus-visible{outline:3px solid #677768;outline-offset:3px}
+@media(max-width:700px){
+ main{padding:17px 14px 48px}.logo{font-size:28px}
+ nav{padding-bottom:14px}
+ h1{margin-top:31px}.description{margin-bottom:19px}
+ .stage{padding:4px;border-radius:13px}video{border-radius:10px}
+ .controls{gap:14px;margin-top:14px}
+ .switches{width:100%}.switches button{flex:1;padding:12px 6px;font-size:12px}
+ .exports{justify-content:space-between;width:100%}
+ .details{display:block;margin-top:29px}.details aside{margin-top:17px}
+}
+</style></head>
+<body><main>
+<nav><div class="logo">sauce.</div><a href="/sauce-film-05/">Film 05</a></nav>
+<h1>Follow the action.</h1>
+<p class="description">A real Brimble workflow rendered frame by frame. The camera responds to cursor movement, then reframes the actual dialog. No reconstructed product UI.</p>
+<section class="stage">
+<video id="film" controls playsinline preload="metadata" poster="poster.jpg"
+ aria-label="Brimble agent-connection cinematic replay">
+ <source src="preview.mp4?v=11" type="video/mp4">This browser does not support video playback.
+</video>
+</section>
+<div class="controls">
+ <div class="switches" role="group" aria-label="Choose a recording to compare">
+  <button type="button" data-mode="new" aria-pressed="true">New motion</button>
+  <button type="button" data-mode="old" aria-pressed="false">Previous replay</button>
+ </div>
+ <div class="exports">
+  <a id="master" href="master-1080p60.mp4?v=11">1080p · 60fps</a>
+  <a id="fullscreen" href="#film">Fullscreen</a>
+ </div>
+</div>
+<section class="details">
+<div><h2>Two interactions. Real browser states.</h2>
+<p>The cursor moves toward Connect, opens the native modal, approaches Codex and reveals its setup command. Spring-controlled framing tracks the action; a light background-focus treatment keeps the dialog readable without redrawing it. This is a silent engine test, not the final launch film.</p></div>
+<aside>252 rendered frames · 4.2 seconds · 16:9 landscape</aside>
+</section>
+<footer>Independent Sauce production exercise using Brimble's public interface. No account sign-in or deployment performed. Not affiliated with or endorsed by Brimble.</footer>
+<script>
+(()=>{
+ const film=document.getElementById('film');
+ const master=document.getElementById('master');
+ const modes={
+  new:{src:'preview.mp4?v=11',poster:'poster.jpg?v=11',master:'master-1080p60.mp4?v=11'},
+  old:{src:'/sauce-engine-v10/preview.mp4',poster:'/sauce-engine-v10/poster.jpg',
+       master:'/sauce-engine-v10/master-1080p60.mp4'}
+ };
+ document.querySelectorAll('[data-mode]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+   if(btn.getAttribute('aria-pressed')==='true')return;
+   const files=modes[btn.dataset.mode];
+   film.pause();film.src=files.src;film.poster=files.poster;film.load();
+   master.href=files.master;
+   document.querySelectorAll('[data-mode]').forEach(b=>
+      b.setAttribute('aria-pressed',String(b===btn)));
+  });
+ });
+ document.getElementById('fullscreen').addEventListener('click',e=>{
+  e.preventDefault();
+  if(film.requestFullscreen)film.requestFullscreen().catch(()=>{});
+  else if(film.webkitEnterFullscreen)film.webkitEnterFullscreen();
+ });
+})();
+</script>
+</main></body></html>

@@ -1,0 +1,32 @@
+[
+  {
+    "action": "approach",
+    "selector": "button:has-text('Connect your agent'):visible",
+    "duration_ms": 670,
+    "settle_ms": 70
+  },
+  {
+    "action": "click",
+    "selector": "button:has-text('Connect your agent'):visible",
+    "settle_ms": 240,
+    "expect_selector": "[role=dialog]"
+  },
+  {
+    "action": "approach",
+    "selector": "[role=dialog] :text-is('Codex')",
+    "duration_ms": 630,
+    "settle_ms": 60
+  },
+  {
+    "action": "click",
+    "selector": "[role=dialog] :text-is('Codex')",
+    "settle_ms": 240,
+    "expect_text": "Copied. Paste it into your terminal"
+  },
+  {
+    "action": "wait",
+    "ms": 700,
+    "settle_ms": 180,
+    "expect_text": "Copied. Paste it into your terminal"
+  }
+]

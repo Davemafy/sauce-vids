@@ -37,6 +37,12 @@ class SessionContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_actions([{'action':'run_shell','value':'whoami'}])
 
+    def test_approach_requires_real_target(self):
+        validate_actions([{'action':'approach','selector':'#start',
+                           'duration_ms':650}])
+        with self.assertRaisesRegex(ValueError,'Missing'):
+            validate_actions([{'action':'approach'}])
+
     def test_visual_expectation_is_allowed(self):
         validate_actions([{'action':'click','selector':'#open',
                            'expect_selector':'[role=dialog]'}])
