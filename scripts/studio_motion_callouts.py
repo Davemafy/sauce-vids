@@ -49,10 +49,11 @@ class KineticCalloutRenderer:
 
     def draw(self,frame:np.ndarray,frame_idx:int,
              source_factor:float,dx:float,dy:float,
-             tilt:tuple[float,float],window:tuple[int,int,int,int])->None:
+             tilt:tuple[float,float],window:tuple[int,int,int,int],
+             focal:float=1820.)->None:
         now_ms=frame_idx*1000./self.fps
         x,y,w,h=window
-        H=window_homography(x,y,w,h,*tilt)
+        H=window_homography(x,y,w,h,*tilt,focal=focal)
         for i,cue in enumerate(self.callouts):
             start=float(cue['outputStartMs']);end=float(cue['outputEndMs'])
             if not start<=now_ms<end:continue

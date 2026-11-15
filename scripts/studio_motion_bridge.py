@@ -28,7 +28,9 @@ def _enrich_events(session:dict)->list[dict]:
     return events
 
 
-def plan_studio_motion(session:dict,duration_s:float,fps:int,config:dict)->dict:
+def plan_studio_motion(session:dict,duration_s:float,fps:int,
+                       config:dict,preset:str|None=None,
+                       preset_overrides:dict|None=None)->dict:
     if not BUNDLE.is_file():
         raise RuntimeError('Missing StudioMotion JS bundle. Run: cd scripts/studio-motion && npm ci && npm run build')
     data={'events':_enrich_events(session),
@@ -36,6 +38,16 @@ def plan_studio_motion(session:dict,duration_s:float,fps:int,config:dict)->dict:
           'durationMs':duration_s*1000.,
           'fps':fps,
           'config':config}
+    if preset is not None:
+        if preset not in ('clean-studio','3d-launch','hyper-cut'):
+            raise ValueError('Unsupported Sauce preset')
+        data['preset']=preset
+        if preset_overrides is not None:
+            if not isinstance(preset_overrides,dict):
+                raise ValueError('Preset overrides must be a JSON object')
+            data['presetOverrides']=preset_overrides
+    elif preset_overrides is not None:
+        raise ValueError('Cannot override a missing preset')
     proc=subprocess.run(['node',str(BUNDLE)],input=json.dumps(data),
                         text=True,capture_output=True,timeout=18)
     if proc.returncode:
@@ -52,4 +64,39 @@ def plan_studio_motion(session:dict,duration_s:float,fps:int,config:dict)->dict:
         prev=t
     if any(x.get('sourceStartMs',0)<0 for x in report['callouts']):
         raise RuntimeError('Invalid callout timestamp')
+    if preset is not None:
+        engine=report.get('motionEngine')
+        if not isinstance(engine,dict) or engine.get('schema')!='sauce-motion-plan-v1':
+            raise RuntimeError('Missing versioned Sauce Motion Engine plan')
+        settings=engine.get('preset',{})
+        if (settings.get('schemaVersion')!=1 or settings.get('id')!=preset
+            or settings.get('export',{}).get('fps')!=fps):
+            raise RuntimeError('Preset identity, version or fps mismatch')
+        fp=engine.get('framePlan',{})
+        if fp.get('schema')!='sauce-frame-plan-v1' or fp.get('fps')!=fps:
+            raise RuntimeError('Unrecognized FramePlan schema')
+        instructions=fp.get('frames')
+        if not isinstance(instructions,list) or len(instructions)!=len(frames):
+            raise RuntimeError('FramePlan count does not match StudioMotion clock')
+        for i,frame in enumerate(instructions):
+            pose=frame.get('camera',{})
+            if (frame.get('outputFrame')!=i
+                or abs(frame['sourceMs']-frames[i]['sourceMs'])>1e-3
+                or not 0.8<=pose.get('scale',0)<=2.
+                or not 600<=pose.get('perspectivePx',0)<=3000
+                or max(abs(pose.get('rotateXDeg',99)),
+                       abs(pose.get('rotateYDeg',99)))>6.):
+                raise RuntimeError(f'Invalid FramePlan camera/time at {i}')
+        foley=engine.get('foleyPlan',{})
+        if (foley.get('schema')!='sauce-foley-plan-v1'
+            or foley.get('sampleRate')!=48000
+            or abs(foley.get('durationMs',0)-fp.get('outputDurationMs',-100))>.1):
+            raise RuntimeError('FoleyPlan not aligned to FramePlan')
+        max_sample=int((fp['outputDurationMs']+1000/fps)*48)
+        for cue in foley.get('cues',[]):
+            if (cue.get('sound') not in ('click_crisp','whoosh_soft','pop_glass')
+                or not isinstance(cue.get('outputSample'),int)
+                or not 0<=cue['outputSample']<max_sample
+                or abs(cue.get('outputMs',-1000)-cue['outputSample']/48)>.05):
+                raise RuntimeError('Invalid output-synchronized Foley cue')
     return report

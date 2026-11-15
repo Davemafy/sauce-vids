@@ -10,7 +10,7 @@ from functools import lru_cache
 from typing import Callable
 import numpy as np
 import cv2
-from spatial_parallax import window_homography,map_pointer
+from spatial_parallax import window_homography,map_pointer,projected_target_quad
 from PIL import Image, ImageDraw, ImageFilter
 
 MASTER_WIDTH,MASTER_HEIGHT=1920,1080
@@ -135,14 +135,15 @@ def _ambient_pulse_field()->np.ndarray:
 
 
 def _studio_floor(output:np.ndarray,source:np.ndarray,
-                  tilt:tuple[float,float],intensity:float)->None:
+                  tilt:tuple[float,float],intensity:float,
+                  focal:float=1820.)->None:
     """Projection-grounded virtual floor: diffused reflection and two shadows.
 
     The floor is applied ONLY below the projected browser bottom. Roughened
     reflected pixels are actual website pixels, not a fabricated UI duplicate.
     """
     if intensity<=0:return
-    matrix=window_homography(WINDOW_X,WINDOW_Y,WINDOW_WIDTH,WINDOW_HEIGHT,*tilt)
+    matrix=window_homography(WINDOW_X,WINDOW_Y,WINDOW_WIDTH,WINDOW_HEIGHT,*tilt,focal=focal)
     corners=[map_pointer(matrix,float(x),float(y)) for x,y in (
         (WINDOW_X,WINDOW_Y+WINDOW_HEIGHT),
         (WINDOW_X+WINDOW_WIDTH,WINDOW_Y+WINDOW_HEIGHT))]
@@ -198,6 +199,64 @@ def _studio_floor(output:np.ndarray,source:np.ndarray,
         +reflected.astype(np.float32)*strength,0,255))
 
 
+def apply_spotlight_focus(frame:np.ndarray,box:dict,
+                          stage_window:tuple[int,int,int,int],
+                          factor:float,dx:float,dy:float,
+                          tilt:tuple[float,float],focal:float=1200.,
+                          blur_px:float=6.,dim_opacity:float=.25)->np.ndarray:
+    """Cinematic focus: sharp real UI region, projected 1px rim, contact shadow.
+
+    The same homography maps the browser quad, cursor, and focus bounds.
+    Inactive browser pixels are blurred/dimmed; outside-stage ambient remains
+    unaffected. This never repaints the original UI or modifies source pixels.
+    """
+    if frame.ndim!=3 or frame.shape[2]!=3:raise ValueError('Expected BGR frame')
+    if not 0<=blur_px<=6 or not 0<=dim_opacity<=.7:
+        raise ValueError('Invalid spotlight parameters')
+    x,y,w,h=stage_window
+    H=window_homography(x,y,w,h,*tilt,focal=focal)
+    window=np.float32([[x,y],[x+w,y],[x+w,y+h],[x,y+h]]).reshape(1,4,2)
+    window_quad=cv2.perspectiveTransform(window,H)[0]
+    target_quad=projected_target_quad(box,stage_window,factor,dx,dy,
+                                      *tilt,perspective_px=focal)
+    if not np.isfinite(target_quad).all():raise ValueError('Invalid target projection')
+    out=frame.copy()
+    # Focus effects are bounded to the projected browser window.
+    left=max(0,int(np.floor(np.min(window_quad[:,0])))-6)
+    right=min(frame.shape[1],int(np.ceil(np.max(window_quad[:,0])))+7)
+    top=max(0,int(np.floor(np.min(window_quad[:,1])))-6)
+    bottom=min(frame.shape[0],int(np.ceil(np.max(window_quad[:,1])))+7)
+    if right<=left or bottom<=top:return out
+    roi=out[top:bottom,left:right]
+    original=roi.copy()
+    window_poly=np.rint(window_quad-[left,top]).astype(np.int32)
+    target_poly=np.rint(target_quad-[left,top]).astype(np.int32)
+    window_mask=np.zeros(roi.shape[:2],dtype=np.uint8)
+    target_mask=np.zeros_like(window_mask)
+    cv2.fillConvexPoly(window_mask,window_poly,255,lineType=cv2.LINE_AA)
+    cv2.fillConvexPoly(target_mask,target_poly,255,lineType=cv2.LINE_AA)
+    target_mask=cv2.bitwise_and(target_mask,window_mask)
+    if np.count_nonzero(target_mask)<20:return out
+    # Compute visual context independently and restore the actual target.
+    softened=(cv2.GaussianBlur(original,(0,0),max(.01,blur_px))
+              if blur_px>0 else original)
+    muted=np.uint8(np.clip(softened.astype(np.float32)*(1-dim_opacity),0,255))
+    inactive=cv2.subtract(window_mask,target_mask).astype(np.float32)[:,:,None]/255.
+    roi[:]=np.uint8(np.clip(original.astype(np.float32)*(1-inactive)
+                  +muted.astype(np.float32)*inactive,0,255))
+    # Contact elevation: a soft 7px-offset shadow outside the sharp target.
+    shifted=np.float32(target_poly)+[0,7]
+    shadow_mask=np.zeros_like(window_mask)
+    cv2.fillConvexPoly(shadow_mask,shifted.astype(np.int32),255)
+    shadow=cv2.GaussianBlur(shadow_mask,(0,0),11).astype(np.float32)/255.
+    exclusion=(255-target_mask).astype(np.float32)/255.
+    shadow=(shadow*exclusion*window_mask.astype(np.float32)/255.*.27)[:,:,None]
+    roi[:]=np.uint8(np.clip(roi.astype(np.float32)*(1-shadow),0,255))
+    # 1-pixel antialiased specular rim follows transformed target geometry.
+    cv2.polylines(roi,[target_poly],True,(249,236,216),1,cv2.LINE_AA)
+    return out
+
+
 @dataclass(frozen=True)
 class CinematicStage:
     """Absolute root video wrapper, never an optional nested UI decoration."""
@@ -226,7 +285,9 @@ class CinematicStage:
 
     def render(self,website_frame:np.ndarray,
                cinematic_cursor:Callable[[np.ndarray],None]|None=None,
-               tilt:tuple[float,float]=(0.,0.),glow:float=0.)->np.ndarray:
+               tilt:tuple[float,float]=(0.,0.),glow:float=0.,
+               perspective_px:float=1820.,
+               spotlight:dict|None=None)->np.ndarray:
         """Outer composition: ambient -> 3D window -> final SVG pointer.
 
         tilt and glow are deterministic frame-indexed inputs. The source
@@ -242,7 +303,7 @@ class CinematicStage:
         region[:]=np.uint8(np.clip(
             region.astype(np.float32)*(1-alpha)+website_frame.astype(np.float32)*alpha,0,255))
         if abs(tilt[0])+abs(tilt[1])>1e-5:
-            homography=window_homography(x,y,w,h,*tilt)
+            homography=window_homography(x,y,w,h,*tilt,focal=perspective_px)
             warped=cv2.warpPerspective(flat,homography,(self.width,self.height),
                      flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT,
                      borderValue=(0,0,0))
@@ -259,13 +320,20 @@ class CinematicStage:
             # Glow must never overpower or re-color the content.
             # Modulate outside the transformed window only.
             area=cv2.warpPerspective(_tilt_mask()[:,:,0],
-                     window_homography(x,y,w,h,*tilt),
+                     window_homography(x,y,w,h,*tilt,focal=perspective_px),
                      (self.width,self.height))[:,:,None] if (
                       abs(tilt[0])+abs(tilt[1])>1e-5) else _tilt_mask()
             output=np.uint8(np.clip(output.astype(np.float32)+
                   extra.astype(np.float32)*(glow*.68)*(1-area),0,255))
         if self.enable_studio_floor:
-            _studio_floor(output,website_frame,tilt,self.floor_reflection_intensity)
+            _studio_floor(output,website_frame,tilt,self.floor_reflection_intensity,perspective_px)
+        if spotlight and spotlight.get('active') and spotlight.get('box'):
+            output=apply_spotlight_focus(
+                output,spotlight['box'],self.window,
+                float(spotlight['factor']),float(spotlight['dx']),
+                float(spotlight['dy']),tilt,perspective_px,
+                min(6.,float(spotlight.get('blurPx',6.))),
+                float(spotlight.get('dimOpacity',.25)))
         if cinematic_cursor is not None:
             cinematic_cursor(output)
         return output
@@ -282,12 +350,12 @@ class CinematicCursor:
 
     def draw(self,output:np.ndarray,position:tuple[float,float]|None,
              t:float,source_factor:float,shift_x:float,shift_y:float,
-             tilt:tuple[float,float]=(0.,0.))->None:
+             tilt:tuple[float,float]=(0.,0.),focal:float=1820.)->None:
         from cinematic_presentation_v13 import _blend,click_ring_frames
         from reference_cursor_v15 import load_cursor,press_scale
         if position is None:return
         ox,oy=self.stage.window[:2]
-        homography=(window_homography(*self.stage.window,*tilt)
+        homography=(window_homography(*self.stage.window,*tilt,focal=focal)
                     if abs(tilt[0])+abs(tilt[1])>1e-5 else None)
         def point(px:float,py:float)->tuple[int,int]:
             if homography is not None:

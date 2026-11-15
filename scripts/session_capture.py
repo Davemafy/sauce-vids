@@ -39,8 +39,13 @@ CAPTURE_JS=r"""
    const css=el?getComputedStyle(el):null;
    // Keep event semantics small, public-facing and non-sensitive.
    // Never capture input values, terminal contents, passwords or tokens.
+   const confidential=!!el&&(!!el.closest(
+     'input[type="password"],[autocomplete="one-time-code"],[data-private],'
+       +'[data-sensitive],[data-secret]')||
+     sensitive.test(el.getAttribute('name')||'')||
+     sensitive.test(el.getAttribute('id')||''));
    const semantic=(type==='pointerdown'||type==='click'||type==='focusin'
-       ||type==='dialog-visible') && el;
+       ||type==='dialog-visible'||type==='submit') && el && !confidential;
    const semanticEl=semantic && el.closest('button,[role="button"],[role="dialog"],a[href]');
    const safeLabel=(text)=>{
      const value=(text||'').replace(/\s+/g,' ').trim();
@@ -50,10 +55,10 @@ CAPTURE_JS=r"""
    };
    const entry={
      t:Math.max(0,+(performance.now()-start).toFixed(3)),
-     type,selector:safeSelector(el),
+     type,selector:confidential?'':safeSelector(el),
      eventType:type,
      tag:el?.tagName?.toLowerCase()||null,
-     role:el?.getAttribute('role')||null,
+     role:confidential?null:(el?.getAttribute('role')||null),
      ariaLabel:semantic?safeLabel(semanticEl?.getAttribute('aria-label')):null,
      innerText:semantic?safeLabel(semanticEl?.innerText):null,
      box:box?{x:+box.x.toFixed(2),y:+box.y.toFixed(2),
@@ -121,11 +126,20 @@ CAPTURE_JS=r"""
         }
       }
    },true);
+ // Never inspect ClipboardEvent.clipboardData, selected text, field
+ // values, or DataTransfer payloads. Emit only timing + target geometry.
+ for(const kind of ['copy','paste'])
+   document.addEventListener(kind,e=>push(kind,e,{
+     redacted:true,length:null,ariaLabel:null,innerText:null
+   }),true);
+ // Prefer the concrete submitter, when present, over the whole <form>.
+ document.addEventListener('submit',e=>{
+   const target=e.submitter instanceof Element?e.submitter:e.target;
+   push('submit',{target},{redacted:true,length:null,
+     ariaLabel:null,innerText:null});
+ },true);
  document.addEventListener('input',e=>{
-   const el=e.target;
-   push('input',e,{redacted:true,
-     length:el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement?
-       (sensitive.test(el.name||'')||el.type==='password' ? null:el.value.length):null});
+   push('input',e,{redacted:true,length:null,ariaLabel:null,innerText:null});
  },true);
  document.addEventListener('scroll',e=>push('scroll',e),true);
  window.__sauceCapture={version:1,entries:timeline,flush:()=>timeline.splice(0),elapsed:()=>performance.now()-start,

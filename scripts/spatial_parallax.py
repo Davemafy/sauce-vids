@@ -39,9 +39,13 @@ def inertial_tilt_track(cursor:Sequence[tuple[float,float]]|None,
 
 def window_homography(x:int,y:int,w:int,h:int,
                       rotate_x:float,rotate_y:float,
-                      focal:float=FOCAL_LENGTH)->np.ndarray:
-    if max(abs(rotate_x),abs(rotate_y))>MAX_DEGREES+1e-8:
-        raise ValueError('3D window tilt exceeds 2.5 degrees')
+                      focal:float=FOCAL_LENGTH,max_degrees:float=6.)->np.ndarray:
+    if not math.isfinite(focal) or focal<=600 or focal>3000:
+        raise ValueError('Invalid 3D perspective focal distance')
+    if (not math.isfinite(max_degrees) or max_degrees<0 or max_degrees>6 or
+        not math.isfinite(rotate_x) or not math.isfinite(rotate_y) or
+        max(abs(rotate_x),abs(rotate_y))>max_degrees+1e-8):
+        raise ValueError('3D window tilt exceeds permitted preset bounds')
     ax,ay=math.radians(rotate_x),math.radians(rotate_y)
     cx,cy=x+w/2.,y+h/2.
     src=np.float32([[x,y],[x+w,y],[x+w,y+h],[x,y+h]])
@@ -62,3 +66,30 @@ def map_pointer(matrix:np.ndarray,x:float,y:float)->tuple[float,float]:
     point=np.array([[[x,y]]],dtype=np.float32)
     transformed=cv2.perspectiveTransform(point,matrix)[0,0]
     return float(transformed[0]),float(transformed[1])
+
+
+def projected_target_quad(box:dict,window:tuple[int,int,int,int],
+                          source_factor:float,offset_x:float,offset_y:float,
+                          rotate_x:float,rotate_y:float,
+                          perspective_px:float=FOCAL_LENGTH)->np.ndarray:
+    """Use the SAME window homography for screenshot, rim, and cursor.
+
+    Input box is evidence-backed CSS viewport coordinates; source_factor
+    includes deviceScaleFactor and the per-frame CameraPose scale.
+    Returns four corners in 1920x1080 final-compositor pixel coordinates.
+    """
+    values=[box.get(k) for k in ('x','y','width','height')]
+    if (any(not isinstance(v,(int,float)) or not math.isfinite(v) for v in values)
+        or values[2]<=1 or values[3]<=1 or
+        not all(math.isfinite(v) for v in (source_factor,offset_x,offset_y))
+        or source_factor<=0):
+        raise ValueError('Invalid evidence-backed spotlight box')
+    ox,oy,_,_=window
+    x,y,w,h=values
+    coords=np.float32([[
+      [ox+offset_x+x*source_factor,oy+offset_y+y*source_factor],
+      [ox+offset_x+(x+w)*source_factor,oy+offset_y+y*source_factor],
+      [ox+offset_x+(x+w)*source_factor,oy+offset_y+(y+h)*source_factor],
+      [ox+offset_x+x*source_factor,oy+offset_y+(y+h)*source_factor]]])
+    matrix=window_homography(*window,rotate_x,rotate_y,focal=perspective_px)
+    return cv2.perspectiveTransform(coords,matrix)[0]

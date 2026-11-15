@@ -248,10 +248,18 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         frame_map=studio_motion_plan['frameMap']
         total=len(frame_map)
         if not total:raise ValueError('StudioMotion mapping is empty')
-        if audio_levels is not None:raise ValueError('StudioMotion mode excludes all audio')
+        # Audio is mixed offline AFTER video replay; no audio clock is
+        # fed into Chromium and it never changes source frame timing.
+        if audio_levels is not None:raise ValueError('Do not drive preset visuals from audio RMS')
     else:
         frame_map=None
         total=source_total
+    preset_engine=(studio_motion_plan.get('motionEngine')
+                   if studio_motion_plan else None)
+    preset_frames=(preset_engine['framePlan']['frames'] if preset_engine else None)
+    if preset_frames is not None and len(preset_frames)!=total:
+        raise ValueError('Preset FramePlan must cover every output video frame')
+    preset_spotlight_frames=0
     film_mode=presentation_v12 or presentation_v13 or presentation_v14 or presentation_v15
     vector_mode=presentation_v13 or presentation_v14 or presentation_v15
     if (presentation_v14 or presentation_v15) and cursor_style not in ('ink','outline'):
@@ -508,7 +516,13 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 if not cv2.imwrite(str(raw),decoded,[cv2.IMWRITE_PNG_COMPRESSION,3]):
                     raise RuntimeError('Could not write private canonical source')
                 cached_files.append(hashlib.sha256(raw.read_bytes()).hexdigest())
-            z,fx,fy=camera[source_index]
+            preset_pose=(preset_frames[index]['camera'] if preset_frames else None)
+            if preset_pose:
+                z=float(preset_pose['scale'])
+                fx=float(preset_pose['focusX'])
+                fy=float(preset_pose['focusY'])
+            else:
+                z,fx,fy=camera[source_index]
             factor=(ww/source_px_w)*z
             dx=ww/2-fx*info['dpr']*factor
             dy=wh/2-fy*info['dpr']*factor
@@ -518,7 +532,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             source=cv2.warpAffine(decoded,matrix,(ww,wh),
                    flags=cv2.INTER_LANCZOS4 if film_mode else cv2.INTER_LINEAR,
                    borderMode=cv2.BORDER_REPLICATE)
-            if backdrop_focus and first_dialog_ms is not None:
+            if backdrop_focus and not preset_pose and first_dialog_ms is not None:
                 age_ms=wanted_ms-(first_dialog_ms-start_ms)
                 if age_ms>0:
                     progress=min(1.,age_ms/280.)
@@ -542,7 +556,12 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                                                  info['dpr'],factor)
             if frame_map:
                 speed=float(frame_map[index]['speed'])
-                prev_z,prev_cx,prev_cy=camera[last_source_index]
+                if preset_frames:
+                    prior=preset_frames[max(0,index-1)]['camera']
+                    prev_z,prev_cx,prev_cy=(float(prior['scale']),
+                       float(prior['focusX']),float(prior['focusY']))
+                else:
+                    prev_z,prev_cx,prev_cy=camera[last_source_index]
                 # Blur only follows observed camera/scroll displacement.
                 # Static UI remains sharp even when idle time is accelerated.
                 vx=(prev_cx-fx)*z*(ww/source_w)
@@ -557,17 +576,33 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 source=directional_blur(source,vx,vy,speed)
             if root_stage:
                 # One root export with perspective studio floor and overlays.
-                frame_tilt=tilt_track[source_index]
+                frame_tilt=((float(preset_pose['rotateXDeg']),
+                             float(preset_pose['rotateYDeg']))
+                            if preset_pose else tilt_track[source_index])
+                perspective=(float(preset_pose['perspectivePx'])
+                             if preset_pose else 1820.)
+                active_spotlight=(preset_pose is not None and
+                     bool(preset_pose.get('spotlightActive')) and
+                     bool(preset_pose.get('spotlightBox')))
+                if active_spotlight:preset_spotlight_frames+=1
+                spotlight=({'active':True,
+                    'box':preset_pose['spotlightBox'],
+                    'blurPx':min(6.,float(preset_pose['spotlightBlurPx'])),
+                    'dimOpacity':float(preset_pose['spotlightDimOpacity']),
+                    'factor':info['dpr']*factor,'dx':dx,'dy':dy}
+                    if active_spotlight else None)
                 def draw_overlays(final):
                     if callout_renderer is not None:
                         callout_renderer.draw(final,index,
-                            info['dpr']*factor,dx,dy,frame_tilt,root_stage.window)
+                            info['dpr']*factor,dx,dy,frame_tilt,root_stage.window,
+                            focal=perspective)
                     root_cursor.draw(final,
                         cursor[source_index] if cursor else None,wanted_ms/1000.,
-                        info['dpr']*factor,dx,dy,tilt=frame_tilt)
+                        info['dpr']*factor,dx,dy,tilt=frame_tilt,focal=perspective)
                 output_image=root_stage.render(
                     source,cinematic_cursor=draw_overlays,tilt=frame_tilt,
-                    glow=audio_levels[source_index] if audio_levels is not None else 0.)
+                    glow=audio_levels[source_index] if audio_levels is not None else 0.,
+                    perspective_px=perspective,spotlight=spotlight)
             else:
                 output_image=base.copy()
                 area=output_image[wy:wy+wh,wx:wx+ww]
@@ -668,6 +703,11 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'editorial_closeup':bool(editorial_closeup),
             'cinematic_stage_root':bool(root_stage),
             'spatial_parallax':bool(spatial_parallax and root_stage),
+            'preset':preset_engine['preset']['id'] if preset_engine else None,
+            'preset_camera_frames':len(preset_frames) if preset_frames else 0,
+            'spotlight_frames':preset_spotlight_frames,
+            'preset_perspective_px':preset_engine['preset']['camera']['perspectivePx']
+                if preset_engine else None,
             'max_abs_tilt_degrees':round(max(
                 max(abs(t[0]),abs(t[1])) for t in tilt_track),4),
             'semantic_ast_foci':[{'file':f.file,'symbol':f.name,
