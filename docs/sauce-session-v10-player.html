@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f6f6f2">
+<meta name="description" content="Sauce's verified Chromium frame-by-frame browser replay proof.">
+<title>Sauce — deterministic browser replay</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+html,body{margin:0;background:#f6f6f2;color:#282b27;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1320px;margin:0 auto;padding:26px clamp(16px,4vw,56px) 72px}
+nav{display:flex;align-items:center;justify-content:space-between;
+ padding-bottom:22px;border-bottom:1px solid #dfdfda}
+.logo{font:italic 700 33px/1 Georgia,serif;letter-spacing:-2px}
+nav a{font-size:13px;color:#5a5f58;text-underline-offset:4px}
+h1{font:normal clamp(36px,5vw,72px)/1.08 Georgia,serif;
+ letter-spacing:-.055em;margin:44px 0 17px;max-width:850px}
+.intro{font:400 15px/1.65 system-ui;color:#60645e;
+ max-width:750px;margin:0 0 30px}
+.frame{padding:8px;border:1px solid #d6d8d1;border-radius:20px;
+ background:#e5e6df;box-shadow:0 20px 56px #30383013}
+video{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:contain;
+ border-radius:14px;background:#e8e9e3}
+.info{display:grid;grid-template-columns:1fr auto;gap:25px;
+ padding:23px 0 0;align-items:start}
+strong{font-weight:600}
+.info p{font-size:14px;line-height:1.7;margin:7px 0 0;
+ max-width:680px;color:#676b65}
+.download{display:inline-flex;align-items:center;border:1px solid #cdd0c8;
+ text-decoration:none;background:#fff;color:#303530;
+ padding:13px 17px;border-radius:8px;font-size:13px;font-weight:600;white-space:nowrap}
+.stats{display:flex;flex-wrap:wrap;gap:20px;padding:36px 0;
+ margin-top:42px;border-top:1px solid #dedfd8;color:#696d66;font-size:13px}
+.stats b{color:#303530}
+footer{font-size:12px;line-height:1.6;color:#777a75}
+a:focus-visible{outline:3px solid #6f786b;outline-offset:3px}
+@media(max-width:700px){
+ main{padding:17px 14px 50px}
+ nav{padding-bottom:15px}.logo{font-size:29px}
+ h1{margin-top:34px}.intro{margin-bottom:23px}
+ .frame{padding:4px;border-radius:13px}video{border-radius:10px}
+ .info{display:block}.download{margin-top:19px}
+ .stats{gap:12px 24px;padding-top:25px;margin-top:34px}
+}
+</style></head>
+<body><main>
+<nav><div class="logo">sauce.</div><a href="/sauce-film-05/">Landscape film 05</a></nav>
+<h1>Real browser frames. Replayed, not recorded.</h1>
+<p class="intro">A silent engineering test of the new capture-and-replay engine. These frames come from a live Brimble session rebuilt inside Chromium with a controlled clock, not an FFmpeg screen recording.</p>
+<section class="frame">
+<video controls playsinline preload="metadata" poster="poster.jpg" aria-label="Three-second Brimble browser replay">
+<source src="preview.mp4" type="video/mp4">Your browser cannot display the video.
+</video>
+</section>
+<div class="info"><div><strong>What this proves</strong>
+<p>The real agent picker opens and the Codex setup command appears. All four recorded UI assertions and four image-region checks passed. The camera, native cursor states and transition layers are rendered independently.</p></div>
+<a class="download" href="master-1080p60.mp4">Watch 1080p / 60fps</a></div>
+<div class="stats">
+<span><b>180</b> offscreen frames</span><span><b>60fps</b> fixed output</span>
+<span><b>5</b> verified capture states</span><span><b>4/4</b> UI and visual checks</span>
+</div>
+<footer>This is a pipeline proof, not Sauce's launch film. The 16:9 flagship remains separate. The source is Brimble's publicly accessible interface; no account was authorized or deployment performed. No endorsement or affiliation is implied.</footer>
+</main></body></html>

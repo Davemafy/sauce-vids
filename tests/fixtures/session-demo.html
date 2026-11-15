@@ -1,0 +1,57 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/>
+<title>Sauce Session Verification</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f7f6f2;color:#232522;font:16px/1.5 system-ui,-apple-system,sans-serif}
+header{height:72px;border-bottom:1px solid #d9dad4;display:flex;align-items:center;padding:0 64px;justify-content:space-between}
+strong.brand{font-family:Georgia,serif;font-size:28px;letter-spacing:-1.3px}
+.badge{color:#5d655e;font-size:14px}
+main{max-width:1100px;margin:92px auto}
+h1{font:normal 54px/1.08 Georgia,serif;letter-spacing:-1.7px;max-width:760px;margin:0 0 20px}
+p{color:#646860;max-width:540px;font-size:17px}
+button{font:600 15px system-ui;cursor:pointer;border:1px solid #31382f;background:#253329;color:#fff;padding:15px 22px;border-radius:8px}
+button:hover{background:#425a45}
+button:focus-visible,input:focus-visible{outline:3px solid #9bba91;outline-offset:4px}
+button.secondary{color:#2c332b;background:#fff;border-color:#c7cec2}
+section{display:flex;gap:16px;align-items:center;margin-top:36px}
+.cards{margin-top:56px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.card{background:#fff;border:1px solid #e0e2d9;border-radius:12px;padding:21px;min-height:142px}
+.card strong{display:block;margin-bottom:8px}
+.dialog-layer{display:none;position:fixed;inset:0;align-items:center;justify-content:center;background:rgba(31,35,31,.18)}
+.dialog-layer.open{display:flex}
+.dialog{width:460px;min-height:338px;background:#fff;border:1px solid #d5d8cf;border-radius:16px;padding:30px 34px;box-shadow:0 20px 70px #161e1622}
+.dialog h2{font:normal 34px Georgia,serif;margin:0 0 8px}
+.dialog p{font-size:14px;margin:0 0 19px}
+label{display:block;font-size:13px;color:#596058;margin-bottom:7px}
+input{width:100%;padding:14px;font:16px system-ui;border:1px solid #c7c9c1;border-radius:8px}
+.dialog footer{display:flex;gap:12px;align-items:center;justify-content:flex-end;margin-top:22px}
+#status{font-size:14px;color:#21693c;margin-right:auto}
+</style></head>
+<body><header><strong class="brand">Saxton</strong><span class="badge">Capture &amp; Replay QA</span></header>
+<main>
+<h1>Real browser interactions, reproducible frames.</h1>
+<p>Three UI states, a modal, text input, and click feedback. Used to verify that session events and browser pixels stay aligned.</p>
+<section><button id="open" type="button">Create a workspace</button><button class="secondary" id="secondary" type="button">Documentation</button></section>
+<div class="cards"><div class="card"><strong>Browser capture</strong><p>Real rendered DOM</p></div><div class="card"><strong>Fixed timeline</strong><p>Frame-accurate output</p></div><div class="card"><strong>Cursor states</strong><p>Pointer, text, default</p></div></div>
+</main>
+<div class="dialog-layer" id="layer" role="presentation">
+<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+<h2 id="dialog-title">New workspace</h2>
+<p>Enter a short name. This is a local verification fixture.</p>
+<label for="workspace-name">Workspace name</label>
+<input id="workspace-name" type="text" placeholder="New workspace" autocomplete="off"/>
+<footer><span id="status"></span><button class="secondary" type="button" id="cancel">Cancel</button><button id="create" type="button">Create</button></footer>
+</div></div>
+<script>
+const layer=document.getElementById('layer');
+document.getElementById('open').addEventListener('click',()=>{
+ layer.classList.add('open');document.getElementById('status').textContent='';
+});
+document.getElementById('cancel').addEventListener('click',()=>layer.classList.remove('open'));
+document.getElementById('create').addEventListener('click',()=>{
+ const name=document.getElementById('workspace-name').value.trim();
+ if(!name){document.getElementById('status').textContent='Enter a name';return;}
+ document.getElementById('status').textContent='Created';
+ document.getElementById('create').textContent='Created';
+});
+</script></body></html>

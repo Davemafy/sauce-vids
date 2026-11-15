@@ -1,0 +1,33 @@
+[
+  {
+    "action": "hover",
+    "selector": "#open",
+    "settle_ms": 100
+  },
+  {
+    "action": "click",
+    "selector": "#open",
+    "settle_ms": 100
+  },
+  {
+    "action": "hover",
+    "selector": "#workspace-name",
+    "settle_ms": 100
+  },
+  {
+    "action": "fill",
+    "selector": "#workspace-name",
+    "value": "Atlas",
+    "settle_ms": 100
+  },
+  {
+    "action": "click",
+    "selector": "#create",
+    "settle_ms": 120
+  },
+  {
+    "action": "wait",
+    "ms": 250,
+    "settle_ms": 20
+  }
+]
