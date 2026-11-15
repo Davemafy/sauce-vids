@@ -20,6 +20,9 @@ from session_contract import validate_actions,verify_package
 from spring_motion import cursor_track
 from cinematic_tracks import cinematic_camera
 from cinematic_composite import background_focus
+from cinematic_presentation_v12 import (draw_stage,compose_cursor,click_feedback,
+    modal_spring_scale,WINDOW_X as PRESENT_X,WINDOW_Y as PRESENT_Y,
+    WINDOW_W as PRESENT_W,WINDOW_H as PRESENT_H)
 from system_cursors import extract_native_cursors,cursor_class
 
 MASTER_W,MASTER_H,FPS_DEFAULT=1920,1080,60
@@ -186,7 +189,9 @@ def execute_action(page,action:dict):
 def replay(session_dir:Path,workflow_file:Path,output:Path,
            fps:int=60,seconds:float|None=None,har:bool=False,
            screenshot_step:int=45,expected_text:str|None=None,
-           click_effect:bool=False,backdrop_focus:bool=False) -> dict:
+           click_effect:bool=False,backdrop_focus:bool=False,
+           presentation_v12:bool=False,
+           presentation_hide_selector:str|None=None) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -217,11 +222,14 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 error=math.dist(cursor[idx],(action['x'],action['y']))
                 if error>3.:
                     raise RuntimeError(f'Cursor would miss recorded click: {error:.2f}px')
-    base,clip=draw_frame_base()
+    base,clip=(draw_stage() if presentation_v12 else draw_frame_base())
+    assert (WINDOW_X,WINDOW_Y,WINDOW_W,WINDOW_H)==(PRESENT_X,PRESENT_Y,PRESENT_W,PRESENT_H)
     cursor_art=extract_native_cursors(display=':121',scale=2)
     source_w,source_h=info['viewport']
     source_px_w=source_w*info['dpr']
     source_px_h=source_h*info['dpr']
+    actionable_boxes=[e['box'] for e in session['events']
+        if e['type']=='pointerdown' and e.get('box')]
     if (source_w,source_h)!=(1280,720):
         raise ValueError('Current 16:9 proof compositor requires a 1280x720 CSS viewport')
     if output.parent:output.parent.mkdir(parents=True,exist_ok=True)
@@ -230,7 +238,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
       'ffmpeg','-hide_banner','-loglevel','error','-y',
       '-f','rawvideo','-pix_fmt','bgr24','-video_size',f'{MASTER_W}x{MASTER_H}',
       '-framerate',str(fps),'-i','pipe:0','-an',
-      '-c:v','libx264','-preset','veryfast','-crf','16',
+      '-c:v','libx264','-preset','medium' if presentation_v12 else 'veryfast',
+      '-crf','14' if presentation_v12 else '16',
       '-pix_fmt','yuv420p','-g',str(fps*2),'-threads','7',
       '-movflags','+faststart',str(tmp)
     ],stdin=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=10*1024*1024)
@@ -270,6 +279,21 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             page.locator(actions[0]['selector']).first.scroll_into_view_if_needed()
             page.wait_for_timeout(260)
         page.clock.pause_at(datetime(2026,1,1,1,0,tzinfo=timezone.utc))
+        hidden_decoration_count=0
+        if presentation_v12 and presentation_hide_selector:
+            # Strictly opt-in for specific decorative elements. Raw capture
+            # evidence is unmodified; film-mode replay may hide the element
+            # ONLY when the operator explicitly requests it.
+            selector=presentation_hide_selector
+            if len(selector)>180 or any(k in selector for k in ('{','}',';','<','>')):
+                raise ValueError('Invalid presentation-only selector')
+            hidden_decoration_count=page.locator(selector).count()
+            if hidden_decoration_count:
+                page.add_style_tag(content=selector+' { visibility: hidden !important; }')
+                assert page.locator(selector).first.evaluate(
+                    "e=>getComputedStyle(e).visibility")=='hidden'
+            else:
+                raise RuntimeError('Requested presentation element not found: '+selector)
         page.evaluate(ANIMATION_DRIVER)
         page.evaluate('window.__sauceAnimationControls.settleInitial()')
         animated_frames=0
@@ -288,6 +312,19 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 execute_action(page,actions[next_action])
                 next_action+=1
             animated_frames+=int(page.evaluate('(ms)=>window.__sauceAnimationControls.step(ms)',wanted_ms))
+            if presentation_v12:
+                # Independent CSS scale multiplies the site's native
+                # Web Animations. A physically damped 0.95 -> 1.0 emphasis
+                # only runs while the REAL modal has just opened.
+                age=(wanted_ms-(first_dialog_ms-start_ms))/1000 if first_dialog_ms else -1.
+                amount=modal_spring_scale(age) if 0<=age<=.35 else 1.
+                page.evaluate("""s=>{
+                  const d=document.querySelector('[role=dialog]');
+                  if(d) {
+                    d.style.scale=s.toFixed(6);
+                    d.style.transformOrigin='center center';
+                  }
+                }""",amount)
             while next_check<len(actions) and stored[next_check]['end_ms']-start_ms<=wanted_ms:
                 a=actions[next_check]
                 if a.get('expect_selector'):
@@ -316,7 +353,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             dy=max(WINDOW_H-source_px_h*factor,min(0.,dy))
             matrix=np.array([[factor,0,dx],[0,factor,dy]],dtype=np.float32)
             source=cv2.warpAffine(decoded,matrix,(WINDOW_W,WINDOW_H),
-                   flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_REPLICATE)
+                   flags=cv2.INTER_LANCZOS4 if presentation_v12 else cv2.INTER_LINEAR,
+                   borderMode=cv2.BORDER_REPLICATE)
             if backdrop_focus and first_dialog_ms is not None:
                 age_ms=wanted_ms-(first_dialog_ms-start_ms)
                 if age_ms>0:
@@ -337,15 +375,28 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             output_image=base.copy()
             area=output_image[WINDOW_Y:WINDOW_Y+WINDOW_H,WINDOW_X:WINDOW_X+WINDOW_W]
             area[:]=np.uint8(area.astype(np.float32)*(1-clip)+source*clip)
-            if cursor and samples and index/fps>=samples[0][0]:
-                t=start_ms+index*1000/fps
-                k=max(0,bisect_right(timestamps,t)-1)
-                pointer_css=session['events'][k].get('cursor','default')
-                overlay_native_cursor(output_image,cursor_art,cursor[index],
-                            pointer_css,info['dpr']*factor,dx,dy)
-            if click_effect:
-                overlay_click(output_image,session['events'],start_ms,index/fps,
-                              info['dpr']*factor,dx,dy)
+            if presentation_v12:
+                # Perceived click must remain visible. Draw feedback first,
+                # pointer second; CSS cursor:none NEVER hides this overlay.
+                click_feedback(output_image,session['events'],start_ms,index/fps,
+                               info['dpr']*factor,dx,dy)
+                if cursor:
+                    t=start_ms+index*1000/fps
+                    k=max(0,bisect_right(timestamps,t)-1)
+                    pointer_css=session['events'][k].get('cursor','default')
+                    compose_cursor(output_image,cursor_art,pointer_css,cursor[index],
+                                   info['dpr']*factor,dx,dy,actionable_boxes,
+                                   index/fps,start_ms,session['events'])
+            else:
+                if cursor and samples and index/fps>=samples[0][0]:
+                    t=start_ms+index*1000/fps
+                    k=max(0,bisect_right(timestamps,t)-1)
+                    pointer_css=session['events'][k].get('cursor','default')
+                    overlay_native_cursor(output_image,cursor_art,cursor[index],
+                                pointer_css,info['dpr']*factor,dx,dy)
+                if click_effect:
+                    overlay_click(output_image,session['events'],start_ms,index/fps,
+                                  info['dpr']*factor,dx,dy)
             encoder.stdin.write(output_image.tobytes())
             rendered+=1
             if index%screenshot_step==0 or index==total-1:
@@ -375,6 +426,15 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'applied_actions':next_action,
             'camera_cues':camera_cues,
             'editorial_background_focus':bool(backdrop_focus),
+            'presentation_v12':bool(presentation_v12),
+            'cursor_visibility':'persistent' if presentation_v12 else 'respect-site-css',
+            'click_feedback':'physical press+ring' if presentation_v12 else ('ring' if click_effect else 'disabled'),
+            'presentation_only_hidden_selector':presentation_hide_selector if presentation_v12 else None,
+            'presentation_only_hidden_count':hidden_decoration_count,
+            'pixel_resampling':'Lanczos4' if presentation_v12 else 'linear',
+            'source_dpr':info['dpr'],
+            'encoder_profile':{'crf':14 if presentation_v12 else 16,
+                               'preset':'medium' if presentation_v12 else 'veryfast'},
             'semantic_checks':checks,
             'animated_frame_effects':animated_frames,
             'visual_region_checks':visuals,
@@ -399,11 +459,17 @@ def main():
     cli.add_argument('--har',action='store_true')
     cli.add_argument('--expect-text')
     cli.add_argument('--click-effect',action='store_true')
+    cli.add_argument('--presentation-hide-selector',
+       help='Optional decorative selector to suppress only in presentation replay')
+    cli.add_argument('--presentation-v12',action='store_true',
+        help='Persistent native cursor, press feedback, layered shadows, ambient glow, Lanczos source resampling, subtle native-modal spring emphasis')
     cli.add_argument('--backdrop-focus',action='store_true',
        help='Blur only real pixels behind the verified modal; never alters the modal itself')
     args=cli.parse_args()
     result=replay(args.session,args.workflow,args.output,args.fps,args.seconds,
                   args.har,expected_text=args.expect_text,
-                  click_effect=args.click_effect,backdrop_focus=args.backdrop_focus)
+                  click_effect=args.click_effect,backdrop_focus=args.backdrop_focus,
+                  presentation_v12=args.presentation_v12,
+                  presentation_hide_selector=args.presentation_hide_selector)
     print(json.dumps(result,indent=2))
 if __name__=='__main__':main()
