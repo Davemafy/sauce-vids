@@ -100,6 +100,11 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         presentation_hide_selector=presentation_hide_selector)
     if not report['verified_semantics'] or not report['visual_region_checks']:
         raise RuntimeError('Replay must pass semantic and visual-region checks')
+    if (not report.get('cinematic_stage_root') or
+        report.get('cinematic_stage_window') != [220,124,1480,832] or
+        report.get('cinematic_stage_background') != '#090a0f' or
+        report.get('cursor_component') != 'CinematicCursor'):
+        raise RuntimeError('CinematicStage root compositor is mandatory for production')
     verify_mp4(master,*MASTER_SIZE,FPS)
     preview=out_dir/'preview.mp4'
     subprocess.run([
@@ -130,7 +135,13 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         'pixel_region_checks':len(report['visual_region_checks']),
         'preview_resampling':'lanczos',
         'master_resampling':'Lanczos4',
-        'player_template':'sauce-premium-player-template.html'
+        'player_template':'sauce-premium-player-template.html',
+        'root_component':'CinematicStage',
+        'cursor_component':'CinematicCursor',
+        'window':[220,124,1480,832],
+        'stage_background':'#090a0f',
+        'glow_blur_px':140,
+        'window_backdrop_blur_px':24
     }
     (out_dir/'release.json').write_text(json.dumps(receipt,indent=2))
     return receipt

@@ -22,7 +22,7 @@ from cinematic_tracks import cinematic_camera
 from cinematic_composite import background_focus
 from cinematic_presentation_v13 import (make_dark_stage,paint_svg_pointer,paint_click_ripple)
 from online_cursor_assets import render_cursor as render_tabler_cursor
-from reference_cursor_v15 import paint_cursor as paint_reference_cursor
+from cinematic_stage import CinematicStage,CinematicCursor
 from cinematic_spec import CURSOR_FILM_SCALE,enforce_hidpi,MASTER_SIZE
 from cinematic_presentation_v12 import (draw_stage,compose_cursor,click_feedback,
     modal_spring_scale,WINDOW_X as PRESENT_X,WINDOW_Y as PRESENT_Y,
@@ -235,9 +235,20 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 error=math.dist(cursor[idx],(action['x'],action['y']))
                 if error>3.:
                     raise RuntimeError(f'Cursor would miss recorded click: {error:.2f}px')
-    base,clip=(make_dark_stage() if vector_mode else
-               draw_stage() if presentation_v12 else draw_frame_base())
-    assert (WINDOW_X,WINDOW_Y,WINDOW_W,WINDOW_H)==(PRESENT_X,PRESENT_Y,PRESENT_W,PRESENT_H)
+    # Film frames are ALWAYS wrapped by the root compositor in production.
+    # Older v12-v14 renderers are retained for deliberate A/B only.
+    root_stage=CinematicStage() if presentation_v15 else None
+    root_cursor=(CinematicCursor(root_stage,session['events'],start_ms,
+                  cursor_style,cursor_scale) if root_stage else None)
+    if root_stage:
+        wx,wy,ww,wh=root_stage.window
+        base,clip=None,None
+    else:
+        wx,wy,ww,wh=WINDOW_X,WINDOW_Y,WINDOW_W,WINDOW_H
+        base,clip=(make_dark_stage() if vector_mode else
+                   draw_stage() if presentation_v12 else draw_frame_base())
+        assert (WINDOW_X,WINDOW_Y,WINDOW_W,WINDOW_H)==(
+            PRESENT_X,PRESENT_Y,PRESENT_W,PRESENT_H)
     # V13 deliberately never opens Xvfb or reads X11/native cursor glyphs.
     cursor_art=None if vector_mode else extract_native_cursors(display=':121',scale=2)
     source_w,source_h=info['viewport']
@@ -370,13 +381,13 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             if decoded is None or decoded.shape[:2]!=(source_px_h,source_px_w):
                 raise RuntimeError(f'Invalid Chromium frame {index}')
             z,fx,fy=camera[index]
-            factor=(WINDOW_W/source_px_w)*z
-            dx=WINDOW_W/2-fx*info['dpr']*factor
-            dy=WINDOW_H/2-fy*info['dpr']*factor
-            dx=max(WINDOW_W-source_px_w*factor,min(0.,dx))
-            dy=max(WINDOW_H-source_px_h*factor,min(0.,dy))
+            factor=(ww/source_px_w)*z
+            dx=ww/2-fx*info['dpr']*factor
+            dy=wh/2-fy*info['dpr']*factor
+            dx=max(ww-source_px_w*factor,min(0.,dx))
+            dy=max(wh-source_px_h*factor,min(0.,dy))
             matrix=np.array([[factor,0,dx],[0,factor,dy]],dtype=np.float32)
-            source=cv2.warpAffine(decoded,matrix,(WINDOW_W,WINDOW_H),
+            source=cv2.warpAffine(decoded,matrix,(ww,wh),
                    flags=cv2.INTER_LANCZOS4 if film_mode else cv2.INTER_LINEAR,
                    borderMode=cv2.BORDER_REPLICATE)
             if backdrop_focus and first_dialog_ms is not None:
@@ -396,18 +407,21 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                           'height':bounds['height']*info['dpr']*factor,
                         }
                         source=background_focus(source,projected,1,mix=.37*smooth)
-            output_image=base.copy()
-            area=output_image[WINDOW_Y:WINDOW_Y+WINDOW_H,WINDOW_X:WINDOW_X+WINDOW_W]
-            area[:]=np.uint8(area.astype(np.float32)*(1-clip)+source*clip)
-            if presentation_v15:
-                # User-referenced custom geometry; drop shadow, correct
-                # upper-left hotspot, recorded spring path and press ripple.
-                paint_click_ripple(output_image,session['events'],start_ms,
-                                   index/fps,info['dpr']*factor,dx,dy)
-                if cursor:
-                    paint_reference_cursor(output_image,cursor[index],
-                        session['events'],start_ms,index/fps,
-                        info['dpr']*factor,dx,dy,cursor_style,cursor_scale)
+            if root_stage:
+                # One root export, not website CSS: compose window on
+                # #090a0f with 140px ambient blur, then top-layer pointer.
+                draw_cursor=(lambda final:root_cursor.draw(
+                    final,cursor[index] if cursor else None,index/fps,
+                    info['dpr']*factor,dx,dy))
+                output_image=root_stage.render(source,cinematic_cursor=draw_cursor)
+            else:
+                output_image=base.copy()
+                area=output_image[wy:wy+wh,wx:wx+ww]
+                area[:]=np.uint8(area.astype(np.float32)*(1-clip)+source*clip)
+            if root_stage:
+                # CinematicStage has already drawn CinematicCursor above the
+                # site. Do not fall through to any legacy native cursor.
+                pass
             elif presentation_v14:
                 # MIT Tabler SVG assets, black fill / outline variants.
                 paint_click_ripple(output_image,session['events'],start_ms,
@@ -478,6 +492,12 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'presentation_v13':bool(presentation_v13),
             'presentation_v14':bool(presentation_v14),
             'presentation_v15':bool(presentation_v15),
+            'cinematic_stage_root':bool(root_stage),
+            'cinematic_stage_window':list(root_stage.window) if root_stage else None,
+            'cinematic_stage_background':root_stage.background_hex if root_stage else None,
+            'cinematic_stage_glow_blur':140 if root_stage else None,
+            'cinematic_stage_backdrop_blur':24 if root_stage else None,
+            'cursor_component':'CinematicCursor' if root_stage else None,
             'cursor_scale':cursor_scale if presentation_v15 else None,
             'cursor_style':cursor_style if (presentation_v14 or presentation_v15) else None,
             'cursor_asset':('assets/cursors/reference-v15/black-rounded.svg' if cursor_style=='ink' else 'assets/cursors/reference-v15/white-outline.svg') if presentation_v15 else (('assets/cursors/tabler/pointer-filled.svg' if cursor_style=='ink' else 'assets/cursors/tabler/pointer-outline.svg') if presentation_v14 else ('assets/cursors/sauce-pointer.svg' if presentation_v13 else 'native-x11')),

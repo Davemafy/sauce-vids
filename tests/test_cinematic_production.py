@@ -55,16 +55,18 @@ class CinematicProductionPresetTests(unittest.TestCase):
         src=(ROOT/'scripts/session_replay.py').read_text()
         self.assertIn('cursor_art=None if vector_mode',src)
         self.assertIn('cursor:none !important',src)
-        self.assertIn('paint_reference_cursor(',src)
+        self.assertIn('root_stage.render(source,cinematic_cursor=draw_cursor)',src)
         self.assertIn('CURSOR_FILM_SCALE',src)
         self.assertIn('cursor_track(',src)
 
     def test_dark_template_contains_exact_stage_css(self):
         template=(ROOT/'docs/sauce-premium-player-template.html').read_text()
-        self.assertIn('filter:blur(120px)',template)
+        self.assertIn('filter:blur(140px)',template)
+        self.assertIn('<body><div class="CinematicStage"><main>',template)
+        self.assertIn('background:#090a0f',template)
         for shadow in ('0 0 0 1px rgba(255,255,255,.08)',
-                       '0 25px 50px -12px rgba(0,0,0,.5)',
-                       '0 50px 100px -20px rgba(0,0,0,.3)'):
+                       '0 40px 80px -20px rgba(0,0,0,.7)',
+                       '0 80px 160px -40px rgba(0,0,0,.5)'):
             self.assertIn(shadow,template)
         self.assertIn('aspect-ratio:16/9',template)
         self.assertIn('playsinline',template)

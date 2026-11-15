@@ -68,7 +68,7 @@ class ReferenceCursorV15Tests(unittest.TestCase):
         self.assertIn('presentation_v15',src)
         self.assertIn('vector_mode=presentation_v13 or presentation_v14 or presentation_v15',src)
         self.assertIn('cursor_art=None if vector_mode',src)
-        self.assertIn('paint_reference_cursor',src)
+        self.assertIn('CinematicCursor',src)
         self.assertIn('reference-svg-overlay-always-visible',src)
 
     def test_cli_has_correct_new_preset(self):
