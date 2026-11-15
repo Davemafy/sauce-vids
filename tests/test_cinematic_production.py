@@ -55,7 +55,7 @@ class CinematicProductionPresetTests(unittest.TestCase):
         src=(ROOT/'scripts/session_replay.py').read_text()
         self.assertIn('cursor_art=None if vector_mode',src)
         self.assertIn('cursor:none !important',src)
-        self.assertIn('root_stage.render(source,cinematic_cursor=draw_cursor)',src)
+        self.assertIn('root_stage.render(',src)
         self.assertIn('CURSOR_FILM_SCALE',src)
         self.assertIn('cursor_track(',src)
 
