@@ -19,6 +19,7 @@ from playwright.sync_api import sync_playwright
 from session_contract import validate_actions,verify_package
 from spring_motion import cursor_track
 from cinematic_tracks import cinematic_camera
+from editorial_closeup_camera import closeup_camera
 from cinematic_composite import background_focus
 from cinematic_presentation_v13 import (make_dark_stage,paint_svg_pointer,paint_click_ripple)
 from online_cursor_assets import render_cursor as render_tabler_cursor
@@ -203,7 +204,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            presentation_v14:bool=False,cursor_style:str='ink',
            presentation_v15:bool=False,cursor_scale:float=CURSOR_FILM_SCALE,
            spatial_parallax:bool=False,audio_levels:list[float]|None=None,
-           code_root:Path|None=None) -> dict:
+           code_root:Path|None=None,editorial_closeup:bool=False,
+           editorial_geometry:Path|None=None) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -226,8 +228,26 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         raise ValueError('Select ink or outline cursor style')
     if vector_mode:
         enforce_hidpi(info['dpr'])
-    camera,camera_cues=cinematic_camera(
-        session['events'],start_ms,length,fps,tuple(info['viewport']))
+    if editorial_closeup and not presentation_v15:
+        raise ValueError('Editorial closeup requires the root cinematic stage')
+    expanded_rect=None
+    if editorial_closeup:
+        if editorial_geometry is None or not editorial_geometry.is_file():
+            raise ValueError('Editorial closeup requires observed expanded dialog geometry')
+        evidence=json.loads(editorial_geometry.read_text())
+        if evidence.get('source_url')!=session['source_url']:
+            raise ValueError('Expanded dialog evidence belongs to another website')
+        if evidence.get('selector')!='[role=dialog]':
+            raise ValueError('Expanded dialog selector must be verified')
+        second_click=[e for e in session['events'] if e['type']=='pointerdown'][1]
+        if abs(evidence['after_click_t']-(second_click['t']-start_ms)/1000.)>.15:
+            raise ValueError('Expanded dialog evidence is not tied to second click')
+        expanded_rect=evidence['observed_rect']
+    camera,camera_cues=(closeup_camera(
+        session['events'],start_ms,length,fps,tuple(info['viewport']),
+        expanded_rect=expanded_rect)
+        if editorial_closeup else cinematic_camera(
+        session['events'],start_ms,length,fps,tuple(info['viewport'])))
     dialog_events=[event for event in session['events']
         if event['type']=='dialog-visible' and event.get('box')]
     first_dialog_ms=dialog_events[0]['t'] if dialog_events else None
@@ -515,6 +535,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'presentation_v13':bool(presentation_v13),
             'presentation_v14':bool(presentation_v14),
             'presentation_v15':bool(presentation_v15),
+            'editorial_closeup':bool(editorial_closeup),
             'cinematic_stage_root':bool(root_stage),
             'spatial_parallax':bool(spatial_parallax and root_stage),
             'max_abs_tilt_degrees':round(max(

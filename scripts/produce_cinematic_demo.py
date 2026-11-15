@@ -73,7 +73,9 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             cursor_style:str='ink',cursor_scale:float=CURSOR_FILM_SCALE,
             presentation_hide_selector:str|None=None,
             webgl_optics:bool=True,spatial_parallax:bool=True,
-            audio_track:Path|None=None,code_root:Path|None=None)->dict:
+            audio_track:Path|None=None,code_root:Path|None=None,
+            editorial_closeup:bool=False,
+            editorial_geometry:Path|None=None)->dict:
     enforce_hidpi(dpr)
     if cursor_style not in ('ink','outline'):raise ValueError('Unsupported pointer style')
     if not .35<=cursor_scale<=1:raise ValueError('Invalid cursor scale')
@@ -110,7 +112,8 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         presentation_v15=True,cursor_style=cursor_style,
         cursor_scale=cursor_scale,
         presentation_hide_selector=presentation_hide_selector,
-        spatial_parallax=spatial_parallax,audio_levels=rms,code_root=code_root)
+        spatial_parallax=spatial_parallax,audio_levels=rms,code_root=code_root,
+        editorial_closeup=editorial_closeup,editorial_geometry=editorial_geometry)
     if not report['verified_semantics'] or not report['visual_region_checks']:
         raise RuntimeError('Replay must pass semantic and visual-region checks')
     if (not report.get('cinematic_stage_root') or
@@ -170,6 +173,7 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         'root_component':'CinematicStage',
         'cursor_component':'CinematicCursor',
         'window':[220,124,1480,832],
+        'editorial_closeup':bool(editorial_closeup),
         'stage_background':'#090a0f',
         'glow_blur_px':140,
         'window_backdrop_blur_px':24,
@@ -203,6 +207,10 @@ def main():
                    help='Opt out of the actual WebGL2 shader pass for debugging')
     p.add_argument('--no-parallax',action='store_true',
                    help='Opt out of cursor velocity-driven 3D tilt')
+    p.add_argument('--editorial-geometry',type=Path,
+                   help='Verified post-click dialog geometry for safe editorial framing')
+    p.add_argument('--editorial-closeup',action='store_true',
+                   help='Tight evidence-led shot framing for a 4s narrated test')
     p.add_argument('--audio-track',type=Path,
                    help='Licensed source soundtrack; drives RMS glow and is muxed into MP4')
     p.add_argument('--code-root',type=Path,
@@ -217,7 +225,9 @@ def main():
         presentation_hide_selector=args.presentation_hide_selector,
         webgl_optics=not args.no_webgl_optics,
         spatial_parallax=not args.no_parallax,
-        audio_track=args.audio_track,code_root=args.code_root),indent=2))
+        audio_track=args.audio_track,code_root=args.code_root,
+        editorial_closeup=args.editorial_closeup,
+        editorial_geometry=args.editorial_geometry),indent=2))
 
 
 if __name__=='__main__':main()
