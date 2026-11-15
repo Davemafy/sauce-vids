@@ -14,6 +14,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from spring_motion import camera_track, cursor_track
 
 ROOT=Path(__file__).resolve().parents[1]
 P=ROOT/"studio"/".tmp"/"landscape-hidpi"
@@ -68,20 +69,22 @@ def state_mix(t):
  if t<7.993:return 1,2,quint((t-7.723)/.27)
  return 2,2,0.
 
+# Spring camera has no hard per-shot position resets. Held targets yield
+# continuous position and velocity. Critical damping avoids distracting bounce.
+CAMERA_TARGETS=[
+ (0.0,1.08,800.0,450.0),
+ (1.25,1.34,670.0,450.0),
+ (4.25,1.73,800.0,450.0),
+ (7.38,1.80,800.0,450.0),
+]
+CAMERA_FRAMES=camera_track(
+ fps=FPS,duration=DURATION,anchors=CAMERA_TARGETS,
+ stiffness_zoom=100.0,damping_zoom=20.0,
+ stiffness_pan=144.0,damping_pan=24.0,
+)
 def camera(t):
- # Pre-action anticipation, readable holds, then a slight second move.
- # 1.80x on 2x DPR source remains downsampled, not 2.63x
- # magnification of compressed 1600px H.264 footage.
- if t<1.32:return (1.08,800.,450.)
- if t<3.60:return (interpolate(t,1.32,3.60,1.08,1.34),
-                    interpolate(t,1.32,3.60,800.,670.),450.)
- if t<4.62:return (1.34,670.,450.)
- if t<5.76:return (interpolate(t,4.62,5.76,1.34,1.73),
-                    interpolate(t,4.62,5.76,670.,800.),450.)
- if t<7.75:return (1.73,800.,450.)
- if t<8.70:return (interpolate(t,7.75,8.70,1.73,1.80),
-                    800.,450.)
- return (1.80,800.,450.)
+ index=max(0,min(len(CAMERA_FRAMES)-1,round(t*FPS)))
+ return CAMERA_FRAMES[index]
 
 BASE=Image.new("RGB",(W,H),(244,243,239))
 shadow=Image.new("L",(W,H),0)
@@ -107,9 +110,21 @@ ICON=np.asarray(icon)
 ICON_RGB=ICON[:,:,:3][:,:,[2,1,0]]
 ICON_A=ICON[:,:,3:4].astype(np.float32)/255.
 POINTER=events["pointer"]
-TIMES=np.array([x[0] for x in POINTER],dtype=np.float64)
-XS=np.array([x[1] for x in POINTER],dtype=np.float64)
-YS=np.array([x[2] for x in POINTER],dtype=np.float64)
+# Critically damped pointer follows the actual telemetry, rather than each
+# frame linearly lerping to the next raw sample. Click deadlines are validated.
+CURSOR_FRAMES=cursor_track(
+ samples=POINTER,fps=FPS,duration=DURATION,
+ stiffness=784.0,damping=56.0,
+)
+RECORDED_CLICKS=[
+ (4.90,459.22,416.38),
+ (7.70,667.00,551.00),
+ (10.15,655.77,628.00),
+]
+for click_t,target_x,target_y in RECORDED_CLICKS:
+ filtered=CURSOR_FRAMES[round(click_t*FPS)]
+ if math.hypot(filtered[0]-target_x,filtered[1]-target_y)>3.0:
+  raise RuntimeError("Spring pointer would miss recorded click at %.3fs" % click_t)
 # Event-aligned captions intentionally use no eyebrow, label or title slide.
 def text_layer(words):
  width=math.ceil(FONT.getlength(words))
@@ -134,8 +149,7 @@ def warp(image,scale,fx,fy):
 
 def draw_pointer(stage,t,fac,dx,dy):
  if t<3.77:return
- x=float(np.interp(t,TIMES,XS))
- y=float(np.interp(t,TIMES,YS))
+ x,y=CURSOR_FRAMES[max(0,min(len(CURSOR_FRAMES)-1,round(t*FPS)))]
  px=int(round(OX+dx+fac*(2*x)))
  py=int(round(OY+dy+fac*(2*y)))
  h,w=ICON_RGB.shape[:2]
