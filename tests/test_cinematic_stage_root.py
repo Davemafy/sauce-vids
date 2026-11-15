@@ -27,7 +27,7 @@ class CinematicStageRootTests(unittest.TestCase):
 
     def test_root_is_the_last_frame_operation_before_encoding(self):
         src=(ROOT/'scripts/session_replay.py').read_text()
-        pos=src.index('output_image=root_stage.render(source,cinematic_cursor=draw_cursor)')
+        pos=src.index('output_image=root_stage.render(')
         emit=src.index('encoder.stdin.write(output_image.tobytes())',pos)
         self.assertLess(pos,emit)
         self.assertIn('root_stage=CinematicStage() if presentation_v15 else None',src)

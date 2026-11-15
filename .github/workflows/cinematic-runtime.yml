@@ -32,6 +32,8 @@ jobs:
         run: python -m pip install "numpy>=1.26,<3" "opencv-python-headless>=4.9,<5" "pillow>=10,<12"
       - name: Install pinned Babel AST parser
         run: npm ci --prefix scripts --ignore-scripts --no-audit --no-fund
+      - name: Install FFmpeg audio decoder for RMS fixture
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Confirm FFmpeg availability
         run: ffmpeg -version | head -1
       - name: Verify cinematic behavior with actual code and audio fixtures

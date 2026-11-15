@@ -12,7 +12,6 @@ from pathlib import Path
 from cinematic_spec import (DEFAULT_DPR,DPR_CHOICES,CURSOR_FILM_SCALE,
     MASTER_SIZE,PREVIEW_SIZE,FPS,enforce_hidpi,ffmpeg_lanczos_preview)
 from session_contract import verify_package
-from audio_reactive import audio_envelope
 
 
 def video_info(path:Path)->dict:
@@ -97,8 +96,14 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
     master=out_dir/'master-1080p60.mp4'
     real_duration=(seconds if seconds is not None
         else (session['states'][-1]['at_ms']-session['states'][0]['at_ms'])/1000.+.35)
-    rms=(audio_envelope(audio_track,FPS,round(real_duration*FPS))
-         if audio_track is not None else None)
+    if audio_track is not None:
+        # Keep importable contract and player utilities dependency-free in
+        # standard Python CI. Scientific audio dependencies are only needed
+        # when an audio track is explicitly supplied.
+        from audio_reactive import audio_envelope
+        rms=audio_envelope(audio_track,FPS,round(real_duration*FPS))
+    else:
+        rms=None
     # HDR/offscreen replay's own time-step clock is independent of export fps.
     report=replay(session_dir,workflow,master,fps=FPS,seconds=seconds,
         har=(session_dir/'network.har').is_file(),backdrop_focus=True,
