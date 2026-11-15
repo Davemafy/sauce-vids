@@ -76,11 +76,14 @@ def load_cursor(style:str)->PointerSprite:
 
 def paint_cursor(frame:np.ndarray,position:tuple[float,float],
                  events:list[dict],start_ms:float,elapsed_s:float,
-                 factor:float,dx:float,dy:float,style:str)->tuple[int,int]:
+                 factor:float,dx:float,dy:float,style:str,
+                 film_scale:float=.56)->tuple[int,int]:
+    if not .35<=film_scale<=1.:
+        raise ValueError('Film cursor scale must be between 0.35 and 1.0')
     sprite=load_cursor(style)
     art=sprite.rgba
     age=_click_age(elapsed_s,events,start_ms,.25)
-    scale=press_scale(age)
+    scale=film_scale*press_scale(age)
     if scale<.999:
         image=Image.fromarray(art,'RGBA')
         w=max(2,round(art.shape[1]*scale))

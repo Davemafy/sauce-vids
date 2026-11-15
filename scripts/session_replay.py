@@ -197,7 +197,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            presentation_hide_selector:str|None=None,
            presentation_v13:bool=False,
            presentation_v14:bool=False,cursor_style:str='ink',
-           presentation_v15:bool=False) -> dict:
+           presentation_v15:bool=False,cursor_scale:float=.56) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -406,7 +406,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 if cursor:
                     paint_reference_cursor(output_image,cursor[index],
                         session['events'],start_ms,index/fps,
-                        info['dpr']*factor,dx,dy,cursor_style)
+                        info['dpr']*factor,dx,dy,cursor_style,cursor_scale)
             elif presentation_v14:
                 # MIT Tabler SVG assets, black fill / outline variants.
                 paint_click_ripple(output_image,session['events'],start_ms,
@@ -477,6 +477,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'presentation_v13':bool(presentation_v13),
             'presentation_v14':bool(presentation_v14),
             'presentation_v15':bool(presentation_v15),
+            'cursor_scale':cursor_scale if presentation_v15 else None,
             'cursor_style':cursor_style if (presentation_v14 or presentation_v15) else None,
             'cursor_asset':('assets/cursors/reference-v15/black-rounded.svg' if cursor_style=='ink' else 'assets/cursors/reference-v15/white-outline.svg') if presentation_v15 else (('assets/cursors/tabler/pointer-filled.svg' if cursor_style=='ink' else 'assets/cursors/tabler/pointer-outline.svg') if presentation_v14 else ('assets/cursors/sauce-pointer.svg' if presentation_v13 else 'native-x11')),
             'native_cursor_suppressed':bool(vector_mode),
@@ -521,6 +522,8 @@ def main():
        help='Reference-shaped rounded pointer with deep drop shadow (default)')
     cli.add_argument('--presentation-v14',action='store_true',
        help='MIT Tabler SVG cursor, fixed hotspot, click ripple and dark stage')
+    cli.add_argument('--cursor-scale',type=float,default=.56,
+       help='Size of the reference cursor relative to its vector master; default 0.56 (about 32x39px)')
     cli.add_argument('--cursor-style',choices=('ink','outline'),default='ink',
        help='Black body with white rim, or white body with black outline')
     cli.add_argument('--presentation-v13',action='store_true',
@@ -547,6 +550,6 @@ def main():
                   presentation_hide_selector=args.presentation_hide_selector,
                   presentation_v13=args.presentation_v13,
                   presentation_v14=args.presentation_v14,cursor_style=args.cursor_style,
-                  presentation_v15=args.presentation_v15)
+                  presentation_v15=args.presentation_v15,cursor_scale=args.cursor_scale)
     print(json.dumps(result,indent=2))
 if __name__=='__main__':main()
