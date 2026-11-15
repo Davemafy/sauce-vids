@@ -44,6 +44,19 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Python planner contract tests
         run: python -m unittest tests.test_studio_motion_runtime -v
+      - name: Install FFmpeg audio tooling
+        run: |
+          python -m pip install imageio-ffmpeg
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import imageio_ffmpeg
+          executable = Path(os.environ['RUNNER_TEMP']) / 'ffmpeg'
+          executable.symlink_to(imageio_ffmpeg.get_ffmpeg_exe())
+          with open(os.environ['GITHUB_PATH'], 'a') as path:
+              path.write(str(executable.parent) + '\n')
+          PY
+          "$RUNNER_TEMP/ffmpeg" -version | head -1
       - name: Phase 2 capture privacy, projection and Foley pytest
         run: SAUCE_BROWSER_TEST=1 python -m pytest tests/phase2/test_sauce_motion_phase2.py -q
       - name: Compile silent export verifier
