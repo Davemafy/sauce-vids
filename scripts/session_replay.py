@@ -22,6 +22,7 @@ from cinematic_tracks import cinematic_camera
 from cinematic_composite import background_focus
 from cinematic_presentation_v13 import (make_dark_stage,paint_svg_pointer,paint_click_ripple)
 from online_cursor_assets import render_cursor as render_tabler_cursor
+from reference_cursor_v15 import paint_cursor as paint_reference_cursor
 from cinematic_presentation_v12 import (draw_stage,compose_cursor,click_feedback,
     modal_spring_scale,WINDOW_X as PRESENT_X,WINDOW_Y as PRESENT_Y,
     WINDOW_W as PRESENT_W,WINDOW_H as PRESENT_H)
@@ -195,7 +196,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            presentation_v12:bool=False,
            presentation_hide_selector:str|None=None,
            presentation_v13:bool=False,
-           presentation_v14:bool=False,cursor_style:str='ink') -> dict:
+           presentation_v14:bool=False,cursor_style:str='ink',
+           presentation_v15:bool=False) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -212,9 +214,9 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     length=seconds if seconds is not None else (last_ms-start_ms)/1000.+.35
     if not 0<length<=10:raise ValueError('Limit this proof renderer to <=10s')
     total=round(length*fps)
-    film_mode=presentation_v12 or presentation_v13 or presentation_v14
-    vector_mode=presentation_v13 or presentation_v14
-    if presentation_v14 and cursor_style not in ('ink','outline'):
+    film_mode=presentation_v12 or presentation_v13 or presentation_v14 or presentation_v15
+    vector_mode=presentation_v13 or presentation_v14 or presentation_v15
+    if (presentation_v14 or presentation_v15) and cursor_style not in ('ink','outline'):
         raise ValueError('Select ink or outline cursor style')
     if vector_mode and info['dpr']<2:
         raise ValueError('SVG film mode requires deviceScaleFactor >= 2')
@@ -396,7 +398,16 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             output_image=base.copy()
             area=output_image[WINDOW_Y:WINDOW_Y+WINDOW_H,WINDOW_X:WINDOW_X+WINDOW_W]
             area[:]=np.uint8(area.astype(np.float32)*(1-clip)+source*clip)
-            if presentation_v14:
+            if presentation_v15:
+                # User-referenced custom geometry; drop shadow, correct
+                # upper-left hotspot, recorded spring path and press ripple.
+                paint_click_ripple(output_image,session['events'],start_ms,
+                                   index/fps,info['dpr']*factor,dx,dy)
+                if cursor:
+                    paint_reference_cursor(output_image,cursor[index],
+                        session['events'],start_ms,index/fps,
+                        info['dpr']*factor,dx,dy,cursor_style)
+            elif presentation_v14:
                 # MIT Tabler SVG assets, black fill / outline variants.
                 paint_click_ripple(output_image,session['events'],start_ms,
                                    index/fps,info['dpr']*factor,dx,dy)
@@ -465,12 +476,13 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'presentation_v12':bool(presentation_v12),
             'presentation_v13':bool(presentation_v13),
             'presentation_v14':bool(presentation_v14),
-            'cursor_style':cursor_style if presentation_v14 else None,
-            'cursor_asset':('assets/cursors/tabler/pointer-filled.svg' if cursor_style=='ink' else 'assets/cursors/tabler/pointer-outline.svg') if presentation_v14 else ('assets/cursors/sauce-pointer.svg' if presentation_v13 else 'native-x11'),
+            'presentation_v15':bool(presentation_v15),
+            'cursor_style':cursor_style if (presentation_v14 or presentation_v15) else None,
+            'cursor_asset':('assets/cursors/reference-v15/black-rounded.svg' if cursor_style=='ink' else 'assets/cursors/reference-v15/white-outline.svg') if presentation_v15 else (('assets/cursors/tabler/pointer-filled.svg' if cursor_style=='ink' else 'assets/cursors/tabler/pointer-outline.svg') if presentation_v14 else ('assets/cursors/sauce-pointer.svg' if presentation_v13 else 'native-x11')),
             'native_cursor_suppressed':bool(vector_mode),
             'stage':'dark-ambient-multilayer' if vector_mode else 'light',
-            'cursor_visibility':'tabler-svg-overlay-always-visible' if presentation_v14 else ('svg-overlay-always-visible' if presentation_v13 else ('persistent' if presentation_v12 else 'respect-site-css')),
-            'click_feedback':'tabler-pointer-contract-0.85+svg-ripple' if presentation_v14 else ('svg-pointer-contract-0.85+svg-ripple' if presentation_v13 else ('physical press+ring' if presentation_v12 else ('ring' if click_effect else 'disabled'))),
+            'cursor_visibility':'reference-svg-overlay-always-visible' if presentation_v15 else ('tabler-svg-overlay-always-visible' if presentation_v14 else ('svg-overlay-always-visible' if presentation_v13 else ('persistent' if presentation_v12 else 'respect-site-css'))),
+            'click_feedback':'reference-pointer-contract-0.88+svg-ripple' if presentation_v15 else ('tabler-pointer-contract-0.85+svg-ripple' if presentation_v14 else ('svg-pointer-contract-0.85+svg-ripple' if presentation_v13 else ('physical press+ring' if presentation_v12 else ('ring' if click_effect else 'disabled')))),
             'presentation_only_hidden_selector':presentation_hide_selector if film_mode else None,
             'presentation_only_hidden_count':hidden_decoration_count,
             'pixel_resampling':'Lanczos4' if film_mode else 'linear',
@@ -503,6 +515,10 @@ def main():
     cli.add_argument('--click-effect',action='store_true')
     cli.add_argument('--presentation-hide-selector',
        help='Optional decorative selector to suppress only in presentation replay')
+    cli.add_argument('--raw-replay',action='store_true',
+       help='Opt out of the default cinematic presentation (debug/legacy mode)')
+    cli.add_argument('--presentation-v15',action='store_true',
+       help='Reference-shaped rounded pointer with deep drop shadow (default)')
     cli.add_argument('--presentation-v14',action='store_true',
        help='MIT Tabler SVG cursor, fixed hotspot, click ripple and dark stage')
     cli.add_argument('--cursor-style',choices=('ink','outline'),default='ink',
@@ -514,12 +530,23 @@ def main():
     cli.add_argument('--backdrop-focus',action='store_true',
        help='Blur only real pixels behind the verified modal; never alters the modal itself')
     args=cli.parse_args()
+    chosen=[args.presentation_v12,args.presentation_v13,args.presentation_v14,
+            args.presentation_v15]
+    if sum(map(bool,chosen))>1:
+        cli.error('Choose one presentation version')
+    if args.raw_replay and any(chosen):
+        cli.error('--raw-replay is incompatible with a presentation version')
+    if not args.raw_replay and not any(chosen):
+        # The polished reference-shaped vector cursor is the new film
+        # default. Older versions and unstyled source replay stay opt-in.
+        args.presentation_v15=True
     result=replay(args.session,args.workflow,args.output,args.fps,args.seconds,
                   args.har,expected_text=args.expect_text,
                   click_effect=args.click_effect,backdrop_focus=args.backdrop_focus,
                   presentation_v12=args.presentation_v12,
                   presentation_hide_selector=args.presentation_hide_selector,
                   presentation_v13=args.presentation_v13,
-                  presentation_v14=args.presentation_v14,cursor_style=args.cursor_style)
+                  presentation_v14=args.presentation_v14,cursor_style=args.cursor_style,
+                  presentation_v15=args.presentation_v15)
     print(json.dumps(result,indent=2))
 if __name__=='__main__':main()
