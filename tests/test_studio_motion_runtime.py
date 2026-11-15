@@ -91,6 +91,17 @@ class StudioPixelTests(unittest.TestCase):
         changed=self.blur(frame,12,1,4)
         self.assertFalse(np.array_equal(changed,frame))
 
+    def test_blur_shutter_growth_follows_warp_speed(self):
+        np=self.np
+        frame=np.zeros((48,96,3),np.uint8)
+        frame[:,44:50,:]=255
+        slow=self.blur(frame,10,0,1.6)
+        quick=self.blur(frame,10,0,4.0)
+        self.assertGreater(int(np.abs(quick.astype('int16')-
+                             frame.astype('int16')).sum()),
+                           int(np.abs(slow.astype('int16')-
+                             frame.astype('int16')).sum()))
+
     def test_callout_is_visible_and_deterministic_at_matching_frame(self):
         np=self.np
         cue={'text':'Connect Agent','outputStartMs':700,'outputEndMs':2400,

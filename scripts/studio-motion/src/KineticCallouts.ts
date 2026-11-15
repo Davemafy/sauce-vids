@@ -39,7 +39,9 @@ export function buildCallouts(events:TraceEvent[],startMs:number,
     const label=nameOf(e);
     if(!label||!e.box)continue;
     const t=Math.max(0,e.t-startMs),mapped=sourceToOutput(t);
-    if(mapped-last<options.cooldownMs)continue;
+    // Never overlap even when the configurable cooldown is shorter than
+    // the maximum visible lifetime. Defaults remain 2500ms / 1800ms.
+    if(mapped-last<Math.max(options.cooldownMs,hold))continue;
     const b=e.box;
     if(![b.x,b.y,b.width,b.height].every(finite)||b.width<2||b.height<2)continue;
     // Reject full-screen backdrop; dialogs need a real title to trigger.

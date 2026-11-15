@@ -47,6 +47,26 @@ test("scroll traces form a compressible continuous interval without manual scrol
  assert.ok(p.frameMap.some(v=>v.sourceMs>1200&&v.sourceMs<1400&&v.speed>1.5));
  assert.ok(p.frameMap.filter(v=>v.sourceMs>=2000&&v.sourceMs<=2700).every(v=>v.speed===1));
 });
+test("only first focus of a field protects its action window",()=>{
+ const entries:TraceEvent[]=[
+  {t:1000,type:"focusin",tag:"input",selector:"#email"},
+  {t:2400,type:"focusin",tag:"input",selector:"#email"},
+  {t:4100,type:"focusin",tag:"textarea",selector:"#bio",isInitial:false},
+ ];
+ const plan=buildTimeWarp(entries,0,5000,60,4,true);
+ assert.deepEqual(plan.actionWindows,[{start:600,end:1300}]);
+ assert.ok(plan.deadZones.some(d=>d.start<=1300&&d.end>=5000));
+});
+test("callouts never overlap even when cooldown is configured below lifetime",()=>{
+ const rows:TraceEvent[]=[
+  {t:500,type:"click",tag:"button",innerText:"Connect",box:{x:10,y:30,width:70,height:40}},
+  {t:900,type:"click",tag:"button",innerText:"Deploy",box:{x:10,y:30,width:70,height:40}},
+  {t:2500,type:"click",tag:"button",innerText:"Publish",box:{x:10,y:30,width:70,height:40}},
+ ];
+ const cues=buildCallouts(rows,0,t=>t,{enable:true,cooldownMs:300,lifetimeMs:1800});
+ assert.deepEqual(cues.map(c=>c.text),["Connect","Publish"]);
+ assert.ok(cues[1]!.outputStartMs>=cues[0]!.outputEndMs);
+});
 test("disabled timewarp is exact real-time with no deadzone acceleration",()=>{
  const p=buildTimeWarp(events,0,9000,60,4,false);
  assert.ok(Math.abs(p.outputDurationMs-9000)<.001);

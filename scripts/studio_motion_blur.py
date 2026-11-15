@@ -14,8 +14,12 @@ def directional_blur(frame:np.ndarray,vx:float,vy:float,speed:float)->np.ndarray
     length=hypot(vx,vy)
     if amount<=0 or length<.75:return frame
     radius=min(6.,amount*3.6+min(2.4,length*.20))
-    dx=vx/length*radius
-    dy=vy/length*radius
+    # Source-frame displacement is expressed per output frame. Increase
+    # blur-shutter displacement with the accelerated playback multiplier
+    # while preserving the direction measured from actual camera/scroll.
+    multiplier=max(0.,speed-1.)
+    dx=vx/length*min(6.,radius*multiplier)
+    dy=vy/length*min(6.,radius*multiplier)
     h,w=frame.shape[:2]
     xs=np.arange(w,dtype=np.float32)[None,:]
     ys=np.arange(h,dtype=np.float32)[:,None]

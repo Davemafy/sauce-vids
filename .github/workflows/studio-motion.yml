@@ -9,6 +9,7 @@ on:
       - 'scripts/session_capture.py'
       - 'scripts/session_replay.py'
       - 'scripts/produce_cinematic_demo.py'
+      - 'scripts/verify_studio_motion_export.py'
       - 'tests/test_studio_motion_runtime.py'
       - 'tests/fixtures/studio-motion-trace.json'
       - '.github/workflows/studio-motion.yml'
@@ -34,3 +35,5 @@ jobs:
           python-version: '3.12'
       - name: Python planner contract tests
         run: python -m unittest tests.test_studio_motion_runtime -v
+      - name: Compile silent export verifier
+        run: python -m py_compile scripts/verify_studio_motion_export.py

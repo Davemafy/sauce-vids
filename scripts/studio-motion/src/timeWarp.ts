@@ -16,7 +16,8 @@ function kindOf(e:TraceEvent):string{return (e.eventType||e.type||"").toLowerCas
 export function isHighIntent(e:TraceEvent):boolean {
   const k=kindOf(e);
   if (["click","pointerdown","submit","modal-open","dialog-visible","modal-opened"].includes(k))return true;
-  if (["focus","focusin"].includes(k))return e.isInitial===true || e.role==="textbox" || e.tag==="input";
+  if (["focus","focusin"].includes(k))return e.isInitial===true ||
+    (e.isInitial!==false && (e.role==="textbox" || e.tag==="input" || e.tag==="textarea"));
   return false;
 }
 function unify(rows:Interval[]):Interval[]{
@@ -48,7 +49,20 @@ export function buildTimeWarp(events:TraceEvent[],startMs:number,
     throw new Error("Invalid source duration or trace origin");
   if(!finite(fps)||fps<1||fps>120)throw new Error("FPS outside supported interval");
   if(!finite(maxWarpSpeed)||maxWarpSpeed<1||maxWarpSpeed>4)throw new Error("maxWarpSpeed must be 1–4");
-  const locks=unify(events.filter(e=>finite(e.t)&&isHighIntent(e)).map(e=>({
+  // Only initial focus for each target is an action. Later refocus must
+  // not keep dead zones locked at 1x forever.
+  const firstFocus=new Set<string>();
+  const intents=events.filter(e=>finite(e.t)&&isHighIntent(e))
+    .sort((a,b)=>a.t-b.t).filter(e=>{
+      const kind=kindOf(e);
+      if(kind!=="focus"&&kind!=="focusin")return true;
+      const key=e.selector || e.ariaLabel ||
+        JSON.stringify([e.tag,e.role,e.box?.x,e.box?.y]);
+      if(firstFocus.has(key))return false;
+      firstFocus.add(key);
+      return true;
+    });
+  const locks=unify(intents.map(e=>({
     start:clamp(e.t-startMs-400,0,sourceDurationMs),
     end:clamp(e.t-startMs+300,0,sourceDurationMs),
   })));
