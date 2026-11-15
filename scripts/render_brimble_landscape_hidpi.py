@@ -14,7 +14,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
-from spring_motion import camera_track, cursor_track
+from spring_motion import cursor_track
+from action_zoom_planner import Rect, build_action_camera
 
 ROOT=Path(__file__).resolve().parents[1]
 P=ROOT/"studio"/".tmp"/"landscape-hidpi"
@@ -25,7 +26,9 @@ events=json.loads((ORIG/"capture-events.json").read_text())
 VO=json.loads((ORIG/"voice.json").read_text())["lines"]
 if not manifest.get("verified") or len(manifest.get("states",{}))!=3:
  raise RuntimeError("Unverified state capture. Reject rendering.")
-if [x["action"] for x in events["events"]][:2]!=["connect-modal-visible","setup-command-visible"]:
+UI_EVENTS={e["action"]:e for e in events["events"]
+           if e["action"] in ("connect-modal-visible","setup-command-visible","copy-confirmation")}
+if not all(k in UI_EVENTS for k in ("connect-modal-visible","setup-command-visible")):
  raise RuntimeError("Missing actual interaction events.")
 STATES=[]
 for name in FRAME_NAMES:
@@ -69,19 +72,27 @@ def state_mix(t):
  if t<7.993:return 1,2,quint((t-7.723)/.27)
  return 2,2,0.
 
-# Spring camera has no hard per-shot position resets. Held targets yield
-# continuous position and velocity. Critical damping avoids distracting bounce.
-CAMERA_TARGETS=[
- (0.0,1.08,800.0,450.0),
- (1.25,1.34,670.0,450.0),
- (4.25,1.73,800.0,450.0),
- (7.38,1.80,800.0,450.0),
-]
-CAMERA_FRAMES=camera_track(
- fps=FPS,duration=DURATION,anchors=CAMERA_TARGETS,
- stiffness_zoom=100.0,damping_zoom=20.0,
- stiffness_pan=144.0,damping_pan=24.0,
+# Camera targets are derived from cursor travel, click DOM box and actual
+# state visibility, not independent timestamps that zoom into an empty scene.
+AGENT_BTN=manifest["states"]["01-agent-section"]["proof"]["buttonBox"]
+PICKER_BOX=manifest["states"]["02-agent-picker"]["proof"]["dialogBox"]
+COPIED_BOX=manifest["states"]["03-command-copied"]["proof"]["dialogBox"]
+CAMERA_FRAMES,CAMERA_CUES=build_action_camera(
+ fps=FPS,duration=DURATION,
+ pointer_samples=events["pointer"],
+ click_time=next((e["t"] for e in events["events"]
+                  if e.get("action")=="click-down" and
+                  e.get("label")=="Connect your agent"),4.90),
+ # Legacy sidecar lacks mouse-down events. 4.90s is the original
+ # recording script's verified click schedule, not a fabricated click.
+ click_rect=Rect(**AGENT_BTN),
+ modal_open_time=UI_EVENTS["connect-modal-visible"]["t"],
+ picker_rect=Rect(**PICKER_BOX),
+ copied_time=UI_EVENTS["setup-command-visible"]["t"],
+ result_rect=Rect(**COPIED_BOX),
 )
+(P/"action-camera-cues.json").write_text(json.dumps(CAMERA_CUES,indent=2))
+
 def camera(t):
  index=max(0,min(len(CAMERA_FRAMES)-1,round(t*FPS)))
  return CAMERA_FRAMES[index]

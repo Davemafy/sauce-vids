@@ -5,16 +5,19 @@ import argparse,hashlib,json,math,subprocess
 from pathlib import Path
 import cv2
 import numpy as np
-from spring_motion import camera_track,cursor_track
+from spring_motion import cursor_track
+from action_zoom_planner import Rect,build_action_camera
 
 ROOT=Path(__file__).resolve().parents[1]
 P=ROOT/"studio"/".tmp"/"landscape-hidpi"
 CAPTURE=ROOT/"studio"/".tmp"/"film-05"/"capture-events.json"
 parser=argparse.ArgumentParser()
-parser.add_argument("--video",type=Path,default=P/"sauce-landscape-spring-1080p60.mp4")
+parser.add_argument("--video",type=Path,default=P/"sauce-landscape-action-1080p60.mp4")
 args=parser.parse_args()
 receipt=json.loads((P/"manifest.json").read_text())
 events=json.loads(CAPTURE.read_text())
+UI_EVENTS={e["action"]:e for e in events["events"] if e["action"] in ("connect-modal-visible","setup-command-visible")}
+
 assert receipt.get("verified")
 for name in ("01-agent-section","02-agent-picker","03-command-copied"):
  record=receipt["states"][name]
@@ -23,19 +26,29 @@ for name in ("01-agent-section","02-agent-picker","03-command-copied"):
  assert hashlib.sha256(file.read_bytes()).hexdigest()==record["sha256"]
 assert receipt["states"]["03-command-copied"]["proof"]["copyConfirmed"]
 
-anchors=[
- (0.,1.08,800.,450.),
- (1.25,1.34,670.,450.),
- (4.25,1.73,800.,450.),
- (7.38,1.80,800.,450.),
-]
-camera=camera_track(fps=60,duration=12.9,anchors=anchors,
-  stiffness_zoom=100,damping_zoom=20,stiffness_pan=144,damping_pan=24)
+camera,cues=build_action_camera(
+ fps=60,duration=12.9,
+ pointer_samples=events["pointer"],
+ click_time=next((e["t"] for e in events["events"] if e.get("action")=="click-down" and e.get("label")=="Connect your agent"),4.90),
+ click_rect=Rect(**receipt["states"]["01-agent-section"]["proof"]["buttonBox"]),
+ modal_open_time=UI_EVENTS["connect-modal-visible"]["t"],
+ picker_rect=Rect(**receipt["states"]["02-agent-picker"]["proof"]["dialogBox"]),
+ copied_time=UI_EVENTS["setup-command-visible"]["t"],
+ result_rect=Rect(**receipt["states"]["03-command-copied"]["proof"]["dialogBox"]),
+)
+for index in range(math.floor(cues["first_pointer_motion"]*60)):
+ z,x,y=camera[index]
+ assert abs(z-1.0)<1e-10 and abs(x-800)<1e-10 and abs(y-450)<1e-10,(index,z,x,y)
+approach=camera[round(cues["first_click"]*60)]
+assert 1.25<approach[0]<1.34 and 640.<approach[1]<700.,approach
+assert camera[round((cues["modal_visible"]-.02)*60)][0]<1.34
+assert camera[round((cues["copied_state_visible"]-.02)*60)][0]<1.63
+assert camera[round(8.6*60)][0]>1.65
 cursor=cursor_track(samples=events["pointer"],fps=60,duration=12.9,
   stiffness=784,damping=56)
 assert len(camera)==len(cursor)==774
 max_scale=max(z for z,x,y in camera)
-assert max_scale<=1.80+1e-9
+assert max_scale<=1.67+1e-9
 peak_pixel_scale=(1744/3200)*max_scale
 assert peak_pixel_scale<1.0
 
@@ -74,7 +87,7 @@ assert int(stream["nb_frames"])==774
 # rather than only setting the container's FPS to 60.
 cap=cv2.VideoCapture(str(args.video))
 differences=[];previous=None
-for index in range(round(1.35*60),round(2.00*60)):
+for index in range(round(4.25*60),round(4.75*60)):
  cap.set(cv2.CAP_PROP_POS_FRAMES,index)
  success,frame=cap.read()
  if not success:raise RuntimeError(f"Frame {index} could not be decoded")
@@ -93,6 +106,7 @@ out={"artifact":str(args.video),"fps":60,"frames":774,
      "click_checks":click_checks,
      "camera_motion_nonstatic_frames":moving,"camera_motion_checked_frames":len(differences),
      "dialog_projected_bounds":projected,
-     "complete_decode":True,"source_hash_verified":True}
-(P/"spring-quality-report.json").write_text(json.dumps(out,indent=2))
+     "complete_decode":True,"source_hash_verified":True,
+     "action_camera_cues":cues,"idle_before_cursor_motion":True}
+(P/"action-quality-report.json").write_text(json.dumps(out,indent=2))
 print(json.dumps(out,indent=2))
