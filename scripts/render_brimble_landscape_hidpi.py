@@ -16,6 +16,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from spring_motion import cursor_track
 from action_zoom_planner import Rect, build_action_camera
+from landscape_layout import (MASTER_W,MASTER_H,BROWSER_W,BROWSER_H,
+ BROWSER_X,BROWSER_Y,CAPTION_Y1,CAPTION_Y2,CURSOR_W,CURSOR_H)
 
 ROOT=Path(__file__).resolve().parents[1]
 P=ROOT/"studio"/".tmp"/"landscape-hidpi"
@@ -39,13 +41,13 @@ for name in FRAME_NAMES:
  if hashlib.sha256(file.read_bytes()).hexdigest()!=manifest["states"][name]["sha256"]:
   raise RuntimeError("Source SHA256 changed: "+name)
  STATES.append(im)
-W,H,FPS=1920,1080,60
+W,H,FPS=MASTER_W,MASTER_H,60
 INPUT_W,INPUT_H=3200,1800
-OUT_W,OUT_H=1744,981
-OX,OY=88,27
+OUT_W,OUT_H=BROWSER_W,BROWSER_H
+OX,OY=BROWSER_X,BROWSER_Y
 DURATION=12.9
 FONTPATH=ORIG/"fonts"/"DMSans.ttf"
-FONT=ImageFont.truetype(str(FONTPATH),35)
+FONT=ImageFont.truetype(str(FONTPATH),40)
 try:FONT.set_variation_by_name("Regular")
 except ValueError:pass
 cv2.setNumThreads(4)
@@ -110,16 +112,32 @@ BASE=np.asarray(BASE)[:,:,::-1].copy()
 mask=Image.new("L",(OUT_W,OUT_H),0)
 ImageDraw.Draw(mask).rounded_rectangle((0,0,OUT_W-1,OUT_H-1),radius=20,fill=255)
 CLIP=np.asarray(mask,dtype=np.float32)[:,:,None]/255.
-CURSOR_svg='''M2 2 L2 34 L11 25 L19 43 L26 40 L18 24 L34 24 Z'''
-C=(np.array([[2.,2.],[2.,34.],[11.,25.],[19.,43.],[26.,40.],[18.,24.],[34.,24.]],dtype=np.int32))
-# Render cursor once as a crisp vector via Pillow (screen-pixel size).
-icon=Image.new("RGBA",(43,51),(0,0,0,0))
-draw=ImageDraw.Draw(icon)
-draw.polygon([tuple(p) for p in C],fill=(255,255,254,255))
-draw.line([tuple(p) for p in C]+[tuple(C[0])],fill=(21,23,25,255),width=3,joint="curve")
-ICON=np.asarray(icon)
+# Native-size cursor treatment at 1920x1080. The previous 43x51
+# hand-drawn white polygon was far bigger than a typical OS pointer and
+# its thick border made the product recording feel synthetic. Use one
+# antialiased 27x37 arrow: dark body, white separation stroke and a
+# one-pixel optical shadow, with the visible tip at hotspot (0,0).
+# Cursor remains independent of camera zoom, never enlarged with the UI.
+import io
+import cairosvg
+NATIVE_CURSOR='''<svg xmlns="http://www.w3.org/2000/svg" width="27" height="37"
+ viewBox="0 0 27 37">
+ <path d="M2.2 2.3 L2.2 29.2 L8.7 23.0 L15.1 35.1
+ L20.1 32.6 L14.3 21.6 L24.7 21.6 Z"
+ fill="#161819" stroke="#fff" stroke-width="2.7" stroke-linejoin="round"/>
+ <path d="M2.2 2.3 L2.2 29.2 L8.7 23.0 L15.1 35.1
+ L20.1 32.6 L14.3 21.6 L24.7 21.6 Z"
+ fill="none" stroke="#17191a" stroke-width="1"
+ stroke-linejoin="round"/>
+</svg>'''
+svg_png=cairosvg.svg2png(bytestring=NATIVE_CURSOR.encode("utf-8"),
+                         output_width=108,output_height=148)
+cursor_image=Image.open(io.BytesIO(svg_png)).convert("RGBA")
+cursor_image=cursor_image.resize((27,37),Image.Resampling.LANCZOS)
+ICON=np.asarray(cursor_image,dtype=np.uint8)
 ICON_RGB=ICON[:,:,:3][:,:,[2,1,0]]
 ICON_A=ICON[:,:,3:4].astype(np.float32)/255.
+assert ICON.shape[:2]==(CURSOR_H,CURSOR_W),"OS-style cursor must remain at native scale"
 POINTER=events["pointer"]
 # Critically damped pointer follows the actual telemetry, rather than each
 # frame linearly lerping to the next raw sample. Click deadlines are validated.
@@ -137,14 +155,25 @@ for click_t,target_x,target_y in RECORDED_CLICKS:
  if math.hypot(filtered[0]-target_x,filtered[1]-target_y)>3.0:
   raise RuntimeError("Spring pointer would miss recorded click at %.3fs" % click_t)
 # Event-aligned captions intentionally use no eyebrow, label or title slide.
+# Deliberate caption gutter. Browser ends at y=925; subtitles begin
+# beyond y=991, leaving 66px of physical separation and ~47px after
+# the final painted text. No caption is allowed inside browser pixels.
+CAPTION_TOP=CAPTION_Y1
+CAPTION_BOTTOM=CAPTION_Y2
+assert OY+OUT_H<=CAPTION_TOP-50
 def text_layer(words):
  width=math.ceil(FONT.getlength(words))
- if width>W-100:raise RuntimeError("Caption too long")
- img=Image.new("RGBA",(W,66),(0,0,0,0))
+ if width>W-160:raise RuntimeError("Caption too long for calm one-line treatment")
+ img=Image.new("RGBA",(W,CAPTION_BOTTOM-CAPTION_TOP),(0,0,0,0))
  d=ImageDraw.Draw(img)
- d.text(((W-width)/2,7),words,font=FONT,fill=(45,47,43,255))
- a=np.asarray(img,dtype=np.uint8)
- return a[:,:,:3][:,:,[2,1,0]], a[:,:,3:4].astype(np.float32)/255.
+ # Align by real glyph bounds rather than the nominal font anchor, so every
+ # phrase has a consistent optical baseline and vertical breathing.
+ bbox=d.textbbox((0,0),words,font=FONT)
+ x=round((W-width)/2)
+ y=round(13-bbox[1])
+ d.text((x,y),words,font=FONT,fill=(48,49,46,255))
+ rgba=np.asarray(img,dtype=np.uint8)
+ return rgba[:,:,:3][:,:,[2,1,0]],rgba[:,:,3:4].astype(np.float32)/255.
 CAPTIONS={v["id"]:text_layer(v["text"]) for v in VO}
 
 def warp(image,scale,fx,fy):
@@ -185,7 +214,7 @@ def render(t):
  line=next((r for r in VO if r["start"]<=t<=r["end"]+.08),None)
  if line:
   rgb,alpha=CAPTIONS[line["id"]]
-  strip=stage[1009:1075,:]
+  strip=stage[CAPTION_TOP:CAPTION_BOTTOM,:]
   strip[:]=np.uint8(strip.astype(np.float32)*(1-alpha)+rgb*alpha)
  return stage
 

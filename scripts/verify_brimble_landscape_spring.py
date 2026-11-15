@@ -7,6 +7,8 @@ import cv2
 import numpy as np
 from spring_motion import cursor_track
 from action_zoom_planner import Rect,build_action_camera
+from landscape_layout import (BROWSER_W,BROWSER_H,BROWSER_Y,CAPTION_Y1,
+ CAPTION_Y2,CURSOR_W,CURSOR_H,MASTER_H)
 
 ROOT=Path(__file__).resolve().parents[1]
 P=ROOT/"studio"/".tmp"/"landscape-hidpi"
@@ -49,7 +51,7 @@ cursor=cursor_track(samples=events["pointer"],fps=60,duration=12.9,
 assert len(camera)==len(cursor)==774
 max_scale=max(z for z,x,y in camera)
 assert max_scale<=1.67+1e-9
-peak_pixel_scale=(1744/3200)*max_scale
+peak_pixel_scale=(BROWSER_W/3200)*max_scale
 assert peak_pixel_scale<1.0
 
 clicks=[(4.90,459.22,416.38),(7.70,667.,551.),(10.15,655.77,628.)]
@@ -66,14 +68,14 @@ rect=receipt["states"]["03-command-copied"]["proof"]["dialogBox"]
 projected=[]
 for seconds in (8.0,8.6,10.3,12.0):
  z,focusx,focusy=camera[round(seconds*60)]
- factor=(1744/1600)*z
+ factor=(BROWSER_W/1600)*z
  # The camera implementation clamps translation to source limits.
- dx=max(1744-3200*(1744/3200)*z,min(0.,1744/2-2*focusx*(1744/3200)*z))
- dy=max(981-1800*(1744/3200)*z,min(0.,981/2-2*focusy*(1744/3200)*z))
+ dx=max(BROWSER_W-3200*(BROWSER_W/3200)*z,min(0.,BROWSER_W/2-2*focusx*(BROWSER_W/3200)*z))
+ dy=max(BROWSER_H-1800*(BROWSER_W/3200)*z,min(0.,BROWSER_H/2-2*focusy*(BROWSER_W/3200)*z))
  sides=(dx+factor*rect["x"],dy+factor*rect["y"],
         dx+factor*(rect["x"]+rect["width"]),
         dy+factor*(rect["y"]+rect["height"]))
- assert sides[0]>=-1 and sides[1]>=-1 and sides[2]<=1745 and sides[3]<=982,(seconds,sides)
+ assert sides[0]>=-1 and sides[1]>=-1 and sides[2]<=BROWSER_W+1 and sides[3]<=BROWSER_H+1,(seconds,sides)
  projected.append([round(x,2) for x in sides])
 
 metadata=json.loads(subprocess.check_output(["ffprobe","-v","error",
@@ -96,10 +98,32 @@ for index in range(round(4.25*60),round(4.75*60)):
   differences.append(float(np.mean(np.abs(gray.astype(np.float32)-previous.astype(np.float32)))))
  previous=gray
 cap.release()
+# Inspect decoded pixels rather than relying exclusively on style constants.
+# A caption may only occupy its own band, never the intermediate area below
+# the browser. The darkest UI drops off before the 66px caption gutter.
+cap=cv2.VideoCapture(str(args.video))
+gutter_counts=[]
+caption_counts=[]
+for timecode in (0.90,4.40,5.55,8.65,11.25):
+ cap.set(cv2.CAP_PROP_POS_MSEC,timecode*1000)
+ ok,shot=cap.read()
+ if not ok:raise RuntimeError("Caption QA frame is unreadable")
+ gray=cv2.cvtColor(shot,cv2.COLOR_BGR2GRAY)
+ gutter_dark=int(np.count_nonzero(gray[947:991,400:1520]<105))
+ caption_dark=int(np.count_nonzero(gray[998:1043,400:1520]<105))
+ assert gutter_dark<100,("Caption gutter contaminated",timecode,gutter_dark)
+ if timecode==8.65:
+  assert caption_dark>200,("Caption text absent in its dedicated band",caption_dark)
+ gutter_counts.append(gutter_dark)
+ caption_counts.append(caption_dark)
+cap.release()
 moving=sum(d>.03 for d in differences)
 assert moving>=round(len(differences)*.95),(moving,len(differences))
 subprocess.run(["ffmpeg","-v","error","-xerror","-i",str(args.video),
                 "-f","null","-"],check=True,timeout=100)
+assert CAPTION_Y1-(BROWSER_Y+BROWSER_H)>=55
+assert MASTER_H-CAPTION_Y2>=20
+assert CURSOR_W<=30 and CURSOR_H<=40
 out={"artifact":str(args.video),"fps":60,"frames":774,
      "master_px":[1920,1080],"max_scale":round(max_scale,6),
      "max_output_per_source_px":round(peak_pixel_scale,4),
@@ -107,6 +131,10 @@ out={"artifact":str(args.video),"fps":60,"frames":774,
      "camera_motion_nonstatic_frames":moving,"camera_motion_checked_frames":len(differences),
      "dialog_projected_bounds":projected,
      "complete_decode":True,"source_hash_verified":True,
+     "caption_gap_px":CAPTION_Y1-(BROWSER_Y+BROWSER_H),
+     "cursor_pixel_size":[CURSOR_W,CURSOR_H],
+     "encoded_gutter_dark_pixels":gutter_counts,
+     "encoded_caption_dark_pixels":caption_counts,
      "action_camera_cues":cues,"idle_before_cursor_motion":True}
 (P/"action-quality-report.json").write_text(json.dumps(out,indent=2))
 print(json.dumps(out,indent=2))
