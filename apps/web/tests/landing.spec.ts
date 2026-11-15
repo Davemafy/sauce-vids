@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
+const prefix = process.env.NEXT_PUBLIC_SAUCE_BASE_PATH || '';
 
 async function ensureNoHorizontalOverflow(page: Page) {
   const width = await page.evaluate(() => ({
@@ -11,7 +12,7 @@ async function ensureNoHorizontalOverflow(page: Page) {
 
 test('desktop campaign has readable hero and a real waitlist form', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/');
+  await page.goto(prefix || '/');
   await page.evaluate(() => document.fonts.ready);
   await expect(page.getByRole('heading', { name: /make software worth watching/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /join the waitlist/i })).toHaveCount(1);
@@ -22,7 +23,7 @@ test('desktop campaign has readable hero and a real waitlist form', async ({ pag
 
 test('mobile campaign is usable without clipping or fake success', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto(prefix || '/');
   await page.evaluate(() => document.fonts.ready);
   await expect(page.getByRole('heading', { name: /make software worth watching/i })).toBeVisible();
   await ensureNoHorizontalOverflow(page);
@@ -38,7 +39,7 @@ test('mobile campaign is usable without clipping or fake success', async ({ page
 });
 
 test('unconfigured persistence must not claim a successful signup', async ({ request }) => {
-  const response = await request.post('/api/waitlist', {
+  const response = await request.post(`${prefix}/api/waitlist`, {
     data: { email: 'test@example.com', source: 'hero' },
     headers: { Origin: 'http://127.0.0.1:3000' },
   });

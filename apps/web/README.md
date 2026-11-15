@@ -1,6 +1,6 @@
 # Sauce waitlist website
 
-A static-first, editorial Sauce landing page built on the existing Next.js 15 / React 19 application. The Hermes plugin, capture pipeline, Remotion Studio, and FFmpeg renderer are unchanged.
+An editorial Sauce landing page and responsive one-click Studio on Next.js 15 / React 19. The Studio triggers a bounded set of real Python/Chromium/FFmpeg render jobs while preserving the existing verified rendering pipeline.
 
 ## Install and run
 
@@ -39,7 +39,7 @@ npm test
 npm run build
 ```
 
-The conceptual example frame in the purple section is explicitly **illustrative**, not real captured footage or a playable export. Replace it with a verified Sauce render when available.
+The **AFTER: A demo with Sauce** film is a real Phase 2 3D Launch H.264/AAC export, hosted on the existing Vultr HTTPS origin. The Studio UI at `/studio` supports two verified recordings, three presets and a Foley toggle. The worker requires explicit server configuration; without it, rendering fails closed while the reference film remains viewable. See `docs/sauce-studio-phase3.md` for the full API contract, verification and service setup.
 
 ## Production gates
 

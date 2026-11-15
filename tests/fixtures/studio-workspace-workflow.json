@@ -1,0 +1,38 @@
+[
+  {
+    "action": "hover",
+    "selector": "#open",
+    "settle_ms": 100
+  },
+  {
+    "action": "click",
+    "selector": "#open",
+    "settle_ms": 100,
+    "expect_selector": "[role=\"dialog\"]"
+  },
+  {
+    "action": "hover",
+    "selector": "#workspace-name",
+    "settle_ms": 100,
+    "expect_selector": "[role=\"dialog\"]"
+  },
+  {
+    "action": "fill",
+    "selector": "#workspace-name",
+    "value": "Atlas",
+    "settle_ms": 100,
+    "expect_selector": "[role=\"dialog\"]"
+  },
+  {
+    "action": "click",
+    "selector": "#create",
+    "settle_ms": 120,
+    "expect_selector": "[role=\"dialog\"]"
+  },
+  {
+    "action": "wait",
+    "ms": 250,
+    "settle_ms": 20,
+    "expect_selector": "[role=\"dialog\"]"
+  }
+]

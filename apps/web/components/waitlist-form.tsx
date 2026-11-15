@@ -24,7 +24,7 @@ export function WaitlistForm({
     setStatus('pending');
     setMessage('');
     try {
-      const response = await fetch('/api/waitlist', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SAUCE_BASE_PATH || ''}/api/waitlist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, website, source }),

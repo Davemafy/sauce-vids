@@ -5,10 +5,22 @@ on:
     branches: [main]
     paths:
       - 'apps/web/**'
+      - 'scripts/session_capture.py'
+      - 'scripts/session_replay.py'
+      - 'scripts/studio_motion_callouts.py'
+      - 'scripts/click_anchor.py'
+      - 'tests/phase3/**'
+      - 'tests/fixtures/studio-workspace-workflow.json'
       - '.github/workflows/sauce-web.yml'
   pull_request:
     paths:
       - 'apps/web/**'
+      - 'scripts/session_capture.py'
+      - 'scripts/session_replay.py'
+      - 'scripts/studio_motion_callouts.py'
+      - 'scripts/click_anchor.py'
+      - 'tests/phase3/**'
+      - 'tests/fixtures/studio-workspace-workflow.json'
       - '.github/workflows/sauce-web.yml'
 
 jobs:
@@ -39,3 +51,18 @@ jobs:
             apps/web/artifacts/
             apps/web/test-results/
           retention-days: 7
+
+  studio-python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install visual-runtime test dependencies
+        run: python -m pip install 'numpy>=1.26,<3' 'opencv-python-headless>=4.9,<5' 'Pillow>=10,<14' 'playwright>=1.55,<2' 'pytest>=8,<10'
+      - name: Test cursor fidelity, scrollbar behavior and kinetic callouts
+        run: python -m pytest tests/phase3/test_sauce_studio_phase3.py -q
+      - name: Compile touched renderer modules
+        run: python -m py_compile scripts/session_capture.py scripts/session_replay.py scripts/studio_motion_callouts.py scripts/click_anchor.py

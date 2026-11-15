@@ -71,10 +71,14 @@ class KineticCalloutRenderer:
             target_y=max(30,min(frame.shape[0]-pill_h-35,ay-90))
             state=self._springs.setdefault(i,_Spring())
             px,py=state.step(target_x,target_y,1/self.fps)
-            px,py=round(px),round(py)
-            # Modulate visibility at ingress/egress; fixed 1800ms max lifetime.
-            fade=min(1,(now_ms-start)/180,(end-now_ms)/220)
-            alpha=max(0.,min(1.,fade))
+            # Ease the pill up 14px over exactly 180ms while opacity
+            # enters on the same clock. The homography anchor stays fixed
+            # to the UI; only the decorative card glides into position.
+            progress=max(0.,min(1.,(now_ms-start)/180.))
+            ease=progress*progress*(3-2*progress)
+            px,py=round(px),round(py+14*(1-ease))
+            outro=max(0.,min(1.,(end-now_ms)/220.))
+            alpha=max(0.,min(1.,ease*outro))
             if alpha<=0:continue
             x0=max(0,px);y0=max(0,py);x1=min(frame.shape[1],px+pill_w);y1=min(frame.shape[0],py+pill_h)
             if x0>=x1 or y0>=y1:continue
@@ -87,10 +91,14 @@ class KineticCalloutRenderer:
             shade=Image.new('RGBA',(x1-x0,y1-y0),(0,0,0,0))
             d=ImageDraw.Draw(shade)
             dw,dh=x1-x0,y1-y0
+            # Dark-glass tint, precisely one luminous rim pixel (same
+            # ivory-blue family as the active-element spotlight border).
             d.rounded_rectangle((0,0,dw-1,dh-1),radius=19,
-                fill=(11,15,24,round(200*alpha)),
-                outline=(216,230,244,round(80*alpha)),width=1)
-            d.line((17,2,dw-17,2),fill=(255,255,255,round(65*alpha)),width=1)
+                fill=(10,14,23,round(192*alpha)),
+                outline=(216,236,249,round(128*alpha)),width=1)
+            d.arc((1,1,dw-2,dh-2),180,342,
+                  fill=(255,255,255,round(76*alpha)),width=1)
+            d.line((20,2,dw-20,2),fill=(244,248,255,round(77*alpha)),width=1)
             d.text((27,12),text,font=font,fill=(247,248,249,round(255*alpha)))
             image=Image.alpha_composite(image.convert('RGBA'),shade).convert('RGB')
             frame[y0:y1,x0:x1]=cv2.cvtColor(np.array(image),cv2.COLOR_RGB2BGR)

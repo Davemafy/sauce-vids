@@ -18,6 +18,7 @@ from PIL import Image,ImageDraw,ImageFilter
 from playwright.sync_api import sync_playwright
 from session_contract import validate_actions,verify_package
 from spring_motion import cursor_track
+from click_anchor import align_click_positions
 from cinematic_tracks import cinematic_camera
 from editorial_closeup_camera import closeup_camera
 from cinematic_composite import background_focus
@@ -29,6 +30,7 @@ from studio_motion_callouts import KineticCalloutRenderer
 from spatial_parallax import inertial_tilt_track
 from code_semantics import (plan_focus_cues,semantic_camera_track,
                             active_code_focus,highlight_code_region)
+from session_capture import MOCKUP_SCROLLBAR_STYLE
 from cinematic_spec import CURSOR_FILM_SCALE,enforce_hidpi,MASTER_SIZE
 from cinematic_presentation_v12 import (draw_stage,compose_cursor,click_feedback,
     modal_spring_scale,WINDOW_X as PRESENT_X,WINDOW_Y as PRESENT_Y,
@@ -290,6 +292,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         if event['type']=='dialog-visible' and event.get('box')]
     first_dialog_ms=dialog_events[0]['t'] if dialog_events else None
     cursor,samples=cursor_motion(session['events'],start_ms,length,fps)
+    if cursor:
+        cursor=align_click_positions(cursor,session['events'],start_ms,fps)
     if any(e.get('type')=='code-focus' for e in session['events']) and code_root is None:
         raise ValueError('Code-focus events require --code-root for AST source verification')
     code_foci=plan_focus_cues(session['events'],code_root)
@@ -439,6 +443,9 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                     "e=>getComputedStyle(e).visibility")=='hidden'
             else:
                 raise RuntimeError('Requested presentation element not found: '+selector)
+        if film_mode:
+            # Hide grey native scrollbars in drawers without disabling scrolling.
+            page.add_style_tag(content=MOCKUP_SCROLLBAR_STYLE)
         if vector_mode:
             # Chromium only renders the REAL app; SVG cursor is composited
             # in the video layer. Hide every native/DOM CSS cursor state.

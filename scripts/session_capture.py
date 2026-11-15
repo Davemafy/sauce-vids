@@ -13,6 +13,13 @@ from session_contract import SCHEMA,safe_url,validate_actions
 from cinematic_spec import enforce_hidpi,DPR_CHOICES,DEFAULT_DPR
 from playwright.sync_api import sync_playwright
 
+# Presentation-only scrollbar suppression for captured mockup surfaces.
+# Keep scrolling functional; hide only Chromium's OS scrollbar chrome.
+MOCKUP_SCROLLBAR_STYLE = (
+    "html,body,html * { scrollbar-width: none !important; } "
+    "::-webkit-scrollbar, *::-webkit-scrollbar { display: none !important; "
+    "width: 0 !important; height: 0 !important; }"
+)
 CAPTURE_JS=r"""
 (() => {
  if (window.__sauceCapture) return;
@@ -259,10 +266,24 @@ def record(url:str, actions:list[dict],output:Path,
                 args=['--no-sandbox','--disable-dev-shm-usage'])
         context=browser.new_context(**opts)
         context.add_init_script(CAPTURE_JS)
+        # Runs in every new page before the first stylesheet paint.
+        context.add_init_script("""(() => {
+          const css = 'html,body,html *{scrollbar-width:none!important}' +
+            '::-webkit-scrollbar,*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}';
+          const install = () => {
+            if (document.getElementById('sauce-hidden-scrollbars')) return;
+            const el=document.createElement('style');
+            el.id='sauce-hidden-scrollbars'; el.textContent=css;
+            (document.head||document.documentElement).appendChild(el);
+          };
+          install();
+          if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',install,{once:true});
+        })();""")
         page=context.new_page()
         response=page.goto(url,wait_until='domcontentloaded',timeout=35000)
         if response and response.status>=400:raise RuntimeError('Page returned '+str(response.status))
         page.evaluate(CAPTURE_JS)
+        page.add_style_tag(content=MOCKUP_SCROLLBAR_STYLE)
         page.wait_for_timeout(500)
         # The opening composition is the relevant product surface, not an
         # unrelated homepage above the clicked UI. Stage this before t=0.

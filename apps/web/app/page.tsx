@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import Link from 'next/link';
 import { ArrowRightIcon, ArrowUpRightIcon, GithubLogoIcon } from '@phosphor-icons/react/ssr';
 import { WaitlistForm } from '../components/waitlist-form';
 
@@ -25,13 +26,16 @@ function Header() {
         <p className="hidden font-display text-[21px] font-black uppercase tracking-[.075em] text-sauce-cream/90 md:block">
           Product videos, with taste.
         </p>
-        <a
+        <div className="flex items-center gap-4 sm:gap-6">
+         <a href="#film" className="hidden text-[13px] font-semibold text-sauce-cream underline-offset-4 hover:underline sm:inline">Watch the film</a>
+         <a
           href="#waitlist"
           className="inline-flex min-h-[44px] items-center gap-2 rounded-full border-2 border-sauce-cream bg-sauce-cream px-4 font-display text-[19px] font-black uppercase leading-none text-sauce-red transition-colors hover:bg-[#f7cf6e] focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-sauce-cream sm:px-6 sm:text-[23px]"
         >
           Get early access
           <ArrowRightIcon size={18} weight="bold" aria-hidden="true" />
-        </a>
+         </a>
+        </div>
       </div>
     </header>
   );
@@ -50,7 +54,7 @@ function Hero() {
             so the experience remains responsive and accessible. */}
         <div className="pointer-events-none absolute -bottom-[125px] left-1/2 z-[5] w-[min(83vw,520px)] -translate-x-1/2 -rotate-[9deg] sm:-bottom-[145px] sm:w-[min(63vw,600px)] lg:bottom-[-140px] lg:left-[-80px] lg:w-[min(38vw,600px)] lg:translate-x-0 lg:-rotate-[14deg]">
           <Image
-            src="/art/record.webp"
+            src={`${process.env.NEXT_PUBLIC_SAUCE_BASE_PATH || ""}/art/record.webp`}
             alt="Sauce RECORD — red squeeze bottle product artwork"
             width={600}
             height={800}
@@ -61,7 +65,7 @@ function Hero() {
         </div>
         <div className="pointer-events-none absolute -bottom-[120px] right-[-5%] z-[5] hidden w-[min(35vw,570px)] rotate-[13deg] lg:block">
           <Image
-            src="/art/polish.webp"
+            src={`${process.env.NEXT_PUBLIC_SAUCE_BASE_PATH || ""}/art/polish.webp`}
             alt="Sauce POLISH — orange squeeze bottle product artwork"
             width={600}
             height={800}
@@ -107,6 +111,53 @@ function Hero() {
   );
 }
 
+function FilmShowcase() {
+  return (
+    <section id="film" aria-labelledby="film-heading" className="bg-[#151519] px-5 py-20 text-[#f4efe5] sm:px-10 sm:py-28 xl:px-16">
+      <div className="mx-auto max-w-[1440px]">
+        <div className="mb-9 flex flex-col justify-between gap-7 md:mb-12 md:flex-row md:items-end">
+          <div className="max-w-[760px]">
+            <p className="mb-5 font-body text-[13px] font-semibold text-[#d69c75]">A screen recording is not a demo.</p>
+            <h2 id="film-heading" className="font-body text-[clamp(2.35rem,5.6vw,5.8rem)] font-semibold leading-[1.02] tracking-[-.068em]">
+              The difference is <span className="font-serif italic font-normal text-[#f0b18a]">in the details.</span>
+            </h2>
+          </div>
+          <p className="max-w-[340px] font-body text-[15px] leading-[1.7] text-[#aaa5a7]">
+            Real interface. Deliberate camera movement. A little depth. And tactile sound placed on the exact frame.
+          </p>
+        </div>
+        <div className="rounded-[16px] border border-white/15 bg-[#202127] p-[7px] shadow-[0_40px_90px_-40px_rgba(0,0,0,0.8),0_80px_160px_-60px_rgba(0,0,0,0.5)] sm:p-[11px]">
+          <div className="relative aspect-video overflow-hidden rounded-[9px] bg-[#090a0f]">
+            <video
+              aria-label="AFTER: A demo with Sauce — verified 3D Launch film"
+              src="https://devmcp.davemafy.xyz/sauce-motion-phase2/master-1080p60.mp4"
+              poster="https://devmcp.davemafy.xyz/sauce-motion-phase2/poster.jpg"
+              className="h-full w-full object-contain"
+              autoPlay
+              muted
+              loop
+              playsInline
+              controls
+              preload="metadata"
+            />
+          </div>
+        </div>
+        <div className="mt-7 flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
+          <div>
+            <p className="font-body text-[12px] font-semibold tracking-[.04em] text-[#dca888]">AFTER: A demo with Sauce</p>
+            <p className="mt-2 font-body text-[14px] leading-relaxed text-[#a9a5a8]">
+              3D Launch preset · 1080p / 60fps · sound on playback. This is a real rendered interaction, not a mockup.
+            </p>
+          </div>
+          <Link href="/studio" className="inline-flex min-h-[46px] flex-none items-center justify-center gap-3 rounded-[8px] bg-[#ecc1a1] px-6 font-body text-[13px] font-bold text-[#2c201d] transition-colors hover:bg-[#ffddc5] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#ecc1a1]">
+            Open Sauce Studio <ArrowUpRightIcon size={16} weight="bold" aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Footer() {
   return (
     <footer className="bg-sauce-red px-5 py-7 text-sauce-cream sm:px-10 sm:py-9 xl:px-16">
@@ -135,6 +186,7 @@ export default function Home() {
     <div className="min-w-0 overflow-x-clip">
       <Header />
       <Hero />
+      <FilmShowcase />
       <Footer />
     </div>
   );
