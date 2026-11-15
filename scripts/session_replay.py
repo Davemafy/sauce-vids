@@ -21,6 +21,7 @@ from spring_motion import cursor_track
 from cinematic_tracks import cinematic_camera
 from cinematic_composite import background_focus
 from cinematic_presentation_v13 import (make_dark_stage,paint_svg_pointer,paint_click_ripple)
+from online_cursor_assets import render_cursor as render_tabler_cursor
 from cinematic_presentation_v12 import (draw_stage,compose_cursor,click_feedback,
     modal_spring_scale,WINDOW_X as PRESENT_X,WINDOW_Y as PRESENT_Y,
     WINDOW_W as PRESENT_W,WINDOW_H as PRESENT_H)
@@ -193,7 +194,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            click_effect:bool=False,backdrop_focus:bool=False,
            presentation_v12:bool=False,
            presentation_hide_selector:str|None=None,
-           presentation_v13:bool=False) -> dict:
+           presentation_v13:bool=False,
+           presentation_v14:bool=False,cursor_style:str='ink') -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -210,8 +212,11 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     length=seconds if seconds is not None else (last_ms-start_ms)/1000.+.35
     if not 0<length<=10:raise ValueError('Limit this proof renderer to <=10s')
     total=round(length*fps)
-    film_mode=presentation_v12 or presentation_v13
-    if presentation_v13 and info['dpr']<2:
+    film_mode=presentation_v12 or presentation_v13 or presentation_v14
+    vector_mode=presentation_v13 or presentation_v14
+    if presentation_v14 and cursor_style not in ('ink','outline'):
+        raise ValueError('Select ink or outline cursor style')
+    if vector_mode and info['dpr']<2:
         raise ValueError('SVG film mode requires deviceScaleFactor >= 2')
     camera,camera_cues=cinematic_camera(
         session['events'],start_ms,length,fps,tuple(info['viewport']))
@@ -227,11 +232,11 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 error=math.dist(cursor[idx],(action['x'],action['y']))
                 if error>3.:
                     raise RuntimeError(f'Cursor would miss recorded click: {error:.2f}px')
-    base,clip=(make_dark_stage() if presentation_v13 else
+    base,clip=(make_dark_stage() if vector_mode else
                draw_stage() if presentation_v12 else draw_frame_base())
     assert (WINDOW_X,WINDOW_Y,WINDOW_W,WINDOW_H)==(PRESENT_X,PRESENT_Y,PRESENT_W,PRESENT_H)
     # V13 deliberately never opens Xvfb or reads X11/native cursor glyphs.
-    cursor_art=None if presentation_v13 else extract_native_cursors(display=':121',scale=2)
+    cursor_art=None if vector_mode else extract_native_cursors(display=':121',scale=2)
     source_w,source_h=info['viewport']
     source_px_w=source_w*info['dpr']
     source_px_h=source_h*info['dpr']
@@ -301,7 +306,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                     "e=>getComputedStyle(e).visibility")=='hidden'
             else:
                 raise RuntimeError('Requested presentation element not found: '+selector)
-        if presentation_v13:
+        if vector_mode:
             # Chromium only renders the REAL app; SVG cursor is composited
             # in the video layer. Hide every native/DOM CSS cursor state.
             page.add_style_tag(content='html,body,html *,html *::before,html *::after {cursor:none !important;}')
@@ -391,9 +396,16 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             output_image=base.copy()
             area=output_image[WINDOW_Y:WINDOW_Y+WINDOW_H,WINDOW_X:WINDOW_X+WINDOW_W]
             area[:]=np.uint8(area.astype(np.float32)*(1-clip)+source*clip)
-            if presentation_v13:
-                # Render SVG-sourced ring first, custom pointer second.
-                # The pointer is the ONLY visible cursor in the final frame.
+            if presentation_v14:
+                # MIT Tabler SVG assets, black fill / outline variants.
+                paint_click_ripple(output_image,session['events'],start_ms,
+                                   index/fps,info['dpr']*factor,dx,dy)
+                if cursor:
+                    render_tabler_cursor(output_image,cursor[index],
+                        session['events'],start_ms,index/fps,
+                        info['dpr']*factor,dx,dy,cursor_style)
+            elif presentation_v13:
+                # Preserve previous SVG treatment for A/B.
                 paint_click_ripple(output_image,session['events'],start_ms,
                                    index/fps,info['dpr']*factor,dx,dy)
                 if cursor:
@@ -452,11 +464,13 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'editorial_background_focus':bool(backdrop_focus),
             'presentation_v12':bool(presentation_v12),
             'presentation_v13':bool(presentation_v13),
-            'cursor_asset':'assets/cursors/sauce-pointer.svg' if presentation_v13 else 'native-x11',
-            'native_cursor_suppressed':bool(presentation_v13),
-            'stage':'dark-ambient-multilayer' if presentation_v13 else 'light',
-            'cursor_visibility':'svg-overlay-always-visible' if presentation_v13 else ('persistent' if presentation_v12 else 'respect-site-css'),
-            'click_feedback':'svg-pointer-contract-0.85+svg-ripple' if presentation_v13 else ('physical press+ring' if presentation_v12 else ('ring' if click_effect else 'disabled')),
+            'presentation_v14':bool(presentation_v14),
+            'cursor_style':cursor_style if presentation_v14 else None,
+            'cursor_asset':('assets/cursors/tabler/pointer-filled.svg' if cursor_style=='ink' else 'assets/cursors/tabler/pointer-outline.svg') if presentation_v14 else ('assets/cursors/sauce-pointer.svg' if presentation_v13 else 'native-x11'),
+            'native_cursor_suppressed':bool(vector_mode),
+            'stage':'dark-ambient-multilayer' if vector_mode else 'light',
+            'cursor_visibility':'tabler-svg-overlay-always-visible' if presentation_v14 else ('svg-overlay-always-visible' if presentation_v13 else ('persistent' if presentation_v12 else 'respect-site-css')),
+            'click_feedback':'tabler-pointer-contract-0.85+svg-ripple' if presentation_v14 else ('svg-pointer-contract-0.85+svg-ripple' if presentation_v13 else ('physical press+ring' if presentation_v12 else ('ring' if click_effect else 'disabled'))),
             'presentation_only_hidden_selector':presentation_hide_selector if film_mode else None,
             'presentation_only_hidden_count':hidden_decoration_count,
             'pixel_resampling':'Lanczos4' if film_mode else 'linear',
@@ -489,6 +503,10 @@ def main():
     cli.add_argument('--click-effect',action='store_true')
     cli.add_argument('--presentation-hide-selector',
        help='Optional decorative selector to suppress only in presentation replay')
+    cli.add_argument('--presentation-v14',action='store_true',
+       help='MIT Tabler SVG cursor, fixed hotspot, click ripple and dark stage')
+    cli.add_argument('--cursor-style',choices=('ink','outline'),default='ink',
+       help='Black body with white rim, or white body with black outline')
     cli.add_argument('--presentation-v13',action='store_true',
        help='Dark cinematic SVG-only pointer film renderer')
     cli.add_argument('--presentation-v12',action='store_true',
@@ -501,6 +519,7 @@ def main():
                   click_effect=args.click_effect,backdrop_focus=args.backdrop_focus,
                   presentation_v12=args.presentation_v12,
                   presentation_hide_selector=args.presentation_hide_selector,
-                  presentation_v13=args.presentation_v13)
+                  presentation_v13=args.presentation_v13,
+                  presentation_v14=args.presentation_v14,cursor_style=args.cursor_style)
     print(json.dumps(result,indent=2))
 if __name__=='__main__':main()
