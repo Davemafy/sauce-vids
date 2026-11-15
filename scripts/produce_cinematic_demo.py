@@ -6,7 +6,7 @@ capture an explicitly provided workflow. Raw session states and HAR remain
 private; only the mastered MP4, preview, poster and index.html are published.
 """
 from __future__ import annotations
-import argparse,html,json,subprocess,os
+import argparse,html,json,subprocess,os,tempfile
 from pathlib import Path
 
 from cinematic_spec import (DEFAULT_DPR,DPR_CHOICES,CURSOR_FILM_SCALE,
@@ -79,7 +79,10 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             enable_time_warp:bool=False,max_warp_speed:float=4.,
             enable_studio_floor:bool=False,floor_reflection_intensity:float=.25,
             enable_callouts:bool=False,callout_cooldown_ms:int=2500,
-            deterministic_frame_cache:Path|None=None)->dict:
+            deterministic_frame_cache:Path|None=None,
+            preset:str|None=None,foley_assets:Path|None=None,
+            music_track:Path|None=None,mute_audio:bool=False,
+            foley_volume:float|None=None)->dict:
     enforce_hidpi(dpr)
     if cursor_style not in ('ink','outline'):raise ValueError('Unsupported pointer style')
     if not .35<=cursor_scale<=1:raise ValueError('Invalid cursor scale')
@@ -102,12 +105,20 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
     master=out_dir/'master-1080p60.mp4'
     real_duration=(seconds if seconds is not None
         else (session['states'][-1]['at_ms']-session['states'][0]['at_ms'])/1000.+.35)
-    studio_enabled=enable_time_warp or enable_studio_floor or enable_callouts
+    studio_enabled=bool(preset) or enable_time_warp or enable_studio_floor or enable_callouts
+    if preset is not None and preset not in ('clean-studio','3d-launch','hyper-cut'):
+        raise ValueError('Select a supported Sauce flavor')
+    if preset and audio_track:
+        raise ValueError('Preset Foley cannot be combined with legacy --audio-track; use --music-track')
+    if preset is None and (foley_assets or music_track or mute_audio or foley_volume is not None):
+        raise ValueError('Foley and music controls require --preset')
+    if foley_volume is not None and not 0<=foley_volume<=1:
+        raise ValueError('Foley volume must be between 0 and 1')
     if deterministic_frame_cache is not None:
         if not studio_enabled:raise ValueError('Frame cache requires StudioMotion')
         ensure_private_capture_separate(deterministic_frame_cache,out_dir)
     if studio_enabled and audio_track is not None:
-        raise ValueError('StudioMotion test excludes all audio tracks and processing')
+        raise ValueError('StudioMotion takes no legacy audio tracks; use --preset with --music-track')
     if not 1<=max_warp_speed<=4:raise ValueError('maxWarpSpeed must be between 1 and 4')
     if not 0<=floor_reflection_intensity<=.5:
         raise ValueError('floorReflectionIntensity must be between 0 and .5')
@@ -122,7 +133,11 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             'floorReflectionIntensity':floor_reflection_intensity,
             'enableCallouts':enable_callouts,
             'calloutCooldownMs':callout_cooldown_ms,
-            'maxCalloutLifetimeMs':1800})
+            'maxCalloutLifetimeMs':1800},
+            preset=preset,preset_overrides=(
+              {'sound':dict({'muted':bool(mute_audio)},
+                    **({'masterGain':foley_volume} if foley_volume is not None else {}))}
+              if preset and (mute_audio or foley_volume is not None) else None))
     if audio_track is not None:
         # Keep importable contract and player utilities dependency-free in
         # standard Python CI. Scientific audio dependencies are only needed
@@ -155,6 +170,35 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         webgl_report=apply_video(master,webgl_master)
         os.replace(webgl_master,master)
         verify_mp4(master,*MASTER_SIZE,FPS)
+    preset_foley=None
+    if preset is not None:
+        from foley_mixer import render_foley_plan,RATE
+        plan=studio_plan['motionEngine']['foleyPlan']
+        # FoleyPlan is generated in the SAME bridge invocation as FramePlan.
+        # Pad to the encoded video-frame boundary (ceil outputDuration*fps).
+        with tempfile.TemporaryDirectory(prefix='.sauce-foley-',dir=out_dir.parent) as temp:
+            wav=Path(temp)/'sound.wav'
+            preset_foley=render_foley_plan(
+                plan,wav,asset_dir=foley_assets,music=music_track,
+                target_duration_ms=report['seconds']*1000.)
+            muxed=out_dir/'preset-mux-tmp.mp4'
+            subprocess.run([
+                'ffmpeg','-hide_banner','-loglevel','error','-y','-nostdin',
+                '-i',str(master),'-i',str(wav),
+                '-map','0:v:0','-map','1:a:0','-c:v','copy',
+                '-c:a','aac','-ar','48000','-b:a','192k',
+                '-t',f"{report['seconds']:.8f}",'-movflags','+faststart',
+                str(muxed)],check=True,timeout=120)
+            meta=video_info(muxed)
+            check=subprocess.check_output(['ffprobe','-v','error','-of','json',
+                '-show_entries','stream=codec_type,codec_name,sample_rate',
+                str(muxed)],text=True)
+            audio_streams=[v for v in json.loads(check)['streams']
+                if v.get('codec_type')=='audio']
+            if len(audio_streams)!=1 or audio_streams[0].get('sample_rate')!='48000':
+                raise RuntimeError('Preset audio must be one 48kHz AAC stream')
+            os.replace(muxed,master)
+            verify_mp4(master,*MASTER_SIZE,FPS)
     if audio_track is not None:
         muxed=out_dir/'audio-master-1080p60.mp4'
         subprocess.run([
@@ -211,6 +255,10 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             if rms is not None else None,
         'studio_motion':report.get('studio_motion'),
         'studio_config':(studio_plan.get('config') if studio_plan else None),
+        'preset':preset,
+        'preset_camera_frames':report.get('preset_camera_frames',0),
+        'spotlight_frames':report.get('spotlight_frames',0),
+        'foley_audio':preset_foley,
         'studio_output_frames':report['frames'],
         'deterministic_raster_cache':report.get('raster_cache')
     }
@@ -255,6 +303,16 @@ def main():
                    help='Minimum output-time interval between callouts')
     p.add_argument('--deterministic-frame-cache',type=Path,
                    help='Private lossless source frames for bitwise-reproducible exports')
+    p.add_argument('--preset',choices=('clean-studio','3d-launch','hyper-cut'),
+                   help='Enable the versioned Sauce FramePlan + FoleyPlan compositor')
+    p.add_argument('--foley-assets',type=Path,
+                   help='Optional local WAV/OGG samples; procedural fallback otherwise')
+    p.add_argument('--music-track',type=Path,
+                   help='Optional licensed local music, ducked under Foley cues')
+    p.add_argument('--mute-audio',action='store_true',
+                   help='Render a silent audio track for a selected preset')
+    p.add_argument('--foley-volume',type=float,
+                   help='Override preset Foley master gain (0..1)')
     p.add_argument('--audio-track',type=Path,
                    help='Licensed source soundtrack; drives RMS glow and is muxed into MP4')
     p.add_argument('--code-root',type=Path,
@@ -278,7 +336,10 @@ def main():
         floor_reflection_intensity=args.floor_reflection_intensity,
         enable_callouts=args.enable_callouts,
         callout_cooldown_ms=args.callout_cooldown_ms,
-        deterministic_frame_cache=args.deterministic_frame_cache),indent=2))
+        deterministic_frame_cache=args.deterministic_frame_cache,
+        preset=args.preset,foley_assets=args.foley_assets,
+        music_track=args.music_track,mute_audio=args.mute_audio,
+        foley_volume=args.foley_volume),indent=2))
 
 
 if __name__=='__main__':main()

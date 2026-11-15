@@ -7,3 +7,6 @@ Pillow>=11,<14
 opencv-python-headless>=4.10,<5
 numpy>=2,<3
 playwright>=1.55,<2
+
+# Deterministic 48 kHz synthesized Foley filters and envelopes.
+scipy>=1.11,<2

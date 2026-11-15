@@ -10,6 +10,11 @@ on:
       - 'scripts/session_replay.py'
       - 'scripts/produce_cinematic_demo.py'
       - 'scripts/verify_studio_motion_export.py'
+      - 'scripts/foley_mixer.py'
+      - 'scripts/spatial_parallax.py'
+      - 'scripts/requirements-render.txt'
+      - 'tests/phase2/**'
+      - '__init__.py'
       - 'tests/test_studio_motion_runtime.py'
       - 'tests/fixtures/studio-motion-trace.json'
       - '.github/workflows/studio-motion.yml'
@@ -33,7 +38,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install Phase 2 scientific and browser dependencies
+        run: |
+          python -m pip install -r scripts/requirements-render.txt "pytest>=8,<10"
+          python -m playwright install --with-deps chromium
       - name: Python planner contract tests
         run: python -m unittest tests.test_studio_motion_runtime -v
+      - name: Phase 2 capture privacy, projection and Foley pytest
+        run: SAUCE_BROWSER_TEST=1 python -m pytest tests/phase2/test_sauce_motion_phase2.py -q
       - name: Compile silent export verifier
         run: python -m py_compile scripts/verify_studio_motion_export.py

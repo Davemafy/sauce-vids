@@ -1,8 +1,16 @@
 """Sauce Vids native Hermes tool registration."""
 from pathlib import Path
-from . import tools, schemas, director, autopilot, studio_tools
+# When pytest discovers this checkout by its directory path, it imports
+# __init__.py as a standalone module. Defer relative imports until actual
+# Hermes plugin registration; importing the module must be side-effect-free.
+def _registrations():
+    if not __package__:
+        raise RuntimeError('Sauce registration requires its package context')
+    from . import tools, schemas, director, autopilot, studio_tools
+    return tools, schemas, director, autopilot, studio_tools
 
 def register(ctx):
+    tools, schemas, director, autopilot, studio_tools = _registrations()
     for name, handler, schema in (
         ("sauce_capture", tools.capture, schemas.CAPTURE),
         ("sauce_render", tools.render, schemas.RENDER),
