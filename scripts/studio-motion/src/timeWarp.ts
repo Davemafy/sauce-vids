@@ -4,6 +4,12 @@
  */
 import {TraceEvent,FrameMap,clamp,finite} from "./types";
 export interface Interval {start:number;end:number}
+export interface TimeWarpOptions {
+  idleThresholdMs?:number;
+  actionPreRollMs?:number;
+  actionPostRollMs?:number;
+}
+
 export interface TimeWarpPlan {
   sourceDurationMs:number;
   outputDurationMs:number;
@@ -15,7 +21,7 @@ export interface TimeWarpPlan {
 function kindOf(e:TraceEvent):string{return (e.eventType||e.type||"").toLowerCase().replaceAll("_","-")}
 export function isHighIntent(e:TraceEvent):boolean {
   const k=kindOf(e);
-  if (["click","pointerdown","submit","modal-open","dialog-visible","modal-opened"].includes(k))return true;
+  if (["click","pointerdown","submit","modal-open","dialog-visible","modal-opened","copy","paste"].includes(k))return true;
   if (["focus","focusin"].includes(k))return e.isInitial===true ||
     (e.isInitial!==false && (e.role==="textbox" || e.tag==="input" || e.tag==="textarea"));
   return false;
@@ -44,11 +50,18 @@ function sourceSpeed(t:number,dead:Interval[],maxSpeed:number):number {
   return 1+(maxSpeed-1)*Math.min(head,tail);
 }
 export function buildTimeWarp(events:TraceEvent[],startMs:number,
- sourceDurationMs:number,fps:number,maxWarpSpeed=4,enabled=true):TimeWarpPlan{
+ sourceDurationMs:number,fps:number,maxWarpSpeed=4,enabled=true,
+ options:TimeWarpOptions={}):TimeWarpPlan{
   if(!finite(startMs)||!finite(sourceDurationMs)||sourceDurationMs<=0||sourceDurationMs>600000)
     throw new Error("Invalid source duration or trace origin");
   if(!finite(fps)||fps<1||fps>120)throw new Error("FPS outside supported interval");
   if(!finite(maxWarpSpeed)||maxWarpSpeed<1||maxWarpSpeed>4)throw new Error("maxWarpSpeed must be 1–4");
+  const idle=options.idleThresholdMs??800;
+  const preroll=options.actionPreRollMs??400;
+  const postroll=options.actionPostRollMs??300;
+  if(![idle,preroll,postroll].every(finite)||idle<200||idle>10000||
+     preroll<0||preroll>1500||postroll<0||postroll>1500)
+    throw new Error("Invalid temporal director thresholds");
   // Only initial focus for each target is an action. Later refocus must
   // not keep dead zones locked at 1x forever.
   const firstFocus=new Set<string>();
@@ -63,15 +76,15 @@ export function buildTimeWarp(events:TraceEvent[],startMs:number,
       return true;
     });
   const locks=unify(intents.map(e=>({
-    start:clamp(e.t-startMs-400,0,sourceDurationMs),
-    end:clamp(e.t-startMs+300,0,sourceDurationMs),
+    start:clamp(e.t-startMs-preroll,0,sourceDurationMs),
+    end:clamp(e.t-startMs+postroll,0,sourceDurationMs),
   })));
   let cursor=0;const gaps:Interval[]=[];
   for(const protectedWindow of locks){
-    if(protectedWindow.start-cursor>800)gaps.push({start:cursor,end:protectedWindow.start});
+    if(protectedWindow.start-cursor>idle)gaps.push({start:cursor,end:protectedWindow.start});
     cursor=Math.max(cursor,protectedWindow.end);
   }
-  if(sourceDurationMs-cursor>800)gaps.push({start:cursor,end:sourceDurationMs});
+  if(sourceDurationMs-cursor>idle)gaps.push({start:cursor,end:sourceDurationMs});
   // Explicitly observed loading states and continuous static scrolls are
   // compressible even when shorter than 800ms. They NEVER override action
   // windows, and must have a trustworthy start and duration in the trace.

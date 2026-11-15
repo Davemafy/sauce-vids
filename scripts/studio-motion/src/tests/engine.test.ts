@@ -1,0 +1,164 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {buildStudioPlan,buildMotionEnginePlan} from "../bridge";
+import {resolvePreset,SAUCE_FLAVORS} from "../presets";
+import {TraceEvent,FoleyCue} from "../types";
+import {detectHeroMoments} from "../autoDirector";
+import {buildTimeWarp} from "../timeWarp";
+
+const richTrace:TraceEvent[]=[
+ {t:0,type:"pointermove",x:50,y:400},
+ {t:350,type:"pointermove",x:170,y:360},
+ {t:690,type:"pointermove",x:280,y:290},
+ {t:940,type:"pointerdown",tag:"button",selector:"#connect",
+   ariaLabel:"Connect your agent",box:{x:260,y:250,width:190,height:45},x:320,y:275},
+ {t:978,type:"click",tag:"button",selector:"#connect",
+   innerText:"Connect your agent",box:{x:260,y:250,width:190,height:45},x:320,y:275},
+ {t:1260,type:"dialog-visible",role:"dialog",ariaLabel:"Connect your agent",
+   box:{x:455,y:155,width:370,height:390}},
+ {t:2020,type:"copy",tag:"button",ariaLabel:"Copy command",
+   box:{x:660,y:360,width:140,height:45}},
+ {t:5450,type:"pointerdown",tag:"button",selector:"#deploy",
+   innerText:"Deploy",box:{x:690,y:425,width:180,height:50}},
+ {t:5500,type:"click",tag:"button",selector:"#deploy",
+   innerText:"Deploy",box:{x:690,y:425,width:180,height:50}},
+];
+const input=(preset:"clean-studio"|"3d-launch"|"hyper-cut")=>({
+  events:richTrace,startMs:0,durationMs:8000,fps:60,preset
+});
+
+test("all three Sauce flavors are versioned, serializable and distinct",()=>{
+  assert.deepEqual(SAUCE_FLAVORS,["clean-studio","3d-launch","hyper-cut"]);
+  const flavors=SAUCE_FLAVORS.map(id=>resolvePreset(id));
+  for(const item of flavors){
+    const rebuilt=JSON.parse(JSON.stringify(item));
+    assert.deepEqual(rebuilt,item);
+    assert.equal(item.schemaVersion,1);
+    assert.deepEqual(item.export,{width:1920,height:1080,fps:60});
+  }
+  assert.equal(flavors[0]!.camera.mode,"flat");
+  assert.equal(flavors[1]!.camera.perspectivePx,1200);
+  assert.deepEqual(flavors[1]!.camera.spring,
+    {stiffness:180,damping:24,mass:1});
+  assert.equal(flavors[1]!.camera.spotlight.blurPx,6);
+  assert.equal(flavors[2]!.director.idleStrategy,"cut");
+  assert.notDeepEqual(flavors[0]!.director,flavors[1]!.director);
+});
+
+test("preset overrides are immutable, validated, and deny unknown keys",()=>{
+  const tuned=resolvePreset("3d-launch",{
+    sound:{muted:true},director:{maxWarpSpeed:3.5},
+    camera:{spotlight:{blurPx:5}}
+  });
+  assert.equal(tuned.sound.muted,true);
+  assert.equal(tuned.director.maxWarpSpeed,3.5);
+  assert.equal(tuned.camera.spotlight.blurPx,5);
+  assert.equal(resolvePreset("3d-launch").sound.muted,false);
+  assert.throws(()=>resolvePreset("3d-launch",{camera:{perspectivePx:1}}));
+  assert.throws(()=>resolvePreset("3d-launch",{camera:{notASetting:true}}));
+  assert.throws(()=>resolvePreset("hyper-cut",{id:"3d-launch"}));
+  assert.throws(()=>resolvePreset("clean-studio",{sound:{musicGain:8}}));
+});
+
+test("director scores only real hero moments and deduplicates click sequences",()=>{
+  const p=resolvePreset("3d-launch");
+  const heroes=detectHeroMoments(richTrace,0,8000,p,x=>x);
+  assert.deepEqual(heroes.map(x=>x.kind),
+    ["click","modal","copy","click"]);
+  assert.deepEqual(heroes.map(x=>x.sourceMs),[940,1260,2020,5450]);
+  assert.deepEqual(heroes.map(x=>x.id),
+    ["hero-0","hero-1","hero-2","hero-3"]);
+  const privateTrace:TraceEvent[]=[{t:1000,type:"click",tag:"button",
+    ariaLabel:"API key secret 123",box:{x:10,y:10,width:100,height:30}}];
+  assert.equal(detectHeroMoments(privateTrace,0,2000,p,x=>x)[0]!.label,null);
+});
+
+test("camera starts flat, then follows verified target with bounded spring tilt",()=>{
+  const plan=buildMotionEnginePlan(input("3d-launch")).framePlan;
+  assert.equal(plan.frames[0]!.camera.scale,1);
+  assert.equal(plan.frames[0]!.camera.rotateYDeg,0);
+  const before=plan.frames.filter(f=>f.sourceMs<940);
+  assert.ok(before.every(f=>f.camera.scale===1));
+  const action=plan.frames.find(f=>f.sourceMs>1330&&f.sourceMs<1700);
+  assert.ok(action);
+  assert.ok(action!.camera.scale>1.03);
+  assert.ok(action!.camera.spotlightActive);
+  assert.ok(action!.camera.spotlightBox);
+  assert.ok(plan.frames.every(f=>Math.abs(f.camera.rotateXDeg)<=2.500001 &&
+    Math.abs(f.camera.rotateYDeg)<=2.500001));
+  assert.ok(plan.frames.every((f,i)=>i===0 ||
+    f.sourceMs>plan.frames[i-1]!.sourceMs));
+});
+
+test("timewarp respects configurable idle threshold and 400/300 action locks",()=>{
+  const events:TraceEvent[]=[{t:2200,type:"click",tag:"button",box:{
+    x:5,y:5,width:40,height:24}}];
+  const p=buildTimeWarp(events,0,5000,60,4,true,{
+    idleThresholdMs:600,actionPreRollMs:400,actionPostRollMs:300
+  });
+  assert.deepEqual(p.actionWindows,[{start:1800,end:2500}]);
+  assert.ok(p.deadZones.some(d=>d.start===0&&d.end===1800));
+  const protectedFrames=p.frameMap.filter(f=>f.sourceMs>=1800&&f.sourceMs<=2500);
+  assert.ok(protectedFrames.length>20);
+  assert.ok(protectedFrames.every(f=>f.speed===1));
+  assert.ok(p.outputDurationMs<5000);
+  assert.throws(()=>buildTimeWarp(events,0,5000,60,4,true,{idleThresholdMs:50}));
+});
+
+test("Foley click and modal cues align to mapped output sample clock",()=>{
+  const plan=buildMotionEnginePlan(input("3d-launch"));
+  const f=plan.foleyPlan,frames=plan.framePlan.frames;
+  assert.equal(f.sampleRate,48000);
+  assert.equal(f.schema,"sauce-foley-plan-v1");
+  assert.equal(f.muted,false);
+  assert.ok(f.cues.every(c=>c.outputSample>=0 &&
+    c.outputSample<Math.ceil(f.durationMs*48)));
+  assert.equal(f.cues.filter(c=>c.sound==="click_crisp").length,2);
+  assert.equal(f.cues.filter(c=>c.sound==="pop_glass").length,1);
+  const expected=(src:number)=>{
+    const candidate=frames.reduce((best,item)=>
+      Math.abs(item.sourceMs-src)<Math.abs(best.sourceMs-src)?item:best,frames[0]!);
+    return candidate.outputTimeMs;
+  };
+  for(const [source,sound] of [[940,"click_crisp"],[1260,"pop_glass"]] as const){
+    const cue=f.cues.find(c=>c.sound===sound&&Math.abs(c.sourceMs-source)<1);
+    assert.ok(cue);
+    // Event mapping may be between output frames; expect <1/60 second.
+    assert.ok(Math.abs(cue!.outputMs-expected(source))<1000/60+0.1);
+    assert.ok(Math.abs(cue!.outputMs-cue!.outputSample/48)<.001);
+  }
+  assert.ok(f.duckIntervals.every(d=>d.endSample>d.startSample));
+});
+
+test("clean is silent by default, Launch schedules cues, hyper-cut proposes cuts",()=>{
+ const clean=buildMotionEnginePlan(input("clean-studio"));
+ const launch=buildMotionEnginePlan(input("3d-launch"));
+ const hyper=buildMotionEnginePlan(input("hyper-cut"));
+ assert.equal(clean.framePlan.outputDurationMs,8000);
+ assert.equal(clean.foleyPlan.cues.length,0);
+ assert.ok(clean.framePlan.frames.every(f=>f.camera.rotateXDeg===0 &&
+   f.camera.rotateYDeg===0));
+ assert.ok(launch.framePlan.outputDurationMs<clean.framePlan.outputDurationMs);
+ assert.ok(hyper.framePlan.outputDurationMs<launch.framePlan.outputDurationMs);
+ assert.ok(hyper.framePlan.editDecisions.some(d=>d.kind==="cut-candidate"));
+ assert.ok(hyper.foleyPlan.cues.length>0);
+});
+
+test("selected preset remains consumable through original StudioPlan bridge",()=>{
+ const x=buildStudioPlan(input("3d-launch"));
+ assert.equal(x.schema,"sauce-studio-motion-v1");
+ assert.equal(x.motionEngine?.schema,"sauce-motion-plan-v1");
+ assert.equal(x.frameMap.length,x.motionEngine?.framePlan.frames.length);
+ assert.deepEqual(x.frameMap.map(f=>f.sourceMs),
+   x.motionEngine?.framePlan.frames.map(f=>f.sourceMs));
+ assert.deepEqual(x.callouts,x.motionEngine?.framePlan.callouts);
+ assert.equal(x.stage.reflectionIntensity,.25);
+});
+
+test("plan is pure and deterministic; full JSON roundtrip is stable",()=>{
+ const a=buildStudioPlan(input("3d-launch"));
+ const b=buildStudioPlan(input("3d-launch"));
+ assert.deepEqual(a,b);
+ assert.deepEqual(JSON.parse(JSON.stringify(a)),a);
+ assert.equal(a.motionEngine?.framePlan.frames.length,a.frameMap.length);
+});
