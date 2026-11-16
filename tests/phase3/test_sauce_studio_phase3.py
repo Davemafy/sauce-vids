@@ -81,3 +81,18 @@ def test_scrollbar_css_in_real_chromium():
         page.locator("#scroller").evaluate("e=>e.scrollTop=150")
         assert page.locator("#scroller").evaluate("e=>e.scrollTop")==150
         browser.close()
+
+
+def test_connect_agent_pill_has_one_rim_but_no_extra_oval_at_native_pixels():
+    """Regression for the white horseshoe observed at 100% in Phase 2 frame 75."""
+    import numpy as np
+    cue={"text":"Connect Agent","outputStartMs":0,"outputEndMs":1200,
+         "box":{"x":390,"y":210,"width":200,"height":45}}
+    frame=np.full((1080,1920,3),38,dtype=np.uint8)
+    KineticCalloutRenderer([cue],fps=60).draw(
+        frame,11,1.,0.,0.,(0.,0.),(220,124,1480,832),1200.)
+    # Pill top is y=244 with a retained 1px luminous border. The interior
+    # y=245..251 must remain dark; the old 180-342° specular arc polluted it.
+    assert np.mean(frame[244,620:800]) > 100
+    assert not np.any(frame[245:252,620:800].mean(axis=2)>75)
+    assert np.max(frame[260:290,620:800])>180  # Label remains legible.

@@ -96,9 +96,8 @@ class KineticCalloutRenderer:
             d.rounded_rectangle((0,0,dw-1,dh-1),radius=19,
                 fill=(10,14,23,round(192*alpha)),
                 outline=(216,236,249,round(128*alpha)),width=1)
-            d.arc((1,1,dw-2,dh-2),180,342,
-                  fill=(255,255,255,round(76*alpha)),width=1)
-            d.line((20,2,dw-20,2),fill=(244,248,255,round(77*alpha)),width=1)
+            # Keep a single rounded border. A former specular arc and
+            # horizontal highlight drew a white oval above this pill.
             d.text((27,12),text,font=font,fill=(247,248,249,round(255*alpha)))
             image=Image.alpha_composite(image.convert('RGBA'),shade).convert('RGB')
             frame[y0:y1,x0:x1]=cv2.cvtColor(np.array(image),cv2.COLOR_RGB2BGR)
