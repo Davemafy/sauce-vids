@@ -271,3 +271,28 @@ Run /opt/sauce-vids/.venv/bin/python -m pytest -q tests for the VM state:
 No creative quality signoff; every future MP4 is gated on human review and
 the current auto workflow supports only non-mutating scroll/hover.
 See docs/url-to-video-backend.md for key setup, API paths, privacy and limits.
+
+
+## Studio loading-state production monitor (16 November 2026)
+
+Owner requested a living, modern loading screen instead of a stalled spinner.
+
+- Source commit on main: f3f1b90f6d071addd9738ca9284006489f898580
+- Live URL: https://devmcp.davemafy.xyz/sauce-app/studio
+- Implementation: apps/web/app/studio/render-progress.tsx,
+  render-progress.module.css, studio-client.tsx and
+  apps/web/lib/studio-renderer.ts.
+- Measured REPLAY n of total frame counts from the real compositor,
+  no invented total-job percentage. Display queued/compositing/export phases,
+  elapsed time, gentle film-strip motion, reduced-motion accessibility,
+  reconnection messaging, session job reattachment, and failed-job retry.
+- Live browser checked at 1280x720 and 390x844 with no page errors or overflow.
+  E2E verified queued, compositor frames, refresh restoration, ready and mobile.
+- Real render smoke job sauce-hyper-cut-silent observed 0/140, 60/140,
+  120/140 frames, then ready. Encoded preview is H.264 1280x720 30fps
+  with AAC, and passed full FFmpeg decode.
+- Deployment via a separately built Studio application directory under
+  the existing systemd service, preserving the original render workspace.
+- Current scope is the bounded-catalog Studio UI. The private URL-to-video
+  backend is not yet exposed as a public user URL-generation form.
+  A technically complete render still needs visual-quality review.
