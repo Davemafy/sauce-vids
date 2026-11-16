@@ -5,7 +5,7 @@ import s from "./url-flow.module.css";
 
 const api=(process.env.NEXT_PUBLIC_SAUCE_BASE_PATH||"")+"/api/studio/url";
 type Stage="queued"|"inspecting"|"directing"|"capturing"|"rendering"|"needs_access"|"needs_review"|"failed"|"needs_key";
-type Job={id:string;url:string;stage:Stage;status:string;reason?:string;error?:string;message?:string;created_at?:number;updated_at?:number;stage_started_at?:number;frames_rendered?:number;frames_total?:number;title?:string;ai_calls?:number;};
+type Job={id:string;url:string;stage:Stage;status:string;reason?:string;error?:string;message?:string;created_at?:number;updated_at?:number;stage_started_at?:number;frames_rendered?:number;frames_total?:number;title?:string;ai_calls?:number;capture_mode?:"interactive"|"showcase";render_mode?:string;direction_source?:string;video_type?:string;};
 const steps:[Stage,string,string][]=[
  ["inspecting","Explore","Reading real page structure"],
  ["directing","Direct","Finding the story worth showing"],
@@ -63,8 +63,11 @@ export function UrlFlowScreen(){
 
  useEffect(()=>{
   let live=true;
-  const previous=sessionStorage.getItem("sauce-url-job");
-  if(previous&&/^[a-f0-9]{24}$/.test(previous))setJobId(previous);
+  const shared=new URLSearchParams(window.location.search).get("job");
+  const previous=shared&&/^[a-f0-9]{24}$/.test(shared)?shared:sessionStorage.getItem("sauce-url-job");
+  if(previous&&/^[a-f0-9]{24}$/.test(previous)){
+    setJobId(previous);sessionStorage.setItem("sauce-url-job",previous);
+  }
   fetch(api+"/auth",{cache:"no-store"}).then(r=>r.json()).then(data=>{
    if(live)setUnlocked(data.authorized===true);
   }).catch(()=>{if(live)setError("Could not connect to the private studio.");})
@@ -104,15 +107,18 @@ export function UrlFlowScreen(){
    const value=urlValue(url);
    const parsed=new URL(value);
    if(!["https:","http:"].includes(parsed.protocol))throw Error("Use a public HTTP or HTTPS URL.");
+   // Avoid sending unreviewed tracking or access tokens from copied URL queries.
+   parsed.search="";parsed.hash="";
+   const publicUrl=parsed.toString();
    const response=await fetch(api+"/jobs",{
-    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:value}),
+    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:publicUrl}),
    });
    const body=await response.json();
    if(!response.ok)throw Error(body.error||"Could not create film job");
    const id=body.jobId as string;
    if(!/^[a-f0-9]{24}$/.test(id))throw Error("Invalid job identifier");
    setJobId(id);sessionStorage.setItem("sauce-url-job",id);
-   setJob({id,url:value,stage:"queued",status:"queued",created_at:Date.now()/1000});
+   setJob({id,url:publicUrl,stage:"queued",status:"queued",created_at:Date.now()/1000});
   }catch(e){setError(e instanceof Error?e.message:"Could not start this film");}
   finally{setSending(false);}
  }
@@ -159,7 +165,7 @@ export function UrlFlowScreen(){
     <form className={s.urlForm} onSubmit={begin}>
      <label htmlFor="source-url">Product website</label>
      <div className={s.formRow}>
-      <input id="source-url" type="url" inputMode="url" autoComplete="url"
+      <input id="source-url" type="text" inputMode="url" autoComplete="url"
        placeholder="https://yourproduct.com" value={url}
        onChange={e=>setUrl(e.target.value)} required disabled={showProgress}/>
       <button type="submit" disabled={!unlocked||showProgress||!url.trim()}>
@@ -217,8 +223,13 @@ export function UrlFlowScreen(){
 
    {terminal&&<section className={s.result} aria-live="polite">
     <div className={s.resultHead}><span>{ready?"Draft film · Review required":blocked?"Capture paused":"Production stopped"}</span><time>{elapsed(duration)}</time></div>
-    {ready&&<><h2>Your first cut is ready.</h2><p>Recorded browser states, rendered by Sauce. Review the clarity and actual product story before sharing.</p>
+    {ready&&<><h2>Your first cut is ready.</h2>
+     <p>{job?.capture_mode==="interactive"?"A safe on-page interaction was captured.":"This is a public-site visual preview; sign-in-only product features are not demonstrated."} The video is assembled from real captured browser pixels, not a verified continuous application replay. Review before sharing.</p>
      <video src={api+"/jobs/"+jobId+"/media"} className={s.video} controls preload="metadata" playsInline aria-label="AI-directed Sauce video preview"/>
+     <div className={s.outputLinks}>
+       <a href={api+"/jobs/"+jobId+"/media"} download={"sauce-"+(job?.capture_mode||"preview")+".mp4"}>Download MP4 <span aria-hidden="true">↓</span></a>
+       <a href={(process.env.NEXT_PUBLIC_SAUCE_BASE_PATH||"")+"/studio?job="+jobId}>Open review link <span aria-hidden="true">↗</span></a>
+     </div>
      <div className={s.review}>
       <h3>Would you share this?</h3><p>Review notes inform future jobs. An approved film will not be regenerated automatically.</p>
       <div className={s.stars} role="group" aria-label="Rate film quality from one to five">{[1,2,3,4,5].map(n=><button key={n} type="button" aria-label={"Rate "+n+" out of 5"} aria-pressed={rating===n} onClick={()=>{setRating(n);setSaved(false);}} className={rating===n?s.chosen:""}>{n}</button>)}</div>
@@ -228,7 +239,7 @@ export function UrlFlowScreen(){
      </div>
     </>}
     {blocked&&<><h2>This product needs more than a link.</h2><p>{job?.reason||"The meaningful product workflow requires access. Sauce will not fabricate footage."}</p><div className={s.notice}>No video created. Use an authorized test account for the real workflow.</div></>}
-    {failed&&<><h2>We couldn't complete this cut.</h2><p>{job?.message||"The attempt ended before Sauce produced a verified video. Nothing was published."}</p><div className={s.notice}>Try a different public URL or check the backend job logs.</div></>}
+    {failed&&<><h2>We couldn't complete this cut.</h2><p>{job?.message||"The attempt ended before Sauce produced a verified video. Nothing was published."}</p><div className={s.notice}>Try another accessible public URL. If this site requires sign-in or blocks automated browsers, Sauce cannot capture it anonymously.</div></>}
     <button type="button" className={s.another} onClick={clearJob}>↻ Make another film</button>
    </section>}
    <footer className={s.footer}><span>Made with Sauce</span><span>One direction call. Real browser capture. Human-reviewed output.</span></footer>

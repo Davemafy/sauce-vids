@@ -13,7 +13,8 @@ import hmac,json,os,re,secrets,threading,time,socketserver
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlsplit
-from .url2video import execute,inspect_url,validate_public_url,NeedsKey,NeedsAccess
+from .url_engine import execute
+from .url2video import inspect_url,validate_public_url,NeedsKey,NeedsAccess
 
 HOST="127.0.0.1"
 PORT=int(os.getenv("SAUCE_API_PORT","8767"))
@@ -26,6 +27,19 @@ os.chmod(OUT,0o700)
 POOL=ThreadPoolExecutor(max_workers=1)
 LOCK=threading.Lock()
 JOBS={}
+# Persistent jobs cannot be resumed after worker death. Mark them terminal
+# on startup so the browser never spins forever with a stale progress stage.
+for old_status in OUT.glob("*/status.json"):
+    try:
+        old=json.loads(old_status.read_text())
+        if old.get("status")=="queued" and old.get("stage") not in (
+            "needs_review","needs_access","failed","needs_key"):
+            old.update({"status":"failed","last_stage":old.get("stage"),
+                 "stage":"failed","updated_at":time.time(),
+                 "message":"The render worker restarted before this video finished. Please retry."})
+            old_status.write_text(json.dumps(old,indent=2))
+    except (ValueError,OSError,TypeError):
+        pass
 
 def save(job_id):
     j=JOBS[job_id]
@@ -128,7 +142,7 @@ class Handler(BaseHTTPRequestHandler):
             response={key:value for key,value in job.items()
                       if key in ("id","url","stage","status","created_at",
                                  "updated_at","stage_started_at","reason",
-                                 "error","message","ai_calls","title","quality","note")}
+                                 "error","message","ai_calls","title","quality","note","render_mode","direction_source","capture_mode","video_type")}
             if job.get("stage")=="rendering":
                 log=OUT/job_id/"render.log"
                 try:
@@ -175,8 +189,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self.send_json(422,{"error":type(exc).__name__})
         if path=="/v1/jobs":
-            if not os.getenv("GEMINI_API_KEY"):
-                return self.send_json(412,{"error":"GEMINI_API_KEY not configured; /v1/inspect remains available"})
             try: url=validate_public_url(body.get("url",""))
             except ValueError as exc: return self.send_json(422,{"error":str(exc)})
             with LOCK:

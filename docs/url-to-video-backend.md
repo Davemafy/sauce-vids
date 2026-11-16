@@ -78,3 +78,48 @@ are not automatically regenerated.
 - The real film still needs human visual signoff even after
   technical encoding tests pass. Neither shaders nor a successful
   frame count guarantee compelling product storytelling.
+
+
+## Sauce-native Product Explorer and reliable visual exports (16 November 2026)
+
+`backend/product_explorer.py` extracts a bounded inventory of *observed* first-party
+controls and headings, computed style tokens, actual DOM-path selectors and a
+Chromium screenshot. It rejects mutating controls, cross-origin links and private
+network destinations. Browser actions are checked against a fresh session.
+
+`backend/url_engine.py` sends the screenshot and inventory to a single Gemini
+vision call. Gemini returns **element IDs, not selectors or URLs**. IDs are
+validated against observed inventory. If the model is unavailable, Sauce
+produces a deterministic public showcase rather than inventing functionality.
+A browser-side interaction that is unstable downgrades to a conservative public
+preview. Private account workflows are never simulated.
+
+`backend/state_film.py` validates the SHA-256 hashes of every captured browser
+screenshot and produces an 8-second 720p30 H.264 preview and 1080p60 master
+with gentle real-image camera movement, without reconstructing site UI. This is
+**not** a semantically verified DOM replay: the release manifest says
+`replay_verified: false`. Existing Sauce replay verification remains enabled in
+the original renderer and is not bypassed or misreported.
+
+The Studio result screen identifies public showcases versus observed public
+interactions and provides a protected MP4 download and a review link.
+The job API marks unfinished jobs `failed` on worker restart so the browser
+cannot display an endless stale rendering state.
+
+Real integration checks produced playable files from:
+- seal-verify.vercel.app (one evidence-bound click of Paste text instead)
+- igor-taste.vercel.app (public product showcase)
+- paldey.com (public-site showcase; not authenticated matching)
+- 21.dev (public-site showcase)
+- example.com (simple public document)
+
+Additional public HTTPS Playwright verification: entering example.com through
+Sauce Studio on a 390x844 viewport, returning a completed job and a protected
+MP4 with HTTP 200, visible video and download controls, no page errors and no
+horizontal overflow. Measured completion in that test: 12.9 seconds; this is
+not a guaranteed future time or quality result.
+
+Supported scope: websites that render public content to automated Chromium.
+Captchas, bot blocks, private products and services requiring authenticated
+sessions remain explicitly unsupported for automated filming. The generated
+visual preview still requires human quality review.

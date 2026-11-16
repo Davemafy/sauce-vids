@@ -2,7 +2,7 @@
 import ipaddress
 import socket
 from functools import lru_cache
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit,urlunsplit
 
 @lru_cache(maxsize=512)
 def validate_public_url(url):
@@ -30,6 +30,10 @@ def guard_route(route):
         return route.abort("blockedbyclient")
     if req.url.startswith(("data:","blob:")):
         return route.continue_()
-    try: validate_public_url(req.url)
+    try:
+        p=urlsplit(req.url)
+        # Query parameters on CSS, scripts and images are normal; validate the
+        # public destination while leaving the original request untouched.
+        validate_public_url(urlunsplit((p.scheme,p.netloc,p.path,'','')))
     except (ValueError,OverflowError): return route.abort("blockedbyclient")
     return route.continue_()
