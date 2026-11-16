@@ -93,6 +93,8 @@ export interface SaucePreset {
     maxTiltDeg:number;
     scaleRange:[number,number];
     spring:SpringPhysics;
+    // Opt-in orbital motion is driven by output-frame time, never wall time.
+    orbit:{enabled:boolean;periodMs:number;amplitudeXDeg:number;amplitudeYDeg:number};
     spotlight:{enabled:boolean;blurPx:number;dimOpacity:number};
   };
   director:{

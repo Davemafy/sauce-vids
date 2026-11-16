@@ -16,6 +16,7 @@ from multi_plane_depth import focus_background_plane,composite_elevated_modal
 from multi_plane_depth import focus_background_plane,composite_elevated_modal
 from PIL import Image, ImageDraw, ImageFilter
 from procedural_backdrops import procedural_backdrop, STYLES
+from stage_optics import apply_stage_optics
 
 MASTER_WIDTH,MASTER_HEIGHT=1920,1080
 STAGE_BACKGROUND=(9,10,15)   # #090a0f
@@ -276,6 +277,8 @@ class CinematicStage:
     window_h:int=WINDOW_HEIGHT
     background_hex:str='#090a0f'
     backdrop_style:str='obsidian-grain'
+    enable_stage_optics:bool=False
+    optics_seed:int=20261116
     enable_studio_floor:bool=False
     floor_reflection_intensity:float=.25
 
@@ -284,6 +287,8 @@ class CinematicStage:
             raise ValueError('Production stage is fixed to 1920x1080')
         if self.backdrop_style not in STYLES:
             raise ValueError('Invalid procedural stage style')
+        if not isinstance(self.optics_seed,int) or not 0<=self.optics_seed<2**31:
+            raise ValueError('Optical grain seed must be a bounded integer')
         if not 0<=self.floor_reflection_intensity<=.5:
             raise ValueError('Floor intensity must be between 0 and .5')
         if (self.window_x,self.window_y,self.window_w,self.window_h)!=(
@@ -300,7 +305,8 @@ class CinematicStage:
                perspective_px:float=1820.,
                spotlight:dict|None=None,
                diff_reveal:dict|None=None,
-                foreground:dict|None=None)->np.ndarray:
+                foreground:dict|None=None,
+               frame_index:int=0)->np.ndarray:
         """Outer composition: ambient -> 3D window -> final SVG pointer.
 
         tilt and glow are deterministic frame-indexed inputs. The source
@@ -358,6 +364,22 @@ class CinematicStage:
                     float(spotlight['dy']),tilt,perspective_px,
                     min(6.,float(spotlight.get('blurPx',6.))),
                     float(spotlight.get('dimOpacity',.25)))
+        if self.enable_stage_optics:
+            # Protect exact projected H0 and H60 rectangles; optical
+            # sampling is applied only to the stage/shadow/floor and to
+            # the exterior modal rim, never to genuine website pixels.
+            src=np.float32([[[x,y],[x+w,y],[x+w,y+h],[x,y+h]]])
+            H0=window_homography(x,y,w,h,*tilt,focal=perspective_px)
+            window_quad=cv2.perspectiveTransform(src,H0)[0]
+            modal_quad=None
+            if foreground is not None and spotlight and spotlight.get('active'):
+                modal_quad=projected_target_quad(
+                    foreground['box'],self.window,
+                    float(spotlight['factor']),float(spotlight['dx']),
+                    float(spotlight['dy']),*tilt,
+                    perspective_px=perspective_px,z=60.)
+            output=apply_stage_optics(output,window_quad,frame_index,
+                     seed=self.optics_seed,modal_quad=modal_quad)
         if cinematic_cursor is not None:
             cinematic_cursor(output)
         if diff_reveal and diff_reveal.get('progress',0)>0:

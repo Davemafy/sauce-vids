@@ -7,6 +7,7 @@ const BASE:SaucePreset={
     mode:"flat",perspectivePx:1200,maxTiltDeg:0,
     scaleRange:[1,1.28],
     spring:{mass:1,stiffness:180,damping:24},
+    orbit:{enabled:false,periodMs:2200,amplitudeXDeg:.13,amplitudeYDeg:.18},
     spotlight:{enabled:false,blurPx:0,dimOpacity:0}
   },
   director:{
@@ -32,6 +33,7 @@ const registry:Record<SauceFlavor,SaucePreset>={
       mode:"perspective",perspectivePx:1200,maxTiltDeg:2.5,
       scaleRange:[1,1.36],
       spring:{mass:1,stiffness:180,damping:24},
+      orbit:{enabled:false,periodMs:2200,amplitudeXDeg:.13,amplitudeYDeg:.18},
       spotlight:{enabled:true,blurPx:6,dimOpacity:.25}
     },
     director:{
@@ -49,6 +51,7 @@ const registry:Record<SauceFlavor,SaucePreset>={
       mode:"perspective",perspectivePx:1200,maxTiltDeg:4,
       scaleRange:[1,1.48],
       spring:{mass:1,stiffness:235,damping:28},
+      orbit:{enabled:false,periodMs:2200,amplitudeXDeg:.13,amplitudeYDeg:.18},
       spotlight:{enabled:true,blurPx:4,dimOpacity:.18}
     },
     director:{
@@ -101,6 +104,10 @@ export function validatePreset(input:SaucePreset):SaucePreset{
   range(c.spring.mass,.1,5,"spring.mass");
   range(c.spring.stiffness,20,600,"spring.stiffness");
   range(c.spring.damping,0,100,"spring.damping");
+  if(typeof c.orbit?.enabled!=="boolean")throw new Error("Invalid orbital flag");
+  range(c.orbit.periodMs,800,8000,"orbit.periodMs");
+  range(c.orbit.amplitudeXDeg,0,.35,"orbit.amplitudeXDeg");
+  range(c.orbit.amplitudeYDeg,0,.35,"orbit.amplitudeYDeg");
   if(typeof c.spotlight.enabled!=="boolean")throw new Error("Invalid spotlight");
   range(c.spotlight.blurPx,0,24,"spotlight.blurPx");
   range(c.spotlight.dimOpacity,0,.7,"spotlight.dimOpacity");

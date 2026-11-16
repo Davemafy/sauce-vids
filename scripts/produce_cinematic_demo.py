@@ -17,7 +17,7 @@ from session_contract import verify_package
 def video_info(path:Path)->dict:
     return json.loads(subprocess.check_output([
         'ffprobe','-v','error','-show_entries',
-        'stream=codec_name,codec_type,width,height,r_frame_rate,nb_frames:format=duration',
+        'stream=codec_name,codec_type,width,height,r_frame_rate,nb_frames,bit_rate:format=duration',
         '-of','json',str(path)],text=True))
 
 
@@ -82,8 +82,16 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             deterministic_frame_cache:Path|None=None,
             preset:str|None=None,foley_assets:Path|None=None,
             music_track:Path|None=None,mute_audio:bool=False,
-            foley_volume:float|None=None)->dict:
+            foley_volume:float|None=None,
+            experimental_orbit_optics:bool=False,
+            optics_seed:int=20261116)->dict:
     enforce_hidpi(dpr)
+    if experimental_orbit_optics and preset!='3d-launch':
+        raise ValueError('Experimental orbit optics requires --preset 3d-launch')
+    if experimental_orbit_optics and deterministic_frame_cache is None:
+        raise ValueError('Experimental deterministic proof requires --deterministic-frame-cache')
+    if not isinstance(optics_seed,int) or not 0<=optics_seed<2**31:
+        raise ValueError('Optics seed must be a 31-bit nonnegative integer')
     if cursor_style not in ('ink','outline'):raise ValueError('Unsupported pointer style')
     if not .35<=cursor_scale<=1:raise ValueError('Invalid cursor scale')
     if not workflow.is_file():raise FileNotFoundError(workflow)
@@ -135,9 +143,16 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             'calloutCooldownMs':callout_cooldown_ms,
             'maxCalloutLifetimeMs':1800},
             preset=preset,session_dir=session_dir,preset_overrides=(
-              {'sound':dict({'muted':bool(mute_audio)},
-                    **({'masterGain':foley_volume} if foley_volume is not None else {}))}
-              if preset and (mute_audio or foley_volume is not None) else None))
+              dict(
+                  ({'camera':{'spring':{'mass':1,'stiffness':180,'damping':18},
+                              'orbit':{'enabled':True}}}
+                   if experimental_orbit_optics else {}),
+                  **({'sound':dict({'muted':bool(mute_audio)},
+                       **({'masterGain':foley_volume} if foley_volume is not None else {}))}
+                       if mute_audio or foley_volume is not None else {})
+              ) if preset and
+                  (experimental_orbit_optics or mute_audio or foley_volume is not None)
+                else None))
     if audio_track is not None:
         # Keep importable contract and player utilities dependency-free in
         # standard Python CI. Scientific audio dependencies are only needed
@@ -154,7 +169,9 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         presentation_hide_selector=presentation_hide_selector,
         spatial_parallax=spatial_parallax,audio_levels=rms,code_root=code_root,
         editorial_closeup=editorial_closeup,editorial_geometry=editorial_geometry,
-        studio_motion_plan=studio_plan,raster_cache_dir=deterministic_frame_cache)
+        studio_motion_plan=studio_plan,raster_cache_dir=deterministic_frame_cache,
+        experimental_orbit_optics=experimental_orbit_optics,
+        optics_seed=optics_seed)
     if not report['verified_semantics'] or not report['visual_region_checks']:
         raise RuntimeError('Replay must pass semantic and visual-region checks')
     if (not report.get('cinematic_stage_root') or
@@ -224,6 +241,16 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             str(muxed)],check=True,timeout=95)
         os.replace(muxed,master)
         verify_mp4(master,*MASTER_SIZE,FPS)
+    # A declared encoding floor must be measured on the final multiplexed
+    # master, not inferred from libx264 command-line settings.
+    measured_video_bitrate=None
+    if experimental_orbit_optics:
+        encoded=next(stream for stream in video_info(master)['streams']
+                     if stream['codec_type']=='video')
+        measured_video_bitrate=int(encoded.get('bit_rate') or 0)
+        if measured_video_bitrate<8_000_000:
+            raise RuntimeError('Experimental master below 8 Mbps: '+
+                               str(measured_video_bitrate))
     preview=out_dir/'preview.mp4'
     subprocess.run([
         'ffmpeg','-hide_banner','-loglevel','error','-y','-i',str(master),
@@ -272,6 +299,10 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         'studio_motion':report.get('studio_motion'),
         'studio_config':(studio_plan.get('config') if studio_plan else None),
         'preset':preset,
+        'experimental_orbit_optics':bool(experimental_orbit_optics),
+        'optics_seed':optics_seed if experimental_orbit_optics else None,
+        'video_bitrate_floor_mbps':8 if experimental_orbit_optics else None,
+        'measured_video_bitrate_bps':measured_video_bitrate,
         'preset_camera_frames':report.get('preset_camera_frames',0),
         'spotlight_frames':report.get('spotlight_frames',0),
         'beat_cut_frames':report.get('beat_cut_frames',[]),
@@ -281,7 +312,8 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         'single_plane_fallback_frames':report.get('single_plane_fallback_frames',0),
         'foley_audio':preset_foley,
         'studio_output_frames':report['frames'],
-        'deterministic_raster_cache':report.get('raster_cache')
+        'deterministic_raster_cache':report.get('raster_cache'),
+        'canonical_composition':report.get('canonical_composition')
     }
     (out_dir/'release.json').write_text(json.dumps(receipt,indent=2))
     return receipt
@@ -326,6 +358,10 @@ def main():
                    help='Private lossless source frames for bitwise-reproducible exports')
     p.add_argument('--preset',choices=('clean-studio','3d-launch','hyper-cut'),
                    help='Enable the versioned Sauce FramePlan + FoleyPlan compositor')
+    p.add_argument('--experimental-orbit-optics',action='store_true',
+                   help='Opt-in underdamped modal orbit + isolated stage optics + 12Mbps CBR')
+    p.add_argument('--optics-seed',type=int,default=20261116,
+                   help='Deterministic background-grain seed (default 20261116)')
     p.add_argument('--foley-assets',type=Path,
                    help='Optional local WAV/OGG samples; procedural fallback otherwise')
     p.add_argument('--music-track',type=Path,
@@ -360,7 +396,9 @@ def main():
         deterministic_frame_cache=args.deterministic_frame_cache,
         preset=args.preset,foley_assets=args.foley_assets,
         music_track=args.music_track,mute_audio=args.mute_audio,
-        foley_volume=args.foley_volume),indent=2))
+        foley_volume=args.foley_volume,
+        experimental_orbit_optics=args.experimental_orbit_optics,
+        optics_seed=args.optics_seed),indent=2))
 
 
 if __name__=='__main__':main()

@@ -226,7 +226,9 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            code_root:Path|None=None,editorial_closeup:bool=False,
            editorial_geometry:Path|None=None,
            studio_motion_plan:dict|None=None,
-           raster_cache_dir:Path|None=None) -> dict:
+           raster_cache_dir:Path|None=None,
+           experimental_orbit_optics:bool=False,
+           optics_seed:int=20261116) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -336,6 +338,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         raise ValueError('StudioMotion requires root CinematicStage')
     root_stage=(CinematicStage(
         backdrop_style=backdrop_style,
+        enable_stage_optics=experimental_orbit_optics,
+        optics_seed=optics_seed,
         enable_studio_floor=bool(floor_config.get('enabled',False)),
         floor_reflection_intensity=float(floor_config.get('reflectionIntensity',.25))
     ) if presentation_v15 else None)
@@ -383,14 +387,38 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             cached_files=cached_manifest.get('hashes',[])
             if len(cached_files)!=total:raise RuntimeError('Incomplete private raster manifest')
             cache_hit=True
+    composition=None
+    if experimental_orbit_optics:
+        if raster_cache_dir is None or cache_key is None or preset_engine is None:
+            raise ValueError('Experimental canonical export requires a private frame cache')
+        from canonical_frame_cache import (CanonicalComposition,
+                                           identity_for_composition)
+        # A stable identity binds the *source* manifest, full camera plan,
+        # explicit seed and renderer implementation. New edits/seed cannot
+        # silently reuse an unrelated finished image.
+        codefiles=[Path(__file__),Path(__file__).with_name('cinematic_stage.py'),
+                   Path(__file__).with_name('stage_optics.py'),
+                   Path(__file__).with_name('studio_motion_callouts.py')]
+        identity=identity_for_composition(
+            cache_key,preset_engine['framePlan'],optics_seed,codefiles)
+        composition=CanonicalComposition(raster_cache_dir,identity,total)
     tmp=output.with_suffix('.video-only.mp4')
     encoder=subprocess.Popen([
       'ffmpeg','-hide_banner','-loglevel','error','-y',
       '-f','rawvideo','-pix_fmt','bgr24','-video_size',f'{MASTER_W}x{MASTER_H}',
       '-framerate',str(fps),'-i','pipe:0','-an',
       '-c:v','libx264','-preset','medium' if film_mode else 'veryfast',
-      '-crf','14' if film_mode else '16',
-      '-pix_fmt','yuv420p','-g',str(fps*2),'-threads','7',
+      # CBR with filler keeps fine seeded grain above the 8 Mbps floor.
+      # Default CRF=14 path remains byte-for-byte untouched.
+      *(['-b:v','12M','-minrate','12M','-maxrate','12M',
+         '-bufsize','24M','-x264-params','nal-hrd=cbr']
+        if experimental_orbit_optics else
+        ['-crf','14' if film_mode else '16']),
+      '-pix_fmt','yuv420p','-g',str(fps*2),
+      # x264's seven-thread rate control is not reproducible on this worker:
+      # identical 75-frame inputs gave different decoded frame hashes.
+      # The single-thread flagged encoder produced bit-identical MP4s.
+      '-threads','1' if experimental_orbit_optics else '7',
       '-movflags','+faststart',str(tmp)
     ],stdin=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=10*1024*1024)
     timestamps=[float(e['t']) for e in session['events']]
@@ -702,7 +730,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                     background_source,cinematic_cursor=draw_overlays,tilt=frame_tilt,
                     glow=audio_levels[source_index] if audio_levels is not None else 0.,
                     perspective_px=perspective,spotlight=spotlight,
-                    foreground=foreground,diff_reveal=({'commit':diff_reveals[preset_frames[index]['diffId']],
+                    foreground=foreground,frame_index=index,
+                    diff_reveal=({'commit':diff_reveals[preset_frames[index]['diffId']],
                                   'progress':preset_frames[index]['diffProgress']}
                        if preset_frames and preset_frames[index].get('diffId') in diff_reveals
                           # A separate 600px commit card peels out on the right and
@@ -756,6 +785,10 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 if click_effect:
                     overlay_click(output_image,session['events'],start_ms,index/fps,
                                   info['dpr']*factor,dx,dy)
+            if composition is not None:
+                # Real Chromium actions/semantic checks always execute.
+                # Export only the versioned verified composited-frame proof.
+                output_image=composition.use(index,output_image)
             encoder.stdin.write(output_image.tobytes())
             rendered+=1
             if index%screenshot_step==0 or index==total-1:
@@ -767,6 +800,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         if expected_text:
             page.get_by_text(expected_text,exact=True).first.wait_for(state='visible',timeout=3000)
         context.close();browser.close()
+        if composition is not None:
+            composition.finish()
         if raster_cache_dir is not None and not cache_hit:
             manifest={'schema':1,'identity':cache_key,'count':total,
                       'hashes':cached_files,'private':True}
@@ -790,6 +825,11 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'source_seconds':length,
             'raster_cache':({'private':True,'reused':cache_hit,'frames':total}
                              if raster_cache_dir is not None else None),
+            'canonical_composition':({
+                'private':True,'reused':composition.reused,
+                'frames':total,'identity':composition.identity,
+                'live_frame_divergences':composition.live_diff_frames
+                } if composition is not None else None),
             'studio_motion':({'enabled':True,
                 'output_duration_ms':studio_motion_plan['outputDurationMs'],
                 'source_duration_ms':studio_motion_plan['sourceDurationMs'],
@@ -830,6 +870,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'cinematic_stage_window':list(root_stage.window) if root_stage else None,
             'cinematic_stage_background':root_stage.background_hex if root_stage else None,
             'procedural_backdrop_style':root_stage.backdrop_style if root_stage else None,
+            'experimental_orbit_optics':bool(experimental_orbit_optics),
+            'optics_seed':root_stage.optics_seed if root_stage else None,
             'cinematic_stage_glow_blur':140 if root_stage else None,
             'cinematic_stage_backdrop_blur':24 if root_stage else None,
             'cursor_component':'CinematicCursor' if root_stage else None,

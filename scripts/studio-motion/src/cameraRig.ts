@@ -155,13 +155,31 @@ export function planCameraRig(
       desiredRX=modalCameraLocked?.30:0;
       desiredRY=modalCameraLocked?-.40:0;
     }
+    if(preset.id==="3d-launch"&&p.mode==="perspective"&&
+       p.orbit.enabled&&modalCameraLocked){
+      // The exact second-order Spring dynamics already exist above. Drive
+      // their angular targets along a slow, bounded orbit using the fixed
+      // output clock; the modal remains center-locked and source-true.
+      // 2200ms avoids a perceptible oscillation within the 3.28s proof.
+      const phase=2*Math.PI*i*dt*1000/p.orbit.periodMs;
+      desiredRX=clamp(desiredRX+
+        p.orbit.amplitudeXDeg*Math.sin(phase),
+        -p.maxTiltDeg,p.maxTiltDeg);
+      desiredRY=clamp(desiredRY+
+        p.orbit.amplitudeYDeg*(Math.cos(phase)-1),
+        -p.maxTiltDeg,p.maxTiltDeg);
+    }
     if(cutFrames.has(i)){
       // Explicit editorial hard cut to the next verified action's composition.
       // Do not mutate the 180/24/1 physical spring parameters.
       for(const [spring,target] of [
         [scale,desiredScale],[cx,desiredX],[cy,desiredY],
-        [rx,desiredRX],[ry,desiredRY]
-      ] as const){spring.position=target;spring.velocity=0;}
+        ...((p.orbit.enabled&&modalCameraLocked) ? [] :
+          [[rx,desiredRX],[ry,desiredRY]])
+      ] as Array<[Spring,number]>){spring.position=target;spring.velocity=0;}
+      if(p.orbit.enabled&&modalCameraLocked&&i>0){
+        rx.step(desiredRX,dt);ry.step(desiredRY,dt);
+      }
     }else if(i>0){
       scale.step(desiredScale,dt);cx.step(desiredX,dt);cy.step(desiredY,dt);
       rx.step(desiredRX,dt);ry.step(desiredRY,dt);

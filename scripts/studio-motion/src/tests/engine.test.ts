@@ -5,6 +5,7 @@ import {resolvePreset,SAUCE_FLAVORS} from "../presets";
 import {TraceEvent,FoleyCue} from "../types";
 import {detectHeroMoments} from "../autoDirector";
 import {buildTimeWarp} from "../timeWarp";
+import {planCameraRig} from "../cameraRig";
 
 const richTrace:TraceEvent[]=[
  {t:0,type:"pointermove",x:50,y:400},
@@ -379,4 +380,35 @@ test("3D Launch stage selects fluted glass; validated overrides stay determinist
   assert.equal(threeD.camera.spotlight.blurPx,6);
   assert.deepEqual(buildMotionEnginePlan(input("3d-launch")).preset.stage,
     threeD.stage);
+});
+
+test("flagged exact mass-spring overshoots then settles and orbit remains alive",()=>{
+  const preset=resolvePreset("3d-launch",{
+    camera:{spring:{mass:1,stiffness:180,damping:18},orbit:{enabled:true}}
+  });
+  assert.equal(preset.camera.spring.stiffness,180);
+  assert.equal(preset.camera.orbit.periodMs,2200);
+  const frameMap=Array.from({length:210},(_,i)=>({sourceMs:i*1000/60,speed:1}));
+  const modal={id:"modal-test",kind:"modal" as const,sourceMs:400,outputMs:400,
+    score:100,box:{x:550,y:240,width:460,height:360},label:"Dialog"};
+  // No editorial cuts: isolate the true second-order spring response.
+  const poses=planCameraRig(frameMap,[modal],[],preset,0);
+  const targetScale=1.31;
+  const transition=poses.slice(24,150);
+  const peak=Math.max(...transition.map(p=>p.scale));
+  assert.ok(peak>targetScale+.006,"Underdamped scale overshoot: "+peak);
+  const last=poses.at(-1)!;
+  assert.ok(Math.abs(last.scale-targetScale)<.001);
+  assert.ok(last.focusX>640 && last.focusX<850);
+  const orbit=poses.slice(95,185);
+  const amplitude=Math.max(...orbit.map(p=>p.rotateYDeg))-
+                  Math.min(...orbit.map(p=>p.rotateYDeg));
+  assert.ok(amplitude>.09,"Modal orbit must keep moving: "+amplitude);
+  const defaultPreset=resolvePreset("3d-launch");
+  assert.equal(defaultPreset.camera.orbit.enabled,false);
+  assert.deepEqual(defaultPreset.camera.spring,{mass:1,stiffness:180,damping:24});
+  const off=planCameraRig(frameMap,[modal],[],defaultPreset,0);
+  assert.equal(new Set(off.slice(110,185).map(p=>p.rotateYDeg)).size,1);
+  // Fixed frame clock yields deterministic poses, including velocity states.
+  assert.deepEqual(poses,planCameraRig(frameMap,[modal],[],preset,0));
 });
