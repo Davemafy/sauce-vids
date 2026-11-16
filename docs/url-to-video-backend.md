@@ -28,7 +28,7 @@ The access token is generated on the host and never appears in Git.
     curl http://127.0.0.1:8767/health
 
 Use a Google AI Studio key for a vision-capable Gemini model. Default
-SAUCE_DIRECTOR_MODEL=gemini-2.5-flash can be changed in the env file.
+SAUCE_DIRECTOR_MODEL=gemini-3.5-flash-lite can be changed in the env file.
 Gemini receives a screenshot and page outline. On a free tier, use
 public web pages only; paid and free data-use terms differ.
 
