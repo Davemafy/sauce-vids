@@ -2,6 +2,8 @@
 
 Product: **Sauce** — "A screen recording is not a demo."
 
+For a **new chat or recovered worker**, use `docs/SAUCE_NEW_CHAT.md` as the short bootstrap. The ongoing engineering rules below remain authoritative.
+
 **Required before making any change:**
 1. Read `docs/SAUCE_STANDARDS.md` (creative and engineering acceptance contract).
 2. Read `docs/SAUCE_HANDOFF.md` (status, limits, live proofs, next handoff).

@@ -5,6 +5,8 @@ description: Apply Sauce's source-true cinematic production standards, verify ac
 
 # Sauce Quality & Continuity
 
+For a new conversation, start with `docs/SAUCE_NEW_CHAT.md`. Load the repo files directly; prior chat memory is not evidence of the current implementation.
+
 Before any Sauce code, design or render task:
 
 1. Read root `AGENTS.md`, `docs/SAUCE_STANDARDS.md` and `docs/SAUCE_HANDOFF.md` in full.
