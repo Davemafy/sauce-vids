@@ -24,7 +24,7 @@ function coalesceIntervals(rows) {
     }
     return out;
 }
-function buildFoleyPlan(events, startMs, sourceDurationMs, outputDurationMs, sourceToOutput, preset, camera, frameMap) {
+function buildFoleyPlan(events, startMs, sourceDurationMs, outputDurationMs, sourceToOutput, preset, camera, frameMap, cutFrames = new Set()) {
     if (![startMs, sourceDurationMs, outputDurationMs].every(types_1.finite) ||
         sourceDurationMs <= 0 || outputDurationMs <= 0)
         throw new Error("Invalid Foley clock");
@@ -70,6 +70,9 @@ function buildFoleyPlan(events, startMs, sourceDurationMs, outputDurationMs, sou
         const t = i * 1000 / fps;
         if (t - lastWhoosh < 600)
             continue;
+        // Hard cuts are edits, not physical camera whooshes.
+        if ([...cutFrames].some(c => c >= i - 5 && c <= i))
+            continue;
         const scaleRate = Math.abs(current.scale - earlier.scale) * fps / 5;
         const panRate = Math.hypot(current.focusX - earlier.focusX, current.focusY - earlier.focusY) * fps / 5;
         const tiltRate = Math.hypot(current.rotateXDeg - earlier.rotateXDeg, current.rotateYDeg - earlier.rotateYDeg) * fps / 5;
@@ -86,7 +89,12 @@ function buildFoleyPlan(events, startMs, sourceDurationMs, outputDurationMs, sou
     const ordered = candidates.sort((a, b) => a.outputMs - b.outputMs ||
         a.trigger.localeCompare(b.trigger));
     for (const item of ordered) {
-        const at = (0, types_1.clamp)(samples(item.outputMs), 0, endSample - 1);
+        // The executed beat cut and the audible transient share one 60fps
+        // sample boundary: exactly 800 samples per frame, no accumulated drift.
+        const quantized = preset.id === "3d-launch"
+            ? Math.round(item.outputMs * preset.export.fps / 1000) * (RATE / preset.export.fps)
+            : samples(item.outputMs);
+        const at = (0, types_1.clamp)(quantized, 0, endSample - 1);
         plan.cues.push({
             sound: item.sound,
             outputSample: at, outputMs: +(at / RATE * 1000).toFixed(5),

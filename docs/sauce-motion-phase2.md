@@ -102,3 +102,11 @@ test, not a complete edited/narrated commercial.
 The Next.js preset picker, secure per-user render-job API, signed source
 uploads, queued render jobs and long-form creative acceptance are Phase 3.
 Do not imply those exist because the CLI supports presets.
+
+## 2026-11-16 continuation: true depth and beat-locked 3D Launch
+
+The original 197-frame Phase 2 proof remains an independent regression baseline. The new 3D Launch implementation introduces an independent H60 dialog plane (z=+60px) above the original H0 browser window (z=0), both projected with the original 1200px perspective and Y-then-X rotations. The background is a Chromium screenshot with a geometry-verified live dialog temporarily hidden; the renderer restores the original DOM style in a finally block. Without a verified modal-free plate, the original 6px-blur, 1px-rim single-plane spotlight is used instead. The active foreground owner survives nested child actions, with a shared nominal 2400ms lifetime or earlier recorded close.
+
+The 3D Launch source-true beat scheduler generates actual hard cuts at observed hero actions, avoiding motion-blurring a cut frame. Camera transitions preserve the 180 / 24 / 1 physical spring constants between editorial cuts. Every Foley event maps to an integer output-video frame (800 audio samples per frame at 60fps and 48kHz), with sample alignment reverified against decoded AAC.
+
+Verified real Brimble output: https://devmcp.davemafy.xyz/sauce-motion-phase2/z60-beats/ ; master SHA-256 35ef68e22c842eb28cb90ccda92a3961af770ed6352c716c609693648fa2a48c. 1920x1080 H.264/60fps, 197 frames, 3.283333s and AAC stereo 48kHz. The 125th output frame is an executed action-aligned cut, producing 125- and 72-frame shots. There were 120 elevated-modal frames, zero failed modal-free background attempts, 6 verified source hashes, 3 semantic checks and 3 pixel-region checks. Decoded AAC clicks had 0 sample offset before and after the cut. TypeScript 25/25; Python unittest 160/160; Phase 2 pytest with browser 17/17. Opened the new QA montage and full-res cut frame; validated public desktop and mobile playback. The limited 3.3s proof is technically passed, not a premium editorial film or arbitrary-source signoff. See docs/SAUCE_HANDOFF.md for retained gaps.

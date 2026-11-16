@@ -33,6 +33,7 @@ export interface TimeWarpPlan {
   deadZones:Interval[];
   sourceToOutput:(t:number)=>number;
   gazeTargets:GazeTarget[];
+  cuts?:BeatCut[];
 }
 function kindOf(e:TraceEvent):string{return (e.eventType||e.type||"").toLowerCase().replaceAll("_","-")}
 export function isHighIntent(e:TraceEvent):boolean {
@@ -190,4 +191,120 @@ export function buildTimeWarp(events:TraceEvent[],startMs:number,
     throw new Error("Time map is not strictly increasing at requested fps");
   return {sourceDurationMs,outputDurationMs:+total.toFixed(5),
           frameMap,actionWindows:locks,deadZones:dead,sourceToOutput,gazeTargets};
+}
+
+
+/** A real edit list, not a promise to cut someday.
+ * Source frames outside evidence-backed action beats are omitted. A cut also
+ * creates a distinct camera shot if the source frames are adjacent.
+ */
+export interface BeatCut {
+  outputFrame:number;
+  sourceStartMs:number;
+  sourceEndMs:number;
+}
+export interface BeatLockedWarp extends TimeWarpPlan { cuts:BeatCut[] }
+
+export function beatLockTimeWarp(
+  base:TimeWarpPlan,events:TraceEvent[],startMs:number,fps:number
+):BeatLockedWarp {
+  if(fps!==60)throw new Error("Beat locking requires the 60fps export clock");
+  const source=base.frameMap;
+  if(!source.length)throw new Error("Cannot beat-lock an empty capture");
+  const fpsMs=1000/fps;
+  const closest=(src:number):number=>{
+    let lo=0,hi=source.length;
+    while(lo<hi){const mid=(lo+hi)>>1;
+      if(source[mid]!.sourceMs<src)lo=mid+1;else hi=mid;
+    }
+    // Land on the first actually displayed post-event source frame.
+    return Math.min(source.length-1,lo);
+  };
+  const relevant=events.filter(e=>finite(e.t)&&isHighIntent(e)
+    &&e.t-startMs>=0&&e.t-startMs<=base.sourceDurationMs)
+    .sort((a,b)=>a.t-b.t);
+  const anchors:{index:number;modal:boolean}[]=[];
+  for(const e of relevant){
+    const at=closest(e.t-startMs);
+    const previous=anchors[anchors.length-1];
+    // One human action, not separate click/pointerdown/focus shots.
+    if(previous&&Math.abs(source[at]!.sourceMs-source[previous.index]!.sourceMs)<170){
+      if(["dialog-visible","modal-open","modal-opened"].includes(kindOf(e)))
+        previous.modal=true;
+      continue;
+    }
+    anchors.push({index:at,modal:["dialog-visible","modal-open","modal-opened"].includes(kindOf(e))});
+  }
+  const chosen=new Uint8Array(source.length);
+  if(anchors.length){
+    for(const a of anchors){
+      const start=Math.max(0,a.index-24);
+      const end=Math.min(source.length,a.index+(a.modal?90:78)+1);
+      for(let i=start;i<end;i++)chosen[i]=1;
+    }
+    // Preserve opening orientation when the first meaningful action arrives quickly.
+    if(anchors[0]!.index<=60)
+      for(let i=0;i<=anchors[0]!.index;i++)chosen[i]=1;
+  }else{
+    // No observed actions: never invent events, scrolling or endless ambience.
+    for(let i=0;i<Math.min(source.length,120);i++)chosen[i]=1;
+  }
+  // Avoid stroboscopic microcuts in short pre-action gaps.
+  let left=-1;
+  for(let i=0;i<chosen.length;i++)if(chosen[i]){
+    if(left>=0&&i-left<=19)
+      for(let j=left+1;j<i;j++)chosen[j]=1;
+    left=i;
+  }
+  const original:number[]=[];
+  for(let i=0;i<chosen.length;i++)if(chosen[i])original.push(i);
+  if(original.length===0)throw new Error("No source-true frames retained");
+  const frames=original.map(i=>({...source[i]!}));
+  const cutSet=new Set<number>();
+  // Discontinuous source mapping: the renderer actually skips the idle frames.
+  for(let i=1;i<original.length;i++)
+    if(original[i]!-original[i-1]!>1)cutSet.add(i);
+  const anchorFrames=anchors.map(a=>{
+    let lo=0,hi=original.length;
+    while(lo<hi){const m=(lo+hi)>>1;
+      if(original[m]!<a.index)lo=m+1;else hi=m;}
+    return Math.min(original.length-1,lo);
+  });
+  // Deliberate beats of 60–120 frames; NEVER exceed 150 per shot.
+  const forcedCuts:number[]=[];
+  let shotStart=0;
+  for(const boundary of [...cutSet].sort((a,b)=>a-b).concat([original.length])){
+    let end=boundary;
+    while(end-shotStart>150){
+      // Cuts land ON an observed action, never 20 frames before its pointer.
+      const choices=anchorFrames
+        .filter(a=>a-shotStart>=60&&a-shotStart<=150&&end-a>=60);
+      const ideal=shotStart+112;
+      const next=choices.length
+        ?choices.sort((a,b)=>Math.abs(a-ideal)-Math.abs(b-ideal))[0]!
+        :Math.min(end-60,shotStart+120);
+      if(next<=shotStart||next>=end)throw new Error("Invalid edit boundary");
+      forcedCuts.push(next);shotStart=next;
+    }
+    shotStart=boundary;
+  }
+  for(const n of forcedCuts)cutSet.add(n);
+  const cuts=[...cutSet].sort((a,b)=>a-b).filter(n=>n>0&&n<frames.length)
+    .map(outputFrame=>({
+       outputFrame,
+       sourceStartMs:frames[outputFrame-1]!.sourceMs,
+       sourceEndMs:frames[outputFrame]!.sourceMs
+    }));
+  const mapped=(src:number):number=>{
+    const v=clamp(src,0,base.sourceDurationMs);
+    let lo=0,hi=frames.length;
+    while(lo<hi){const mid=(lo+hi)>>1;
+      if(frames[mid]!.sourceMs<v)lo=mid+1;else hi=mid;
+    }
+    const index=Math.min(frames.length-1,lo);
+    return index*fpsMs;
+  };
+  return {...base,frameMap:frames,cuts,
+    outputDurationMs:+(frames.length*fpsMs).toFixed(5),
+    sourceToOutput:mapped};
 }

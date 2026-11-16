@@ -11,7 +11,7 @@ sys.path.insert(0,str(ROOT/'scripts'))
 from spatial_parallax import window_homography,projected_target_quad,map_pointer
 from cinematic_stage import CinematicStage
 from multi_plane_depth import focus_background_plane,composite_elevated_modal
-from modal_depth_capture import verified_modal_background
+from modal_depth_capture import verified_modal_background,expected_modal_box
 
 WINDOW=(220,124,1480,832)
 BOX={'x':440.,'y':183.,'width':400.,'height':360.}
@@ -95,3 +95,13 @@ def test_modal_hide_restores_original_style_after_background_screenshot():
     assert result is not None
     assert np.array_equal(result[0],actual)
     assert page.actions==['hide','screenshot','restore']
+
+
+def test_child_button_spotlight_does_not_steal_modal_plane_ownership():
+    hints=[{'id':'hero-modal','kind':'modal','sourceMs':900.,'box':BOX}]
+    child={'x':480.,'y':440.,'width':190.,'height':35.}
+    assert child!=BOX
+    assert expected_modal_box(hints,'hero-modal',2100.)==BOX
+    assert expected_modal_box(hints,'hero-modal',2350.)==BOX
+    assert expected_modal_box(hints,None,910.)==BOX
+    assert expected_modal_box(hints,None,3000.) is None

@@ -52,7 +52,9 @@ export function buildMotionEnginePlan(input:BridgeInput):SauceMotionPlan{
  const foley=buildFoleyPlan(input.events,input.startMs,input.durationMs,
    direction.framePlan.outputDurationMs,direction.timeWarp.sourceToOutput,
    preset,direction.framePlan.frames.map(f=>f.camera),
-   direction.framePlan.frames.map(f=>({sourceMs:f.sourceMs,speed:f.speed})));
+   direction.framePlan.frames.map(f=>({sourceMs:f.sourceMs,speed:f.speed})),
+   new Set(direction.framePlan.editDecisions.filter(d=>d.kind==="cut")
+     .map(d=>d.outputFrame!).filter(n=>Number.isInteger(n))));
  return {schema:"sauce-motion-plan-v1",preset,
    framePlan:direction.framePlan,foleyPlan:foley};
 }

@@ -61,7 +61,8 @@ function velocityAt(t:number,samples:CursorSample[],hint:number):{x:number;y:num
 }
 export function planCameraRig(
   frameMap:FrameMap[],heroMoments:HeroMoment[],events:TraceEvent[],
-  preset:SaucePreset,startMs:number,viewport:{width:number;height:number}={width:1280,height:720}
+  preset:SaucePreset,startMs:number,viewport:{width:number;height:number}={width:1280,height:720},
+  cutFrames:ReadonlySet<number>=new Set()
 ):CameraPose[]{
   if(!finite(startMs)||viewport.width<=0||viewport.height<=0)
     throw new Error("Invalid camera source viewport");
@@ -127,7 +128,14 @@ export function planCameraRig(
       desiredRX=clamp(desiredRX,-p.maxTiltDeg,p.maxTiltDeg);
       desiredRY=clamp(desiredRY,-p.maxTiltDeg,p.maxTiltDeg);
     }
-    if(i>0){
+    if(cutFrames.has(i)){
+      // Explicit editorial hard cut to the next verified action's composition.
+      // Do not mutate the 180/24/1 physical spring parameters.
+      for(const [spring,target] of [
+        [scale,desiredScale],[cx,desiredX],[cy,desiredY],
+        [rx,desiredRX],[ry,desiredRY]
+      ] as const){spring.position=target;spring.velocity=0;}
+    }else if(i>0){
       scale.step(desiredScale,dt);cx.step(desiredX,dt);cy.step(desiredY,dt);
       rx.step(desiredRX,dt);ry.step(desiredRY,dt);
     }

@@ -41,7 +41,8 @@ function buildMotionEnginePlan(input) {
     if (preset.export.fps !== input.fps)
         throw new Error("Preset FPS must match the source/output render frame rate");
     const direction = (0, autoDirector_1.buildAutoDirector)(input.events, input.startMs, input.durationMs, preset);
-    const foley = (0, foleyPlan_1.buildFoleyPlan)(input.events, input.startMs, input.durationMs, direction.framePlan.outputDurationMs, direction.timeWarp.sourceToOutput, preset, direction.framePlan.frames.map(f => f.camera), direction.framePlan.frames.map(f => ({ sourceMs: f.sourceMs, speed: f.speed })));
+    const foley = (0, foleyPlan_1.buildFoleyPlan)(input.events, input.startMs, input.durationMs, direction.framePlan.outputDurationMs, direction.timeWarp.sourceToOutput, preset, direction.framePlan.frames.map(f => f.camera), direction.framePlan.frames.map(f => ({ sourceMs: f.sourceMs, speed: f.speed })), new Set(direction.framePlan.editDecisions.filter(d => d.kind === "cut")
+        .map(d => d.outputFrame).filter(n => Number.isInteger(n))));
     return { schema: "sauce-motion-plan-v1", preset,
         framePlan: direction.framePlan, foleyPlan: foley };
 }

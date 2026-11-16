@@ -74,7 +74,7 @@ function velocityAt(t, samples, hint) {
     return { x: (0, types_1.clamp)((b.x - a.x) / dt, -2000, 2000),
         y: (0, types_1.clamp)((b.y - a.y) / dt, -2000, 2000), index: j };
 }
-function planCameraRig(frameMap, heroMoments, events, preset, startMs, viewport = { width: 1280, height: 720 }) {
+function planCameraRig(frameMap, heroMoments, events, preset, startMs, viewport = { width: 1280, height: 720 }, cutFrames = new Set()) {
     if (!(0, types_1.finite)(startMs) || viewport.width <= 0 || viewport.height <= 0)
         throw new Error("Invalid camera source viewport");
     const p = preset.camera, dt = 1 / preset.export.fps;
@@ -137,7 +137,18 @@ function planCameraRig(frameMap, heroMoments, events, preset, startMs, viewport 
             desiredRX = (0, types_1.clamp)(desiredRX, -p.maxTiltDeg, p.maxTiltDeg);
             desiredRY = (0, types_1.clamp)(desiredRY, -p.maxTiltDeg, p.maxTiltDeg);
         }
-        if (i > 0) {
+        if (cutFrames.has(i)) {
+            // Explicit editorial hard cut to the next verified action's composition.
+            // Do not mutate the 180/24/1 physical spring parameters.
+            for (const [spring, target] of [
+                [scale, desiredScale], [cx, desiredX], [cy, desiredY],
+                [rx, desiredRX], [ry, desiredRY]
+            ]) {
+                spring.position = target;
+                spring.velocity = 0;
+            }
+        }
+        else if (i > 0) {
             scale.step(desiredScale, dt);
             cx.step(desiredX, dt);
             cy.step(desiredY, dt);

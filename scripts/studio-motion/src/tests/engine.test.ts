@@ -231,3 +231,63 @@ test("elevated dialog ownership persists through child actions and expires on cl
   const pastClose=closed.frames.find(f=>f.sourceMs>3000&&f.sourceMs<3100)!;
   assert.equal(pastClose.foregroundId,null);
 });
+
+test("executed beat cuts enforce the 150-frame ceiling and skip real idle source",()=>{
+  const events:TraceEvent[]=[
+    {type:"pointerdown",t:1000,tag:"button",box:{x:30,y:40,width:180,height:40}},
+    {type:"pointerdown",t:12500,tag:"button",box:{x:600,y:280,width:200,height:44}},
+    {type:"dialog-visible",t:24000,role:"dialog",
+      box:{x:430,y:150,width:400,height:360}}
+  ];
+  const plan=buildMotionEnginePlan({events,startMs:0,durationMs:27000,
+    fps:60,preset:"3d-launch"});
+  const frames=plan.framePlan.frames,cuts=plan.framePlan.editDecisions
+    .filter(x=>x.kind==="cut");
+  assert.ok(cuts.length>=2,"Long real pauses require executed cuts");
+  assert.ok(cuts.some(c=>c.sourceEndMs-c.sourceStartMs>2000),
+    "At least one cut must actually skip recorded idle source frames");
+  const bounds=[0,...cuts.map(c=>c.outputFrame!),frames.length];
+  assert.ok(bounds.slice(1).every((b,i)=>b-bounds[i]!<=150),
+    "No uninterrupted shot may exceed 150 frames");
+  assert.ok(frames.length<27000*60/1000);
+  assert.ok(frames.every((f,i)=>i===0||f.sourceMs>frames[i-1]!.sourceMs));
+  for(const source of [1000,12500,24000]){
+    const shown=frames.find(f=>f.sourceMs>=source);
+    assert.ok(shown&&shown.sourceMs-source<1000/60+1e-2,
+      "A real hero action must remain visible after the cut");
+  }
+  for(const cue of plan.foleyPlan.cues){
+    assert.equal(cue.outputSample%800,0);
+    const shown=frames.find(f=>f.sourceMs>=cue.sourceMs);
+    assert.ok(shown);
+    assert.equal(cue.outputSample,shown!.outputFrame*800);
+  }
+  assert.equal(plan.foleyPlan.durationMs,plan.framePlan.outputDurationMs);
+});
+
+test("no-action sessions end within one 2-second beat without fake cuts",()=>{
+  const plan=buildMotionEnginePlan({events:[],startMs:0,
+    durationMs:15000,fps:60,preset:"3d-launch"});
+  assert.equal(plan.framePlan.frames.length,120);
+  assert.ok(!plan.framePlan.editDecisions.some(c=>c.kind==="cut"));
+  assert.equal(plan.foleyPlan.cues.length,0);
+});
+
+test("cut begins on the visible frame after an observed action, never beforehand",()=>{
+  const events:TraceEvent[]=[
+    {type:"pointerdown",t:600,tag:"button",box:{x:50,y:60,width:100,height:30}},
+    {type:"dialog-visible",t:1100,role:"dialog",
+      box:{x:380,y:160,width:400,height:380}},
+    {type:"pointerdown",t:2700,tag:"span",
+      box:{x:450,y:470,width:140,height:25}}
+  ];
+  const plan=buildMotionEnginePlan({events,startMs:0,
+    durationMs:4500,fps:60,preset:"3d-launch"});
+  const later=plan.framePlan.heroMoments.find(h=>h.kind==="click"&&h.sourceMs===2700);
+  assert.ok(later,"Observed nested modal click must rank as a real hero");
+  const mapped=plan.framePlan.frames.find(f=>f.sourceMs>=2700);
+  assert.ok(mapped);
+  assert.ok(plan.framePlan.editDecisions.some(c=>c.kind==="cut"));
+  const cue=plan.foleyPlan.cues.find(c=>c.trigger==="click"&&c.sourceMs===2700);
+  assert.equal(cue?.outputSample,mapped!.outputFrame*800);
+});

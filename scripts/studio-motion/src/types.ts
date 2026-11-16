@@ -144,7 +144,8 @@ export interface HeroMoment {
   label:string|null;
 }
 export interface EditDecision {
-  kind:"hold"|"ramp"|"cut-candidate";
+  kind:"hold"|"ramp"|"cut-candidate"|"cut";
+  outputFrame?:number;
   sourceStartMs:number;
   sourceEndMs:number;
   speedCap:number;

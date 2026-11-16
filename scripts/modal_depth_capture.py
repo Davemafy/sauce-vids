@@ -67,3 +67,13 @@ def verified_modal_background(page, expected_box:dict, shape:tuple[int,int]):
         return clean,selected['box'],float(selected['radiusCss'])
     finally:
         page.evaluate(_RESTORE_VERIFIED_MODAL)
+
+
+def expected_modal_box(modal_hints:list[dict],foreground_id:str|None,
+                       source_ms:float)->dict|None:
+    """The plane owner is the modal, never a later child-action spotlight box."""
+    owned=next((h for h in modal_hints if h.get('id')==foreground_id),None)
+    if owned is not None:return owned['box']
+    imminent=next((h for h in modal_hints
+        if abs(float(h['sourceMs'])-source_ms)<=350),None)
+    return imminent['box'] if imminent is not None else None

@@ -5,7 +5,7 @@ import {
   EditDecision,HeroMoment,SauceFramePlan,SaucePreset,TraceEvent,
   finite,Rect,DiffReveal,CommitDiff,clamp
 } from "./types";
-import {buildTimeWarp,TimeWarpPlan} from "./timeWarp";
+import {buildTimeWarp,beatLockTimeWarp,TimeWarpPlan} from "./timeWarp";
 import {planCameraRig} from "./cameraRig";
 import {buildCallouts} from "./KineticCallouts";
 
@@ -61,7 +61,23 @@ export function detectHeroMoments(
     .sort((a,b)=>a.t-b.t);
   const heroes:HeroMoment[]=[];
   for(let i=0;i<ordered.length;i++){
-    const event=ordered[i]!,found=rank(event);
+    const event=ordered[i]!;
+    let found=rank(event);
+    // A genuine pointerdown on a span nested in a recorded modal is still a
+    // hero click. The spatial containment and modal-open trace are evidence;
+    // do not manufacture a click from hover or a generic attention signal.
+    const owner=[...heroes].reverse().find(h=>h.kind==="modal"
+      &&h.box&&event.t-startMs-h.sourceMs<MODAL_FOREGROUND_LIFETIME_MS
+      &&event.t-startMs>=h.sourceMs);
+    if(found?.kind==="click"&&found.score<preset.director.heroScoreThreshold
+       &&validBox(event.box)&&owner?.box){
+      const b=owner.box,c=event.box;
+      const mx=c.x+c.width/2,my=c.y+c.height/2;
+      const closed=ordered.some(e=>e.t>owner.sourceMs+startMs&&e.t<=event.t
+        &&MODAL_CLOSE_TYPES.has(kind(e)));
+      if(!closed&&mx>=b.x&&mx<=b.x+b.width&&my>=b.y&&my<=b.y+b.height)
+        found={kind:"click",score:78};
+    }
     if(found?.kind==="feature" && !safeCommit(event.commit))continue;
     if(!found||found.score<preset.director.heroScoreThreshold)continue;
     const t=event.t-startMs;
@@ -105,12 +121,14 @@ export function buildAutoDirector(
 ):AutoDirectorResult{
   const d=preset.director;
   const applyWarp=d.enabled&&d.idleStrategy!=="hold"&&d.maxWarpSpeed>1;
-  const warp=buildTimeWarp(events,startMs,durationMs,preset.export.fps,
+  const basicWarp=buildTimeWarp(events,startMs,durationMs,preset.export.fps,
     d.maxWarpSpeed,applyWarp,{
       idleThresholdMs:d.idleThresholdMs,
       actionPreRollMs:d.actionPreRollMs,
       actionPostRollMs:d.actionPostRollMs
     });
+  const warp=preset.id==="3d-launch" && d.enabled
+    ?beatLockTimeWarp(basicWarp,events,startMs,preset.export.fps):basicWarp;
   const hero=detectHeroMoments(events,startMs,durationMs,preset,warp.sourceToOutput);
   const diffs:DiffReveal[]=[];
   for(const event of [...events].sort((a,b)=>a.t-b.t)){
@@ -122,7 +140,9 @@ export function buildAutoDirector(
     diffs.push({...commit,id:"diff-"+diffs.length,sourceMs,outputMs,
       durationMs:Math.max(0,Math.min(2100,warp.outputDurationMs-outputMs))});
   }
-  const camera=planCameraRig(warp.frameMap,hero,events,preset,startMs,viewport);
+  const executedCuts=new Set((warp.cuts||[]).map(c=>c.outputFrame));
+  const camera=planCameraRig(warp.frameMap,hero,events,preset,startMs,viewport,
+                             executedCuts);
   const approvedEvents=events.filter(e=>hero.some(h=>Math.abs(h.sourceMs-(e.t-startMs))<.001));
   const callouts=buildCallouts(approvedEvents,startMs,warp.sourceToOutput,{
     enable:d.enabled&&d.callouts.enabled,
@@ -132,11 +152,17 @@ export function buildAutoDirector(
   const closingEvents=events.filter(e=>finite(e.t) &&
     MODAL_CLOSE_TYPES.has(kind(e))).map(e=>e.t-startMs).sort((a,b)=>a-b);
   const modalHeroes=hero.filter(h=>h.kind==="modal");
-  const cuts:EditDecision[]=warp.deadZones.map(g=>({
-    // Cut-candidates are metadata until a cut-safe renderer exists.
-    kind:d.idleStrategy==="cut"?"cut-candidate":"ramp",
-    sourceStartMs:g.start,sourceEndMs:g.end,speedCap:d.maxWarpSpeed
-  }));
+  const cuts:EditDecision[]=[
+    ...warp.deadZones.map(g=>({
+      kind:d.idleStrategy==="cut"?"cut-candidate" as const:"ramp" as const,
+      sourceStartMs:g.start,sourceEndMs:g.end,speedCap:d.maxWarpSpeed
+    })),
+    ...(warp.cuts||[]).map(c=>({
+      kind:"cut" as const,outputFrame:c.outputFrame,
+      sourceStartMs:c.sourceStartMs,sourceEndMs:c.sourceEndMs,
+      speedCap:d.maxWarpSpeed
+    }))
+  ];
   const frames=warp.frameMap.map((m,i)=>{
     const diff=[...diffs].reverse().find(d=>
       i*1000/preset.export.fps>=d.outputMs &&

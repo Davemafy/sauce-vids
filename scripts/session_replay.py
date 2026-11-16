@@ -25,7 +25,7 @@ from cinematic_composite import background_focus
 from cinematic_presentation_v13 import (make_dark_stage,paint_svg_pointer,paint_click_ripple)
 from online_cursor_assets import render_cursor as render_tabler_cursor
 from cinematic_stage import CinematicStage,CinematicCursor
-from modal_depth_capture import verified_modal_background
+from modal_depth_capture import verified_modal_background,expected_modal_box
 from studio_motion_blur import directional_blur
 from studio_motion_callouts import KineticCalloutRenderer
 from spatial_parallax import inertial_tilt_track
@@ -264,6 +264,9 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         raise ValueError('Preset FramePlan must cover every output video frame')
     modal_hints=[h for h in (preset_engine.get('framePlan',{}).get('heroMoments',[]) if preset_engine else [])
                  if h.get('kind')=='modal' and h.get('box')]
+    beat_cut_frames={int(d['outputFrame']) for d in (
+        preset_engine.get('framePlan',{}).get('editDecisions',[]) if preset_engine else [])
+        if d.get('kind')=='cut' and isinstance(d.get('outputFrame'),int)}
     preset_spotlight_frames=0
     multi_plane_frames=0
     single_plane_fallback_frames=0
@@ -568,7 +571,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 if current:
                     source=highlight_code_region(source,current,z,dx,dy,
                                                  info['dpr'],factor)
-            if frame_map:
+            if frame_map and index not in beat_cut_frames:
+                # An executed cut is a discontinuity, never motion blur.
                 speed=float(frame_map[index]['speed'])
                 if preset_frames:
                     prior=preset_frames[max(0,index-1)]['camera']
@@ -610,12 +614,9 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 # The live DOM may display the modal before the delayed trace
                 # dialog-visible event. Hints only identify its expected real
                 # bounds; a genuinely visible dialog is mandatory to lift.
-                near_modal=next((h for h in modal_hints
-                     if abs(float(h['sourceMs'])-wanted_ms)<=350),None)
-                if spotlight is not None and (
-                        preset_frames[index].get('foregroundId') or near_modal):
-                    expected_box=(spotlight['box'] if
-                         preset_frames[index].get('foregroundId') else near_modal['box'])
+                expected_box=expected_modal_box(modal_hints,
+                    preset_frames[index].get('foregroundId'),wanted_ms)
+                if spotlight is not None and expected_box is not None:
                     clean=verified_modal_background(
                         page,expected_box,(source_px_h,source_px_w))
                     if clean is not None:
@@ -749,6 +750,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'preset':preset_engine['preset']['id'] if preset_engine else None,
             'preset_camera_frames':len(preset_frames) if preset_frames else 0,
             'spotlight_frames':preset_spotlight_frames,
+            'beat_cut_frames':sorted(beat_cut_frames),
             'multi_plane_frames':multi_plane_frames,
             'single_plane_fallback_frames':single_plane_fallback_frames,
             'preset_perspective_px':preset_engine['preset']['camera']['perspectivePx']
