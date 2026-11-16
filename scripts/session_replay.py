@@ -225,7 +225,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            code_root:Path|None=None,editorial_closeup:bool=False,
            editorial_geometry:Path|None=None,
            studio_motion_plan:dict|None=None,
-           raster_cache_dir:Path|None=None) -> dict:
+           raster_cache_dir:Path|None=None,
+           flagship_mode:str|None=None) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -237,6 +238,10 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         for a,b in zip(actions,stored)):
         raise ValueError('Replay action sequence differs from verified capture')
     if fps not in (30,60):raise ValueError('Supported frame rates: 30,60')
+    if flagship_mode not in (None,'clean','cinematic','experimental'):
+        raise ValueError('Unsupported flagship direction')
+    if flagship_mode and fps!=60:
+        raise ValueError('Flagship composition uses exact 60fps')
     start_ms=session['states'][0]['at_ms']
     last_ms=session['states'][-1]['at_ms']
     length=seconds if seconds is not None else (last_ms-start_ms)/1000.+.35
@@ -294,6 +299,10 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         if event['type']=='dialog-visible' and event.get('box')]
     first_dialog_ms=dialog_events[0]['t'] if dialog_events else None
     cursor,samples=cursor_motion(session['events'],start_ms,length,fps)
+    if flagship_mode and samples:
+        from spring_motion import cursor_track
+        cursor=cursor_track(samples=samples,fps=fps,duration=length,
+                            stiffness=120.,damping=18.)
     if cursor:
         cursor=align_click_positions(cursor,session['events'],start_ms,fps)
     if any(e.get('type')=='code-focus' for e in session['events']) and code_root is None:
@@ -319,14 +328,22 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     floor_config=(studio_motion_plan['stage'] if studio_motion_plan else {})
     if studio_motion_plan and not presentation_v15:
         raise ValueError('StudioMotion requires root CinematicStage')
-    root_stage=(CinematicStage(
-        enable_studio_floor=bool(floor_config.get('enabled',False)),
-        floor_reflection_intensity=float(floor_config.get('reflectionIntensity',.25))
-    ) if presentation_v15 else None)
+    if flagship_mode:
+        from flagship_stage import FlagshipStage
+        root_stage=FlagshipStage()
+    else:
+        root_stage=(CinematicStage(
+            enable_studio_floor=bool(floor_config.get('enabled',False)),
+            floor_reflection_intensity=float(floor_config.get('reflectionIntensity',.25))
+        ) if presentation_v15 else None)
+    # The old pill overlay produced a second oval and a connector line.
+    # Flagship shows only Brimble's real control and Sauce's single pointer.
     callout_renderer=(KineticCalloutRenderer(
-        studio_motion_plan.get('callouts',[]),fps=fps) if studio_motion_plan else None)
+        studio_motion_plan.get('callouts',[]),fps=fps)
+        if studio_motion_plan and not flagship_mode else None)
     root_cursor=(CinematicCursor(root_stage,session['events'],start_ms,
-                  cursor_style,cursor_scale) if root_stage else None)
+                  cursor_style,cursor_scale,show_ripple=not bool(flagship_mode))
+                  if root_stage else None)
     if root_stage:
         wx,wy,ww,wh=root_stage.window
         base,clip=None,None
@@ -431,6 +448,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             page.wait_for_timeout(260)
         page.clock.pause_at(datetime(2026,1,1,1,0,tzinfo=timezone.utc))
         hidden_decoration_count=0
+        if film_mode and not presentation_hide_selector:
+            presentation_hide_selector=session.get('presentation_hide_selector')
         if film_mode and presentation_hide_selector:
             # Strictly opt-in for specific decorative elements. Raw capture
             # evidence is unmodified; film-mode replay may hide the element
@@ -481,7 +500,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 execute_action(page,actions[next_action])
                 next_action+=1
             animated_frames+=int(page.evaluate('(ms)=>window.__sauceAnimationControls.step(ms)',wanted_ms))
-            if film_mode:
+            if film_mode and not flagship_mode:
                 # Independent CSS scale multiplies the site's native
                 # Web Animations. A physically damped 0.95 -> 1.0 emphasis
                 # only runs while the REAL modal has just opened.
@@ -528,8 +547,19 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             preset_pose=(preset_frames[index]['camera'] if preset_frames else None)
             if preset_pose:
                 z=float(preset_pose['scale'])
+                if flagship_mode in ('cinematic','experimental'):
+                    z*=1.11 if flagship_mode=='cinematic' else 1.14
                 fx=float(preset_pose['focusX'])
                 fy=float(preset_pose['focusY'])
+                if flagship_mode=='cinematic' and len(stored)>=4:
+                    # Detail shot after the verified copied-command text is
+                    # visible, never before the second real click.
+                    copied_ms=stored[3]['end_ms']-start_ms
+                    u=max(0.,min(1.,(wanted_ms-copied_ms-160.)/400.))
+                    easing=1.-(1.-u)**3
+                    z*=1.+.09*easing
+                    fx=fx+(640.-fx)*easing
+                    fy=fy+(392.-fy)*easing
             else:
                 z,fx,fy=camera[source_index]
             factor=(ww/source_px_w)*z
@@ -563,7 +593,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 if current:
                     source=highlight_code_region(source,current,z,dx,dy,
                                                  info['dpr'],factor)
-            if frame_map:
+            if frame_map and not flagship_mode:
                 speed=float(frame_map[index]['speed'])
                 if preset_frames:
                     prior=preset_frames[max(0,index-1)]['camera']
@@ -588,9 +618,13 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 frame_tilt=((float(preset_pose['rotateXDeg']),
                              float(preset_pose['rotateYDeg']))
                             if preset_pose else tilt_track[source_index])
-                perspective=(float(preset_pose['perspectivePx'])
-                             if preset_pose else 1820.)
-                active_spotlight=(preset_pose is not None and
+                if flagship_mode:
+                    frame_tilt=((0.,0.) if flagship_mode=='clean' else
+                         tuple(max(-.42,min(.42,a*.28)) for a in frame_tilt))
+                perspective=(2400. if flagship_mode else
+                    (float(preset_pose['perspectivePx'])
+                     if preset_pose else 1820.))
+                active_spotlight=(not flagship_mode and preset_pose is not None and
                      bool(preset_pose.get('spotlightActive')) and
                      bool(preset_pose.get('spotlightBox')))
                 if active_spotlight:preset_spotlight_frames+=1
@@ -605,13 +639,30 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                         callout_renderer.draw(final,index,
                             info['dpr']*factor,dx,dy,frame_tilt,root_stage.window,
                             focal=perspective)
+                    shutter=None
+                    if flagship_mode=='cinematic' and cursor and source_index>0:
+                        now_xy=cursor[source_index]
+                        prior_xy=cursor[source_index-1]
+                        shutter=(.5*(now_xy[0]-prior_xy[0])*info['dpr']*factor,
+                                 .5*(now_xy[1]-prior_xy[1])*info['dpr']*factor)
                     root_cursor.draw(final,
                         cursor[source_index] if cursor else None,wanted_ms/1000.,
-                        info['dpr']*factor,dx,dy,tilt=frame_tilt,focal=perspective)
+                        info['dpr']*factor,dx,dy,tilt=frame_tilt,focal=perspective,
+                        shutter_vector=shutter)
+                chapter=None
+                if flagship_mode:
+                    second_end=(stored[3]['end_ms']-start_ms
+                                if len(stored)>=4 else float('inf'))
+                    dialog_start=(first_dialog_ms-start_ms
+                                  if first_dialog_ms is not None else float('inf'))
+                    chapter=('01  OPEN CONNECTOR' if wanted_ms<dialog_start else
+                             ('02  CHOOSE CODEX' if wanted_ms<second_end else
+                              '03  COMMAND COPIED'))
                 output_image=root_stage.render(
                     source,cinematic_cursor=draw_overlays,tilt=frame_tilt,
                     glow=audio_levels[source_index] if audio_levels is not None else 0.,
                     perspective_px=perspective,spotlight=spotlight,
+                    **({'editorial_caption':chapter} if flagship_mode else {}),
                     diff_reveal=({'commit':diff_reveals[preset_frames[index]['diffId']],
                                   'progress':preset_frames[index]['diffProgress']}
                        if preset_frames and preset_frames[index].get('diffId') in diff_reveals
