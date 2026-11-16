@@ -81,3 +81,13 @@ test("URL film production fits mobile viewport",async({page})=>{
  const sizes=await page.evaluate(()=>[document.documentElement.scrollWidth,window.innerWidth]);
  expect(sizes[0]).toBeLessThanOrEqual(sizes[1]);
 });
+
+
+test("Shared job does not impersonate progress before pilot authorization",async({page})=>{
+ await page.route("**/api/studio/url/auth",route=>route.fulfill({
+  status:200,contentType:"application/json",body:JSON.stringify({authorized:false,configured:true}),
+ }));
+ await page.goto(prefix+"/studio?job="+id);
+ await expect(page.getByLabel("Private pilot access code")).toBeVisible();
+ await expect(page.getByRole("region",{name:"Live URL film production status"})).toHaveCount(0);
+});

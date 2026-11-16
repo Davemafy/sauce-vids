@@ -139,7 +139,7 @@ export function UrlFlowScreen(){
  const ready=job?.status==="needs_review";
  const blocked=job?.status==="needs_access";
  const failed=job?.status==="failed"||job?.status==="needs_key";
- const working=!!jobId&&!terminal;
+ const working=!!jobId&&unlocked&&!terminal;
  const showProgress=sending||working;
  const current=Math.max(0,steps.findIndex(x=>x[0]===stage));
  const total=job?.frames_total||0;
