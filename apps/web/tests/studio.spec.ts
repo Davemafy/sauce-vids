@@ -50,3 +50,65 @@ test("Landing page AFTER card plays a real 3D Launch MP4", async ({ page }) => {
   await expect(player).toHaveAttribute("src", /sauce-motion-phase2\/master-1080p60\.mp4/);
   await expect(page.getByRole("link", { name: /open sauce studio/i })).toHaveAttribute("href", /\/studio$/);
 });
+
+test("Studio render monitor reports real frame counts, survives refresh and shows an actual-ready transition", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const starting=Date.now();
+  const initial={
+    id:"brimble-3d-launch-sound",recording:"brimble",preset:"3d-launch",foley:true,
+    state:"rendering",phase:"compositing",framesRendered:60,framesTotal:252,
+    createdAt:starting-3000,updatedAt:starting,
+  };
+  let state:"rendering"|"ready"="rendering";
+  await page.route("**/api/studio/catalog", route=>route.fulfill({
+    status:200,contentType:"application/json",
+    body:JSON.stringify({available:true,recordings:[
+      {id:"brimble",title:"Brimble · Connect an agent",subtitle:"Verified interaction"},
+      {id:"sauce",title:"Sauce · Workspace creation",subtitle:"Verified interaction"},
+    ]}),
+  }));
+  await page.route("**/api/studio/jobs", route=>route.fulfill({
+    status:202,contentType:"application/json",body:JSON.stringify({job:initial}),
+  }));
+  await page.route("**/api/studio/jobs/*", route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({
+      job:state==="ready"?{
+        ...initial,state:"ready",phase:"complete",
+        previewUrl:"/sauce-app/preview.mp4",masterUrl:"/sauce-app/master.mp4",
+      }:initial,
+    }),
+  }));
+  await page.goto(prefix+"/studio");
+  await expect(page.getByRole("button",{name:"Create film"})).toBeEnabled();
+  await page.getByRole("button",{name:"Create film"}).click();
+  await expect(page.getByRole("region",{name:"Live film production status"})).toBeVisible();
+  await expect(page.getByRole("progressbar",{name:"Frames composited"})).toHaveAttribute("aria-valuenow","60");
+  await expect(page.getByText("60 / 252 frames")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("region",{name:"Live film production status"})).toBeVisible();
+  state="ready";
+  await expect(page.getByLabel("3D Launch demo video")).toBeVisible({timeout:7000});
+  await expect(page.getByText("Rendered export")).toBeVisible();
+});
+
+test("Studio render progress is readable on a mobile viewport", async ({ page }) => {
+  await page.setViewportSize({ width:390,height:844 });
+  await page.route("**/api/studio/catalog", route=>route.fulfill({
+    status:200,contentType:"application/json",
+    body:JSON.stringify({available:true,recordings:[{id:"brimble",title:"Brimble · Connect an agent",subtitle:"Verified"}]}),
+  }));
+  await page.route("**/api/studio/jobs", route=>route.fulfill({
+    status:202,contentType:"application/json",body:JSON.stringify({job:{
+      id:"brimble-3d-launch-sound",recording:"brimble",preset:"3d-launch",foley:true,
+      state:"queued",phase:"queued",createdAt:Date.now(),
+    }}),
+  }));
+  await page.goto(prefix+"/studio");
+  await page.getByRole("button",{name:"Create film"}).click();
+  const monitor=page.getByRole("region",{name:"Live film production status"});
+  await expect(monitor).toBeVisible();
+  await expect(monitor.getByText("Your film is in line.")).toBeVisible();
+  await expect(monitor.getByText("Awaiting frame data")).toBeVisible();
+  const sizes=await page.evaluate(()=>[document.documentElement.scrollWidth,innerWidth]);
+  expect(sizes[0]).toBeLessThanOrEqual(sizes[1]);
+});

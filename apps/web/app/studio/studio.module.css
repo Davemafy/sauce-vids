@@ -109,3 +109,10 @@
 .previewRender:disabled{cursor:not-allowed;opacity:.45}
 .previewRender:focus-visible{outline:2px solid #f5e4d1;outline-offset:3px}
 @media(max-width:600px){.previewHeaderActions{gap:9px}.resolution{display:none}.previewRender{padding:0 12px;min-height:34px;font-size:11px}}
+
+
+/* Production monitor takes over the preview until real encoded media exists. */
+.stageWorking{aspect-ratio:auto;min-height:405px}
+.stageWorking::before{display:none}
+.stageWorking .video{display:none}
+@media(max-width:600px){.stageWorking{min-height:405px;padding:5px}}

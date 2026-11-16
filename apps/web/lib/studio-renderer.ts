@@ -33,6 +33,10 @@ export interface RenderJob {
   foley: boolean;
   state: JobState;
   createdAt: number;
+  updatedAt?: number;
+  phase?: "queued" | "compositing" | "finishing" | "complete";
+  framesRendered?: number;
+  framesTotal?: number;
   message?: string;
   output?: string;
 }
@@ -60,6 +64,17 @@ const success = (id: string) => {
     return existsSync(name) && statSync(name).size > 100;
   });
 };
+export function parseCompositorProgress(output: string) {
+  // The frame pass has a measurable ceiling; total job duration does not.
+  const matches = [...output.matchAll(/REPLAY\s+(\d+)\s+of\s+(\d+)/g)];
+  const latest = matches.at(-1);
+  if (!latest) return null;
+  const done = Number(latest[1]);
+  const total = Number(latest[2]);
+  if (!Number.isSafeInteger(done) || !Number.isSafeInteger(total) ||
+      total <= 0 || done < 0 || done > total) return null;
+  return { done, total };
+}
 export function studioAvailable() { return enabled(); }
 export function makeJobId(recording: RecordingId, preset: Flavor, foley: boolean) {
   return `${recording}-${preset}-${foley ? "sound" : "silent"}`;
@@ -68,7 +83,9 @@ export function describeJob(job: RenderJob) {
   return {
     id: job.id, recording: job.recording, preset: job.preset,
     foley: job.foley, state: job.state,
-    message: job.message,
+    createdAt: job.createdAt, updatedAt: job.updatedAt,
+    phase: job.phase, framesRendered: job.framesRendered,
+    framesTotal: job.framesTotal, message: job.message,
     ...(job.state === "ready" ? {
       previewUrl: `${process.env.NEXT_PUBLIC_SAUCE_BASE_PATH || ""}/api/studio/jobs/${job.id}/media?type=preview`,
       masterUrl: `${process.env.NEXT_PUBLIC_SAUCE_BASE_PATH || ""}/api/studio/jobs/${job.id}/media?type=master`,
@@ -98,7 +115,9 @@ function startNext() {
   if (!job || job.state !== "queued") return startNext();
   globalThis.__sauceStudioBusy = true;
   job.state = "rendering";
-  job.message = "Rendering verified browser frames, camera, and Foley";
+  job.phase = "compositing";
+  job.updatedAt = Date.now();
+  job.message = "Preparing the verified browser-frame composition";
   const rec = RECORDINGS[job.recording];
   const root = workspace();
   const dest = outputDir(id);
@@ -120,20 +139,46 @@ function startNext() {
   if (!job.foley) args.push("--mute-audio");
   const child = spawn(python, args, {
     cwd: root,
-    stdio: ["ignore", "ignore", "pipe"],
+    stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, PYTHONUNBUFFERED: "1" },
   });
   let diagnostics = "";
+  let stdoutTail = "";
+  child.stdout.on("data", (chunk: Buffer) => {
+    // Only publish real frame counts emitted by the Sauce compositor.
+    // Never send the raw renderer's stdout or private capture paths to users.
+    stdoutTail = (stdoutTail + chunk.toString()).slice(-2048);
+    const progress = parseCompositorProgress(stdoutTail);
+    if (progress) {
+      job.framesRendered = Math.max(job.framesRendered || 0, progress.done);
+      job.framesTotal = progress.total;
+      job.updatedAt = Date.now();
+      job.message = "Compositing frame " + job.framesRendered + " of " + progress.total;
+    }
+  });
   child.stderr.on("data", (data: Buffer) => {
     diagnostics = (diagnostics + data.toString()).slice(-2000);
   });
+  const renderStartedAt = Date.now();
+  const outputCheck = setInterval(() => {
+    if (job.state !== "rendering") return;
+    const master = path.join(dest, "master-1080p60.mp4");
+    if (existsSync(master) && statSync(master).mtimeMs >= renderStartedAt) {
+      job.phase = "finishing";
+      job.updatedAt = Date.now();
+      job.message = "Master ready. Preparing the playable preview";
+    }
+  }, 3000);
   const timeout = setTimeout(() => child.kill("SIGKILL"), 240_000);
   let finished = false;
   const finish = (ok: boolean) => {
     if (finished) return;
     finished = true;
     clearTimeout(timeout);
+    clearInterval(outputCheck);
     job.state = ok && success(id) ? "ready" : "failed";
+    job.phase = job.state === "ready" ? "complete" : job.phase;
+    job.updatedAt = Date.now();
     job.output = job.state === "ready" ? dest : undefined;
     // Do not leak filesystem paths, source URLs or stderr to browsers.
     job.message = job.state === "ready" ? "Render completed" : "Render failed. Review worker logs.";
@@ -153,12 +198,15 @@ export function submitJob(recording: unknown, preset: unknown, foley: unknown) {
     throw new Error("invalid");
   const id = makeJobId(recording, preset, foley);
   if (success(id)) return getJob(id)!;
-  if (jobs.has(id)) return jobs.get(id)!;
+  const existing = jobs.get(id);
+  if (existing && existing.state !== "failed") return existing;
+  if (existing?.state === "failed") jobs.delete(id);
   // Hard bounded catalog: at most 2 recordings x 3 flavors x 2 Foley states.
   if (jobs.size >= 12) throw new Error("capacity");
   const job: RenderJob = {
     id, recording, preset, foley, state: "queued",
-    createdAt: Date.now(), message: "Waiting for the rendering worker",
+    createdAt: Date.now(), updatedAt: Date.now(), phase: "queued",
+    message: "Waiting for the rendering worker",
   };
   jobs.set(id, job); queue.push(id); startNext();
   return job;

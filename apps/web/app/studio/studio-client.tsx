@@ -2,12 +2,15 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import styles from "./studio.module.css";
+import {RenderProgress} from "./render-progress";
 
 type Flavor = "clean-studio" | "3d-launch" | "hyper-cut";
 type Recording = "brimble" | "sauce";
 type Job = {
  id:string; recording:Recording; preset:Flavor; foley:boolean;
  state:"queued"|"rendering"|"ready"|"failed"; message?:string;
+ phase?:"queued"|"compositing"|"finishing"|"complete";
+ framesRendered?:number;framesTotal?:number;createdAt?:number;updatedAt?:number;
  previewUrl?:string; masterUrl?:string;
 };
 type Catalog = {
@@ -36,11 +39,13 @@ export function StudioScreen(){
  const [foley,setFoley]=useState(true);
  const [job,setJob]=useState<Job|null>(null);
  const [sending,setSending]=useState(false);
+ const [connectionLost,setConnectionLost]=useState(false);
  const [error,setError]=useState("");
  const [soundOn,setSoundOn]=useState(false);
  const flavor=flavors.find(f=>f.id===preset)!;
  const reference=recording==="brimble"&&preset==="3d-launch"&&foley;
- const videoSrc=job?.state==="ready"?job.previewUrl:reference?publicDemo:undefined;
+ const isWorking=sending||job?.state==="queued"||job?.state==="rendering";
+ const videoSrc=job?.state==="ready"?job.previewUrl:!job&&reference?publicDemo:undefined;
  const poster=reference?publicPoster:undefined;
  const activeVideo=useMemo(()=>`${recording}-${preset}-${foley}-${job?.id||"ref"}`,[recording,preset,foley,job?.id]);
  useEffect(()=>{
@@ -51,22 +56,48 @@ export function StudioScreen(){
   return ()=>{alive=false;};
  },[]);
  useEffect(()=>{
+  // A reload should reconnect to the real job, not reset the screen to idle.
+  const saved=window.sessionStorage.getItem("sauce-studio-job");
+  if(!saved || !/^(brimble|sauce)-(clean-studio|3d-launch|hyper-cut)-(sound|silent)$/.test(saved))return;
+  let alive=true;
+  fetch(basePath+"/api/studio/jobs/"+encodeURIComponent(saved),{cache:"no-store"})
+    .then(r=>{if(!r.ok)throw new Error("Job is no longer available");return r.json();})
+    .then((data:{job:Job})=>{
+      if(!alive||!data.job)return;
+      setRecording(data.job.recording);setPreset(data.job.preset);setFoley(data.job.foley);
+      setJob(data.job);
+    }).catch(()=>{window.sessionStorage.removeItem("sauce-studio-job");});
+  return ()=>{alive=false;};
+ },[]);
+ useEffect(()=>{
   if(!job||!["queued","rendering"].includes(job.state))return;
   let alive=true;
   const timer=setInterval(()=>{
    fetch(`${basePath}/api/studio/jobs/${encodeURIComponent(job.id)}`,{cache:"no-store"})
-    .then(r=>{if(!r.ok)throw new Error("Status check failed");return r.json();})
-    .then((data:{job:Job})=>{if(alive&&data.job)setJob(data.job);})
-    .catch(()=>{if(alive)setError("Could not refresh the render status.");});
+    .then(r=>{
+      if(r.status===404) {
+        setJob(current=>current?{...current,state:"failed",message:"Render worker restarted. Start this film again."}:null);
+        window.sessionStorage.removeItem("sauce-studio-job");
+        throw new Error("Job no longer exists");
+      }
+      if(!r.ok)throw new Error("Status check failed");
+      return r.json();
+    })
+    .then((data:{job:Job})=>{
+      if(!alive)return;
+      if(data.job){setJob(data.job);setConnectionLost(false);}
+    })
+    .catch(()=>{if(alive)setConnectionLost(true);});
   },1600);
   return ()=>{alive=false;clearInterval(timer);};
  },[job?.id,job?.state]);
  const change= (next:Recording,flavor:Flavor,sound:boolean)=>{
-  setRecording(next);setPreset(flavor);setFoley(sound);setJob(null);setError("");setSoundOn(false);
+  setRecording(next);setPreset(flavor);setFoley(sound);setJob(null);setError("");setConnectionLost(false);setSoundOn(false);
+  window.sessionStorage.removeItem("sauce-studio-job");
  };
  async function render(){
   if(!catalog.available||sending)return;
-  setSending(true);setJob(null);setError("");
+  setSending(true);setJob(null);setError("");setConnectionLost(false);
   try{
    const response=await fetch(`${basePath}/api/studio/jobs`,{
     method:"POST",headers:{"Content-Type":"application/json"},
@@ -75,6 +106,7 @@ export function StudioScreen(){
    const data=await response.json();
    if(!response.ok||!data.job)throw new Error(data.error||"Could not start render");
    setJob(data.job as Job);
+   window.sessionStorage.setItem("sauce-studio-job",(data.job as Job).id);
   }catch(e){setError(e instanceof Error?e.message:"Could not start render");}
   finally{setSending(false);}
  }
@@ -158,8 +190,10 @@ export function StudioScreen(){
          </button>
        </div>
       </div>
-      <div className={styles.stage}>
-       {videoSrc?
+      <div className={[styles.stage,isWorking?styles.stageWorking:""].join(" ")} aria-busy={isWorking}>
+       {isWorking?
+        <RenderProgress job={job} sending={sending} title={catalog.recordings.find(r=>r.id===recording)?.title||recording} flavor={flavor.name} connectionLost={connectionLost}/>:
+       videoSrc?
         <video key={activeVideo} controls autoPlay muted={!soundOn} playsInline
           preload="metadata" poster={poster} className={styles.video} src={videoSrc}
           aria-label={`${flavor.name} demo video`}/>:
@@ -171,8 +205,8 @@ export function StudioScreen(){
        }
       </div>
       <div className={styles.previewBottom}>
-       <div><strong>{job?.state==="ready"?"Rendered export":videoSrc?"Reference film":"Awaiting render"}</strong>
-         <p>{job?.state==="ready"?"The result above was generated by the real Sauce engine.":videoSrc?"Brimble, rendered with the 3D Launch preset.":"The selected preset has not been rendered yet."}</p>
+       <div><strong>{isWorking?"Producing your film":job?.state==="ready"?"Rendered export":job?.state==="failed"?"Render unsuccessful":videoSrc?"Reference film":"Awaiting render"}</strong>
+         <p>{isWorking?"Live renderer updates appear above. Frame counts are measured, not estimated.":job?.state==="ready"?"The result above was generated by the real Sauce engine.":job?.state==="failed"?"The export did not complete. You can try this preset again.":videoSrc?"Brimble, rendered with the 3D Launch preset.":"The selected preset has not been rendered yet."}</p>
        </div>
        <div className={styles.previewActions}>
         {videoSrc&&<button type="button" className={styles.soundButton}
