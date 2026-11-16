@@ -82,20 +82,15 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             deterministic_frame_cache:Path|None=None,
             preset:str|None=None,foley_assets:Path|None=None,
             music_track:Path|None=None,mute_audio:bool=False,
-            foley_volume:float|None=None,
-            flagship_mode:str|None=None)->dict:
+            foley_volume:float|None=None)->dict:
     enforce_hidpi(dpr)
-    if flagship_mode not in (None,'clean','cinematic','experimental'):
-        raise ValueError('Unknown flagship mode')
-    if flagship_mode and not preset:preset='3d-launch'
     if cursor_style not in ('ink','outline'):raise ValueError('Unsupported pointer style')
     if not .35<=cursor_scale<=1:raise ValueError('Invalid cursor scale')
     if not workflow.is_file():raise FileNotFoundError(workflow)
     if url:
         from session_capture import record
         actions=json.loads(workflow.read_text())
-        record(url,actions,session_dir,width=1280,height=720,dpr=dpr,capture_har=True,
-               presentation_hide_selector=presentation_hide_selector)
+        record(url,actions,session_dir,width=1280,height=720,dpr=dpr,capture_har=True)
     else:
         if not (session_dir/'session.json').is_file():
             raise FileNotFoundError('Provide an existing verified session or --url')
@@ -129,24 +124,6 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         raise ValueError('floorReflectionIntensity must be between 0 and .5')
     if callout_cooldown_ms<0:raise ValueError('calloutCooldownMs must be nonnegative')
     studio_plan=None
-    motion_overrides={}
-    if flagship_mode:
-        mode=flagship_mode
-        # Keep actual source UI in context; selected shot accents are capped.
-        motion_overrides={
-          'camera':{
-            'mode':'flat' if mode=='clean' else 'perspective',
-            'maxTiltDeg':0 if mode=='clean' else (.7 if mode=='cinematic' else 1.15),
-            'scaleRange':[1,1.045 if mode=='clean' else (1.085 if mode=='cinematic' else 1.09)],
-            'spring':{'stiffness':120,'damping':18,'mass':1},
-            'spotlight':{'enabled':False,'blurPx':0,'dimOpacity':0}},
-          'director':{'idleStrategy':'hold','maxWarpSpeed':1,
-                      'callouts':{'enabled':False,'cooldownMs':2500,'maxLifetimeMs':1800}},
-          'stage':{'floorReflectionIntensity':0,'contactShadow':False,'ambientShadow':False},
-          'sound':{'enabled':True,'masterGain':.25,'musicGain':0.}
-        }
-        if mute_audio:motion_overrides['sound']['muted']=True
-        if foley_volume is not None:motion_overrides['sound']['masterGain']=foley_volume
     if studio_enabled:
         from studio_motion_bridge import plan_studio_motion
         studio_plan=plan_studio_motion(session,real_duration,FPS,{
@@ -158,10 +135,9 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             'calloutCooldownMs':callout_cooldown_ms,
             'maxCalloutLifetimeMs':1800},
             preset=preset,session_dir=session_dir,preset_overrides=(
-              motion_overrides if flagship_mode else
-              ({'sound':dict({'muted':bool(mute_audio)},
+              {'sound':dict({'muted':bool(mute_audio)},
                     **({'masterGain':foley_volume} if foley_volume is not None else {}))}
-              if preset and (mute_audio or foley_volume is not None) else None)))
+              if preset and (mute_audio or foley_volume is not None) else None))
     if audio_track is not None:
         # Keep importable contract and player utilities dependency-free in
         # standard Python CI. Scientific audio dependencies are only needed
@@ -172,21 +148,18 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         rms=None
     # HDR/offscreen replay's own time-step clock is independent of export fps.
     report=replay(session_dir,workflow,master,fps=FPS,seconds=seconds,
-        har=(session_dir/'network.har').is_file(),backdrop_focus=not bool(flagship_mode),
+        har=(session_dir/'network.har').is_file(),backdrop_focus=True,
         presentation_v15=True,cursor_style=cursor_style,
         cursor_scale=cursor_scale,
         presentation_hide_selector=presentation_hide_selector,
         spatial_parallax=spatial_parallax,audio_levels=rms,code_root=code_root,
         editorial_closeup=editorial_closeup,editorial_geometry=editorial_geometry,
-        studio_motion_plan=studio_plan,raster_cache_dir=deterministic_frame_cache,
-        flagship_mode=flagship_mode)
+        studio_motion_plan=studio_plan,raster_cache_dir=deterministic_frame_cache)
     if not report['verified_semantics'] or not report['visual_region_checks']:
         raise RuntimeError('Replay must pass semantic and visual-region checks')
-    expected_window=([138,78,1644,924] if flagship_mode else [220,124,1480,832])
-    expected_background=('#161819' if flagship_mode else '#090a0f')
     if (not report.get('cinematic_stage_root') or
-        report.get('cinematic_stage_window') != expected_window or
-        report.get('cinematic_stage_background') != expected_background or
+        report.get('cinematic_stage_window') != [220,124,1480,832] or
+        report.get('cinematic_stage_background') != '#090a0f' or
         report.get('cursor_component') != 'CinematicCursor'):
         raise RuntimeError('CinematicStage root compositor is mandatory for production')
     verify_mp4(master,*MASTER_SIZE,FPS)
@@ -195,7 +168,7 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         from postprocess_webgl_video import apply_video
         webgl_master=out_dir/'webgl-master-1080p60.mp4'
         shader_uniforms=None
-        stage_fx=preset in ('3d-launch','hyper-cut') and not flagship_mode
+        stage_fx=preset in ('3d-launch','hyper-cut')
         if stage_fx:
             from foley_mixer import foley_shader_envelopes
             shader_uniforms=foley_shader_envelopes(
@@ -280,10 +253,9 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         'player_template':'sauce-premium-player-template.html',
         'root_component':'CinematicStage',
         'cursor_component':'CinematicCursor',
-        'window':expected_window,
+        'window':[220,124,1480,832],
         'editorial_closeup':bool(editorial_closeup),
-        'stage_background':expected_background,
-        'flagship_mode':flagship_mode,
+        'stage_background':'#090a0f',
         'glow_blur_px':140,
         'window_backdrop_blur_px':24,
         'webgl_optics':webgl_report,
@@ -311,8 +283,6 @@ def main():
     source.add_argument('--url',help='Public/authorized website to capture')
     source.add_argument('--session',type=Path,help='Existing raw Sauce session directory')
     p.add_argument('--workflow',type=Path,required=True)
-    p.add_argument('--flagship-mode',choices=('clean','cinematic','experimental'),
-                   help='Optional evidence-led flagship composition')
     p.add_argument('--out',type=Path,required=True,
                    help='Separate public-safe export directory')
     p.add_argument('--dpr',type=int,choices=DPR_CHOICES,default=DEFAULT_DPR)
@@ -380,7 +350,7 @@ def main():
         deterministic_frame_cache=args.deterministic_frame_cache,
         preset=args.preset,foley_assets=args.foley_assets,
         music_track=args.music_track,mute_audio=args.mute_audio,
-        foley_volume=args.foley_volume,flagship_mode=args.flagship_mode),indent=2))
+        foley_volume=args.foley_volume),indent=2))
 
 
 if __name__=='__main__':main()

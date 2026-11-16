@@ -352,18 +352,15 @@ class CinematicStage:
 class CinematicCursor:
     """Sole visible film pointer, linked to the verified Spring2D trace."""
     def __init__(self,stage:CinematicStage,events:list[dict],
-                 start_ms:float,style:str='ink',scale:float=.56,
-                 show_ripple:bool=True):
+                 start_ms:float,style:str='ink',scale:float=.56):
         if not .35<=scale<=1:raise ValueError('Cursor scale out of bounds')
         if style not in ('ink','outline'):raise ValueError('Unsupported cursor style')
         self.stage,self.events,self.start_ms,self.style,self.scale=(
             stage,events,start_ms,style,scale)
-        self.show_ripple=show_ripple
 
     def draw(self,output:np.ndarray,position:tuple[float,float]|None,
              t:float,source_factor:float,shift_x:float,shift_y:float,
-             tilt:tuple[float,float]=(0.,0.),focal:float=1820.,
-             shutter_vector:tuple[float,float]|None=None)->None:
+             tilt:tuple[float,float]=(0.,0.),focal:float=1820.)->None:
         from cinematic_presentation_v13 import _blend,click_ring_frames
         from reference_cursor_v15 import load_cursor,press_scale
         if position is None:return
@@ -375,8 +372,8 @@ class CinematicCursor:
                 px,py=map_pointer(homography,px,py)
             return round(px),round(py)
         # Click ripple under pointer, tied to actual pointerdown timestamp.
-        rings=click_ring_frames() if self.show_ripple else []
-        for ev in self.events if self.show_ripple else ():
+        rings=click_ring_frames()
+        for ev in self.events:
             if ev['type']!='pointerdown' or ev.get('x') is None:continue
             age=t-(ev['t']-self.start_ms)/1000.
             if not 0<=age<.33:continue
@@ -399,9 +396,6 @@ class CinematicCursor:
             height=max(2,round(art.shape[0]*scale))
             art=np.asarray(PILImage.fromarray(art,'RGBA').resize(
                 (width,height),PILImage.Resampling.LANCZOS),dtype=np.uint8)
-        if shutter_vector is not None:
-            from flagship_motion import cursor_shutter_art
-            art=cursor_shutter_art(art,shutter_vector,contact_locked=(age is not None))
         x,y=point(ox+shift_x+position[0]*source_factor,
                   oy+shift_y+position[1]*source_factor)
         _blend(output,art,round(x-image.hotspot[0]*scale),

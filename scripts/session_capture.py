@@ -248,8 +248,7 @@ def run_workflow(page,actions:list[dict],images:Path,trace:list[dict]) -> list[d
 
 def record(url:str, actions:list[dict],output:Path,
            width:int=1280,height:int=720,dpr:int=DEFAULT_DPR,
-           capture_har:bool=False,browser_binary:str|None=None,
-           presentation_hide_selector:str|None=None) -> dict:
+           capture_har:bool=False,browser_binary:str|None=None) -> dict:
     validate_actions(actions)
     if not (320<=width<=2560 and 240<=height<=1440):
         raise ValueError('Viewport outside safe bounds')
@@ -285,19 +284,6 @@ def record(url:str, actions:list[dict],output:Path,
         if response and response.status>=400:raise RuntimeError('Page returned '+str(response.status))
         page.evaluate(CAPTURE_JS)
         page.add_style_tag(content=MOCKUP_SCROLLBAR_STYLE)
-        if presentation_hide_selector:
-            # A specifically authorized decorative cursor, not actual UI,
-            # is suppressed before capturing SHA-backed evidence.
-            selector=presentation_hide_selector
-            if (len(selector)>180 or any(k in selector for k in '{};<>') or
-                not selector.startswith('img[src*="bee-cutout-"')):
-                raise ValueError('Unsupported decorative pointer selector')
-            count=page.locator(selector).count()
-            if count<1:raise RuntimeError('Decorative pointer asset not found')
-            page.add_style_tag(content=selector+' { visibility:hidden !important; }')
-            if page.locator(selector).first.evaluate(
-                   '(e)=>getComputedStyle(e).visibility')!='hidden':
-                raise RuntimeError('Decorative pointer suppression failed')
         page.wait_for_timeout(500)
         # The opening composition is the relevant product surface, not an
         # unrelated homepage above the clicked UI. Stage this before t=0.
@@ -327,7 +313,6 @@ def record(url:str, actions:list[dict],output:Path,
              'states':states,'replay_status':'unverified',
              'capture_elapsed_wall_s':round(time.monotonic()-started,3),
              'har':'network.har' if capture_har else None,
-             'presentation_hide_selector':presentation_hide_selector,
              'warnings':['Screenshots are actual Chromium pixels. An event log alone cannot reconstruct arbitrary page state.',
                'Text input values are intentionally not stored. Supply a separate authorized workflow to replay inputs.',
                'A HAR can contain private data: keep recordings local and review before sharing.']}
