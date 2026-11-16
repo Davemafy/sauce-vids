@@ -309,6 +309,10 @@ def record(url:str, actions:list[dict],output:Path,
         browser=pw.chromium.launch(headless=True,executable_path=chrome,
                 args=['--no-sandbox','--disable-dev-shm-usage'])
         context=browser.new_context(**opts)
+        if os.environ.get('SAUCE_SAFE_PUBLIC_ONLY') == '1':
+            from capture_safety import validate_public_url, guard_route
+            validate_public_url(url)
+            context.route('**/*', guard_route)
         install_presentation_cleanup(context)
         context.add_init_script(CAPTURE_JS)
         page=context.new_page()

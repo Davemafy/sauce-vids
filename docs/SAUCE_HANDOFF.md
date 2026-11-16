@@ -250,3 +250,24 @@ traversal or independent nondeterministic live-replay fix. Font tokens are
 captured for future typography-aware decisions, but the renderer does not
 replace source typography. Never claim that every website exposes a
 trustworthy brand palette; neutral fallback is intentional.
+
+
+## Private URL-to-video backend alpha, 16 November 2026
+
+The owner requested an incremental backend URL -> film pipeline using the
+**existing** Sauce renderer, one optional Gemini vision call, and feedback
+for subsequent decisions. Implemented in backend/url2video.py and
+backend/sauce_api.py, with public network guard under scripts/capture_safety.py.
+A localhost-only systemd service is running on the Vultr host at
+127.0.0.1:8767; authentication is a strong per-host bearer token, stored
+outside Git. The configured AI secret GEMINI_API_KEY is **not present**,
+so no live AI-directed film has been produced or claimed. The GET-only
+Paldey inspector returned 17 headings and 45 visible controls.
+The old VM code at 77a5311 was used for that deployment and differs from
+the newer remote main; source publication is rebased onto latest remote main
+without clobbering its brand-extraction, motion, or depth changes.
+Run /opt/sauce-vids/.venv/bin/python -m pytest -q tests for the VM state:
+176 passed, 5 skipped, 43 subtests passed (plus separate API/Paldey probes).
+No creative quality signoff; every future MP4 is gated on human review and
+the current auto workflow supports only non-mutating scroll/hover.
+See docs/url-to-video-backend.md for key setup, API paths, privacy and limits.
