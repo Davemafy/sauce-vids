@@ -15,6 +15,7 @@ from multi_plane_depth import focus_background_plane,composite_elevated_modal
 from multi_plane_depth import focus_background_plane,composite_elevated_modal
 from multi_plane_depth import focus_background_plane,composite_elevated_modal
 from PIL import Image, ImageDraw, ImageFilter
+from procedural_backdrops import procedural_backdrop, STYLES
 
 MASTER_WIDTH,MASTER_HEIGHT=1920,1080
 STAGE_BACKGROUND=(9,10,15)   # #090a0f
@@ -39,22 +40,14 @@ def _mix_color(base:Image.Image,mask:Image.Image,color:tuple[int,int,int])->None
     base.paste(color,(0,0),mask)
 
 
-@lru_cache(maxsize=1)
-def _stage_base()->tuple[np.ndarray,np.ndarray,np.ndarray]:
-    """Build the stage once; every output frame shares identical typography-safe background."""
-    image=Image.new('RGB',(MASTER_WIDTH,MASTER_HEIGHT),STAGE_BACKGROUND)
-    # Two broad, blurred gradient blooms below the frame. No color is
-    # projected over the website: only the canvas behind the window.
-    for x,y,rx,ry,color,alpha in (
-        (470,610,425,370,(74,88,171),173),
-        (1535,405,395,345,(123,74,149),144),
-        (980,910,430,260,(63,83,124),91),
-    ):
-        mask=Image.new('L',(MASTER_WIDTH,MASTER_HEIGHT),0)
-        ImageDraw.Draw(mask).ellipse((x-rx,y-ry,x+rx,y+ry),fill=alpha)
-        _mix_color(image,mask.filter(ImageFilter.GaussianBlur(GLOW_BLUR)),color)
-
-    ambient=np.asarray(image,dtype=np.uint8)[:,:,::-1].copy()
+@lru_cache(maxsize=3)
+def _stage_base(backdrop_style:str='obsidian-grain')->tuple[np.ndarray,np.ndarray,np.ndarray]:
+    """Key the full stage cache by material; never return a stale flat plate."""
+    # Procedural material is static in the output clock and appears ONLY
+    # behind the original H0/H60 browser/window, never above UI text.
+    material=procedural_backdrop(backdrop_style,MASTER_WIDTH,MASTER_HEIGHT)
+    image=Image.fromarray(material[:,:,::-1].copy(),mode='RGB')
+    ambient=material.copy()
     left,top=WINDOW_X,WINDOW_Y
     right,bottom=left+WINDOW_WIDTH,top+WINDOW_HEIGHT
     # Render wide-diffusion shadows before drawing the window surface.
@@ -282,12 +275,15 @@ class CinematicStage:
     window_w:int=WINDOW_WIDTH
     window_h:int=WINDOW_HEIGHT
     background_hex:str='#090a0f'
+    backdrop_style:str='obsidian-grain'
     enable_studio_floor:bool=False
     floor_reflection_intensity:float=.25
 
     def __post_init__(self):
         if (self.width,self.height)!=(MASTER_WIDTH,MASTER_HEIGHT):
             raise ValueError('Production stage is fixed to 1920x1080')
+        if self.backdrop_style not in STYLES:
+            raise ValueError('Invalid procedural stage style')
         if not 0<=self.floor_reflection_intensity<=.5:
             raise ValueError('Floor intensity must be between 0 and .5')
         if (self.window_x,self.window_y,self.window_w,self.window_h)!=(
@@ -313,7 +309,7 @@ class CinematicStage:
         if website_frame.shape!=(self.window_h,self.window_w,3):
             raise ValueError('Source must be resized to the root window before wrapping')
         if not 0.<=glow<=1.:raise ValueError('RMS-driven glow must be normalized 0..1')
-        base,alpha,ambient=_stage_base()
+        base,alpha,ambient=_stage_base(self.backdrop_style)
         flat=base.copy()
         x,y,w,h=self.window
         region=flat[y:y+h,x:x+w]

@@ -31,7 +31,7 @@ from studio_motion_callouts import KineticCalloutRenderer
 from spatial_parallax import inertial_tilt_track
 from code_semantics import (plan_focus_cues,semantic_camera_track,
                             active_code_focus,highlight_code_region)
-from session_capture import MOCKUP_SCROLLBAR_STYLE
+from session_capture import PRESENTATION_CLEANUP_STYLE, install_presentation_cleanup
 from cinematic_spec import CURSOR_FILM_SCALE,enforce_hidpi,MASTER_SIZE
 from cinematic_presentation_v12 import (draw_stage,compose_cursor,click_feedback,
     modal_spring_scale,WINDOW_X as PRESENT_X,WINDOW_Y as PRESENT_Y,
@@ -330,9 +330,12 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     # Film frames are ALWAYS wrapped by the root compositor in production.
     # Older v12-v14 renderers are retained for deliberate A/B only.
     floor_config=(studio_motion_plan['stage'] if studio_motion_plan else {})
+    backdrop_style=(preset_engine['preset']['stage']['backdropStyle']
+                    if preset_engine else 'obsidian-grain')
     if studio_motion_plan and not presentation_v15:
         raise ValueError('StudioMotion requires root CinematicStage')
     root_stage=(CinematicStage(
+        backdrop_style=backdrop_style,
         enable_studio_floor=bool(floor_config.get('enabled',False)),
         floor_reflection_intensity=float(floor_config.get('reflectionIntensity',.25))
     ) if presentation_v15 else None)
@@ -425,6 +428,10 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            'device_scale_factor':info['dpr'],'service_workers':'block',
            'permissions':['clipboard-read','clipboard-write']}
         context=browser.new_context(**options)
+        # Install before navigation, including frame zero. Identical rules
+        # are used for first capture and deterministic browser replay.
+        if film_mode:
+            install_presentation_cleanup(context)
         if har:
             path=session_dir/'network.har'
             if not path.is_file():raise FileNotFoundError(path)
@@ -459,8 +466,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             else:
                 raise RuntimeError('Requested presentation element not found: '+selector)
         if film_mode:
-            # Hide grey native scrollbars in drawers without disabling scrolling.
-            page.add_style_tag(content=MOCKUP_SCROLLBAR_STYLE)
+            # Reinforce cleanup after hydration if the app replaced <head>.
+            page.add_style_tag(content=PRESENTATION_CLEANUP_STYLE)
         if vector_mode:
             # Chromium only renders the REAL app; SVG cursor is composited
             # in the video layer. Hide every native/DOM CSS cursor state.
@@ -822,6 +829,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'audio_reactive_frames':len(audio_levels) if audio_levels is not None else 0,
             'cinematic_stage_window':list(root_stage.window) if root_stage else None,
             'cinematic_stage_background':root_stage.background_hex if root_stage else None,
+            'procedural_backdrop_style':root_stage.backdrop_style if root_stage else None,
             'cinematic_stage_glow_blur':140 if root_stage else None,
             'cinematic_stage_backdrop_blur':24 if root_stage else None,
             'cursor_component':'CinematicCursor' if root_stage else None,

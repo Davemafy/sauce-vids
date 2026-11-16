@@ -363,3 +363,20 @@ test("camera releases dialog only on an observed close event",()=>{
   assert.ok(closed.camera.scale<1.10);
   assert.equal(closed.camera.spotlightBox,null);
 });
+
+test("3D Launch stage selects fluted glass; validated overrides stay deterministic",()=>{
+  const threeD=resolvePreset("3d-launch");
+  assert.equal(threeD.stage.backdropStyle,"fluted-glass");
+  assert.equal(resolvePreset("clean-studio").stage.backdropStyle,"obsidian-grain");
+  assert.equal(resolvePreset("hyper-cut").stage.backdropStyle,"chromatic-bloom");
+  const override=resolvePreset("3d-launch",{stage:{backdropStyle:"chromatic-bloom"}});
+  assert.equal(override.stage.backdropStyle,"chromatic-bloom");
+  assert.equal(resolvePreset("3d-launch").stage.backdropStyle,"fluted-glass");
+  assert.throws(()=>resolvePreset("3d-launch",
+    {stage:{backdropStyle:"unrecognized"}}));
+  assert.deepEqual(threeD.camera.spring,{mass:1,stiffness:180,damping:24});
+  assert.equal(threeD.camera.perspectivePx,1200);
+  assert.equal(threeD.camera.spotlight.blurPx,6);
+  assert.deepEqual(buildMotionEnginePlan(input("3d-launch")).preset.stage,
+    threeD.stage);
+});

@@ -109,6 +109,7 @@ export interface SaucePreset {
     floorReflectionIntensity:number;
     contactShadow:boolean;
     ambientShadow:boolean;
+    backdropStyle:"obsidian-grain"|"fluted-glass"|"chromatic-bloom";
   };
   sound:{
     enabled:boolean;

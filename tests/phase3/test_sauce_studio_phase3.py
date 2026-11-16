@@ -12,7 +12,7 @@ import pytest
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/"scripts"))
 from click_anchor import align_click_positions
-from session_capture import MOCKUP_SCROLLBAR_STYLE
+from session_capture import MOCKUP_SCROLLBAR_STYLE,PRESENTATION_CLEANUP_STYLE
 from studio_motion_callouts import KineticCalloutRenderer
 
 
@@ -21,7 +21,7 @@ def test_scrollbars_are_visually_hidden_not_disabled():
     assert "display: none !important" in MOCKUP_SCROLLBAR_STYLE
     assert "scrollbar-width: none" in MOCKUP_SCROLLBAR_STYLE
     source=(ROOT/"scripts/session_replay.py").read_text()
-    assert "page.add_style_tag(content=MOCKUP_SCROLLBAR_STYLE)" in source
+    assert "page.add_style_tag(content=PRESENTATION_CLEANUP_STYLE)" in source
 
 
 def test_click_anchor_exact_recorded_position():

@@ -162,6 +162,10 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         report.get('cinematic_stage_background') != '#090a0f' or
         report.get('cursor_component') != 'CinematicCursor'):
         raise RuntimeError('CinematicStage root compositor is mandatory for production')
+    expected_material=(studio_plan['motionEngine']['preset']['stage']['backdropStyle']
+                       if preset is not None else 'obsidian-grain')
+    if report.get('procedural_backdrop_style') != expected_material:
+        raise RuntimeError('Rendered stage material does not match selected preset')
     verify_mp4(master,*MASTER_SIZE,FPS)
     webgl_report=None
     if webgl_optics:
@@ -256,6 +260,7 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         'window':[220,124,1480,832],
         'editorial_closeup':bool(editorial_closeup),
         'stage_background':'#090a0f',
+        'procedural_backdrop_style':report['procedural_backdrop_style'],
         'glow_blur_px':140,
         'window_backdrop_blur_px':24,
         'webgl_optics':webgl_report,

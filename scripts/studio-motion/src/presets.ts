@@ -14,7 +14,8 @@ const BASE:SaucePreset={
     actionPreRollMs:400,actionPostRollMs:300,heroScoreThreshold:70,
     callouts:{enabled:false,cooldownMs:2500,maxLifetimeMs:1800}
   },
-  stage:{floorReflectionIntensity:0,contactShadow:false,ambientShadow:false},
+  stage:{floorReflectionIntensity:0,contactShadow:false,ambientShadow:false,
+    backdropStyle:"obsidian-grain"},
   sound:{
     enabled:false,muted:false,masterGain:.32,musicGain:.12,
     ducking:{enabled:true,attenuationDb:-9,attackMs:35,releaseMs:220},
@@ -38,7 +39,8 @@ const registry:Record<SauceFlavor,SaucePreset>={
       heroScoreThreshold:65,
       callouts:{enabled:true,cooldownMs:2500,maxLifetimeMs:1800}
     },
-    stage:{floorReflectionIntensity:.25,contactShadow:true,ambientShadow:true},
+    stage:{floorReflectionIntensity:.25,contactShadow:true,ambientShadow:true,
+      backdropStyle:"fluted-glass"},
     sound:{...BASE.sound,enabled:true,masterGain:.31,musicGain:.10}
   },
   "hyper-cut":{
@@ -54,7 +56,8 @@ const registry:Record<SauceFlavor,SaucePreset>={
       idleThresholdMs:600,heroScoreThreshold:60,
       callouts:{enabled:true,cooldownMs:2200,maxLifetimeMs:1400}
     },
-    stage:{floorReflectionIntensity:.12,contactShadow:true,ambientShadow:true},
+    stage:{floorReflectionIntensity:.12,contactShadow:true,ambientShadow:true,
+      backdropStyle:"chromatic-bloom"},
     sound:{...BASE.sound,enabled:true,masterGain:.36,musicGain:.08}
   }
 };
@@ -114,6 +117,8 @@ export function validatePreset(input:SaucePreset):SaucePreset{
   range(s.floorReflectionIntensity,0,.5,"floorReflectionIntensity");
   if(typeof s.contactShadow!=="boolean"||typeof s.ambientShadow!=="boolean")
     throw new Error("Invalid shadows");
+  if(!["obsidian-grain","fluted-glass","chromatic-bloom"].includes(s.backdropStyle))
+    throw new Error("Invalid backdropStyle");
   if(typeof f.enabled!=="boolean"||typeof f.muted!=="boolean"||
      typeof f.ducking.enabled!=="boolean")throw new Error("Invalid audio toggles");
   range(f.masterGain,0,1,"masterGain");

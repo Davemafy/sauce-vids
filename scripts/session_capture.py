@@ -20,6 +20,49 @@ MOCKUP_SCROLLBAR_STYLE = (
     "::-webkit-scrollbar, *::-webkit-scrollbar { display: none !important; "
     "width: 0 !important; height: 0 !important; }"
 )
+# Presentation-only support overlays: Brimble's blue launcher is Chatwoot's
+# .woot-widget-bubble (title="Open chat window", no aria-label). The generic
+# aria-label selector alone misses it. Hide only known floating support chrome.
+PRESENTATION_WIDGET_STYLE = (
+    '#intercom-container, .crisp-client, '
+    '#hubspot-messages-iframe-container, '
+    '.woot-widget-bubble, .woot-widget-holder, .woot--bubble-holder, '
+    '[aria-label*="chat" i] {'
+    ' display: none !important; visibility: hidden !important; '
+    ' pointer-events: none !important; }'
+)
+PRESENTATION_CLEANUP_STYLE = MOCKUP_SCROLLBAR_STYLE + ' ' + PRESENTATION_WIDGET_STYLE
+
+
+def install_presentation_cleanup(context) -> None:
+    """Install CSS before navigation so frame zero cannot capture a widget."""
+    # Chromium init scripts run again for fresh documents; dynamically
+    # mounted support widgets inherit the rule without DOM mutation polling.
+    js = """(() => {
+      const css = %s;
+      const install = () => {
+        if (document.getElementById('sauce-presentation-cleanup')) return;
+        const root=document.head || document.documentElement;
+        if (!root) return;
+        const style = document.createElement('style');
+        style.id = 'sauce-presentation-cleanup';
+        style.textContent = css;
+        root.appendChild(style);
+      };
+      // Brimble's hydration can replace <head> and discard an early style.
+      // Observe only child additions/removals; a removed rule is restored.
+      const observer = new MutationObserver(install);
+      const arm = () => {
+        if (document.documentElement)
+          observer.observe(document.documentElement,{childList:true,subtree:true});
+        install();
+      };
+      arm();
+      document.addEventListener('DOMContentLoaded',arm,{once:true});
+    })();""" % json.dumps(PRESENTATION_CLEANUP_STYLE)
+    context.add_init_script(js)
+
+
 CAPTURE_JS=r"""
 (() => {
  if (window.__sauceCapture) return;
@@ -265,25 +308,13 @@ def record(url:str, actions:list[dict],output:Path,
         browser=pw.chromium.launch(headless=True,executable_path=chrome,
                 args=['--no-sandbox','--disable-dev-shm-usage'])
         context=browser.new_context(**opts)
+        install_presentation_cleanup(context)
         context.add_init_script(CAPTURE_JS)
-        # Runs in every new page before the first stylesheet paint.
-        context.add_init_script("""(() => {
-          const css = 'html,body,html *{scrollbar-width:none!important}' +
-            '::-webkit-scrollbar,*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}';
-          const install = () => {
-            if (document.getElementById('sauce-hidden-scrollbars')) return;
-            const el=document.createElement('style');
-            el.id='sauce-hidden-scrollbars'; el.textContent=css;
-            (document.head||document.documentElement).appendChild(el);
-          };
-          install();
-          if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',install,{once:true});
-        })();""")
         page=context.new_page()
         response=page.goto(url,wait_until='domcontentloaded',timeout=35000)
         if response and response.status>=400:raise RuntimeError('Page returned '+str(response.status))
         page.evaluate(CAPTURE_JS)
-        page.add_style_tag(content=MOCKUP_SCROLLBAR_STYLE)
+        page.add_style_tag(content=PRESENTATION_CLEANUP_STYLE)
         page.wait_for_timeout(500)
         # The opening composition is the relevant product surface, not an
         # unrelated homepage above the clicked UI. Stage this before t=0.
