@@ -9,7 +9,7 @@ GET /health -> readiness; no secrets or raw browser recordings.
 """
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
-import hmac,json,os,re,secrets,threading,time
+import hmac,json,os,re,secrets,threading,time,socketserver
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -39,12 +39,14 @@ def worker(job_id):
         with LOCK:
             JOBS[job_id]["stage"]=value
             JOBS[job_id]["updated_at"]=time.time()
+            JOBS[job_id]["stage_started_at"]=time.time()
             save(job_id)
     try:
         result=execute(JOBS[job_id]["url"],folder,progress=stage)
         with LOCK:
             JOBS[job_id].update(result)
             JOBS[job_id]["updated_at"]=time.time()
+            JOBS[job_id]["stage_started_at"]=time.time()
             save(job_id)
     except NeedsKey:
         with LOCK:
@@ -56,10 +58,29 @@ def worker(job_id):
             JOBS[job_id].update(status="needs_access",stage="needs_access",error=str(err)[:250])
             save(job_id)
     except Exception as err:
-        # Avoid returning provider payload or private page data in HTTP errors.
+        # Diagnostic remains in a private directory; API only reveals exception class.
         category=type(err).__name__
+        diagnosis=folder/"failure-local.txt"
+        diagnosis.write_text(category+": "+str(err)[:900]+"\n")
+        os.chmod(diagnosis,0o600)
         with LOCK:
-            JOBS[job_id].update(status="failed",stage="failed",error=category)
+            last_stage=JOBS[job_id].get("stage")
+            description=str(err)
+            if "Gemini returned HTTP 503" in description:
+                safe_message="The AI direction service is temporarily unavailable. Try again."
+            elif "Gemini returned HTTP 429" in description:
+                safe_message="The AI service is at its usage limit. Try again later."
+            elif "Gemini returned HTTP 404" in description:
+                safe_message="The configured AI model is unavailable."
+            elif last_stage=="inspecting":
+                safe_message="Sauce could not inspect this public website."
+            elif last_stage=="capturing":
+                safe_message="The selected browser interaction could not be captured."
+            elif last_stage=="rendering":
+                safe_message="The video renderer could not finish this film."
+            else:
+                safe_message="Sauce could not finish this job."
+            JOBS[job_id].update(status="failed",stage="failed",last_stage=last_stage,error=category,message=safe_message)
             save(job_id)
 
 class Handler(BaseHTTPRequestHandler):
@@ -104,7 +125,26 @@ class Handler(BaseHTTPRequestHandler):
             if path.exists(): job=json.loads(path.read_text())
         if job is None: return self.send_json(404,{"error":"Job unknown"})
         if not video:
-            return self.send_json(200,job)
+            response={key:value for key,value in job.items()
+                      if key in ("id","url","stage","status","created_at",
+                                 "updated_at","stage_started_at","reason",
+                                 "error","message","ai_calls","title","quality","note")}
+            if job.get("stage")=="rendering":
+                log=OUT/job_id/"render.log"
+                try:
+                    with log.open("rb") as fp:
+                        fp.seek(0,2)
+                        fp.seek(max(0,fp.tell()-8192))
+                        tail=fp.read().decode("utf-8","ignore")
+                    frames=list(re.finditer(r"REPLAY\s+(\d+)\s+of\s+(\d+)",tail))
+                    if frames:
+                        last=frames[-1]
+                        count,total=int(last.group(1)),int(last.group(2))
+                        if 0<=count<=total and 0<total<=36000:
+                            response["frames_rendered"]=count
+                            response["frames_total"]=total
+                except (OSError,ValueError): pass
+            return self.send_json(200,response)
         video_path=OUT/job_id/"export"/"preview.mp4"
         if job.get("status")!="needs_review" or not video_path.is_file():
             return self.send_json(404,{"error":"Preview unavailable"})
@@ -146,7 +186,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json(429,{"error":"Sauce queue full"})
                 job_id=secrets.token_hex(12)
                 JOBS[job_id]={"id":job_id,"url":url,"stage":"queued",
-                              "status":"queued","created_at":time.time()}
+                              "status":"queued","created_at":time.time(),
+                              "updated_at":time.time(),"stage_started_at":time.time()}
                 save(job_id)
                 POOL.submit(worker,job_id)
             return self.send_json(202,{"job_id":job_id,
@@ -172,5 +213,21 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200,{"saved":True,"status":"review_recorded"})
         return self.send_json(404,{"error":"Not found"})
 
+class PrivateUnixHandler(Handler):
+    # Socket directory is mode 0700 and socket mode 0600, owned by devmcp.
+    # Unlike the TCP listener, no bearer token crosses process boundaries.
+    def require_auth(self):
+        return True
+
+class PrivateUnixServer(socketserver.ThreadingMixIn,socketserver.UnixStreamServer):
+    daemon_threads=True
+
 if __name__=="__main__":
+    socket_path=Path(os.getenv("SAUCE_URL_SOCKET","/var/lib/sauce-url2video/sauce.sock"))
+    socket_path.parent.mkdir(parents=True,exist_ok=True)
+    if socket_path.exists():
+        socket_path.unlink()
+    private=PrivateUnixServer(str(socket_path),PrivateUnixHandler)
+    os.chmod(socket_path,0o600)
+    threading.Thread(target=private.serve_forever,daemon=True).start()
     ThreadingHTTPServer((HOST,PORT),Handler).serve_forever()

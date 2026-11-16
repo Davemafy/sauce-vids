@@ -99,7 +99,7 @@ def previous_feedback(jobs_dir:Path)->list[dict]:
 def direct_once(inspection:dict,api_key=None,model=None,feedback=None)->dict:
     key=api_key or os.environ.get("GEMINI_API_KEY")
     if not key: raise NeedsKey("Set GEMINI_API_KEY server-side to enable the one-call director")
-    model=model or os.getenv("SAUCE_DIRECTOR_MODEL","gemini-3.5-flash-lite")
+    model=model or os.getenv("SAUCE_DIRECTOR_MODEL","gemini-3.1-flash-lite")
     if not model.replace("-","").replace(".","").replace("_","").isalnum():
         raise ValueError("Invalid model")
     image=base64.b64encode(Path(inspection["screenshot"]).read_bytes()).decode()
@@ -138,7 +138,8 @@ def workflow_for(d:dict,inspection:dict)->list[dict]:
             actions.append({"action":"scroll","dy":dy,"dx":0,"settle_ms":280})
             current+=dy
         selector=item["tag"]+":has-text("+json.dumps(item["text"][:70])+")"
-        actions.append({"action":"hover","selector":selector,"settle_ms":250})
+        actions.append({"action":"hover","selector":selector,
+                        "expect_selector":selector,"settle_ms":250})
     validate_actions(actions)
     return actions
 
@@ -173,7 +174,7 @@ def execute(url:str,directory:Path,progress=None)->dict:
     with (directory/"render.log").open("w") as log:
         subprocess.run([sys.executable,str(ROOT/"scripts"/"produce_cinematic_demo.py"),
             "--session",str(directory/"private"/"session"),
-            "--workflow",str(file),"--out",str(export),"--seconds","8",
+            "--workflow",str(file),"--out",str(export),
             "--title",d["title"],"--description",d["story"],"--no-webgl-optics"],
             cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=750)
     if not (export/"preview.mp4").is_file() or not (export/"release.json").is_file():

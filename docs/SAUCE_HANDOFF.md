@@ -296,3 +296,52 @@ Owner requested a living, modern loading screen instead of a stalled spinner.
 - Current scope is the bounded-catalog Studio UI. The private URL-to-video
   backend is not yet exposed as a public user URL-generation form.
   A technically complete render still needs visual-quality review.
+
+
+## URL-first Studio pilot (16 November 2026)
+
+The URL-to-film flow, not the bounded sample renderer, is now the
+primary Studio page at https://devmcp.davemafy.xyz/sauce-app/studio.
+Legacy sample recordings are at /sauce-app/studio/samples.
+
+The web UI has a permission-gated private pilot URL form and renders
+actual stages: inspecting, directing (exactly one vision call), capturing,
+rendering (actual compositor REPLAY n/total), needs_access, failed,
+and needs_review. It preserves job identity across refresh, reconnects
+status polling, honors reduced motion, and offers human rating/feedback.
+Private MP4 preview uses a signed HttpOnly, SameSite Strict, HTTPS cookie.
+
+The Next proxy uses a private Unix socket owned by devmcp with mode
+0600 inside a 0700 directory, not a bearer token copied into the
+web process. The existing loopback Bearer API remains separately
+protected. Arbitrary untrusted public submissions require a strong
+private pilot access code held outside Git, plus same-origin checks.
+Source: apps/web/app/studio/url-flow.tsx, url-flow.module.css,
+apps/web/app/api/studio/url/[...parts]/route.ts, and backend/sauce_api.py.
+
+Technical tests: 13 Next unit tests, 10 Playwright browser tests,
+176 Python pytest tests (5 skipped, 51 subtests) and 6 backend unittest
+tests passed. Live HTTPS /studio and /auth return HTTP 200; unauthenticated
+media returns 401, incorrect pilot code and cross-site POST return 403.
+Desktop 1280x720 and mobile 390x844 passed no-overflow checks.
+
+AI model verified for multimodal direction: gemini-3.1-flash-lite.
+The prior 3.5 Flash Lite intermittently returned HTTP 503 for image
+direction. The Paldey public site was inspected and one vision call
+correctly returned needs_access (no private scholarship workflow
+invented). Its initial attempt was blocked by provider unavailability,
+then the model was changed and retested.
+
+IMPORTANT UNFINISHED QUALITY GATE: a public site that the AI approved
+advanced to real capture and frame rendering, but its output failed
+the existing replay semantic/visual-region QA. This must NOT be
+claimed as a successful premium URL-to-video export. The workflow
+now includes observed expect_selector assertions and trace-derived
+duration; strict visual comparison remains enabled. The director's
+current public-site workflow supports hover/scroll only and should
+not claim to demonstrate interactive product actions. A verified
+full URL -> MP4 outcome remains a next technical acceptance milestone.
+
+Rollback: remove the separate URL Studio systemd WorkingDirectory
+override and restore the previous isolated Sauce Studio build.
+No worker sessions, credentials or raw captures were committed.

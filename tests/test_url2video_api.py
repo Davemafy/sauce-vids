@@ -46,6 +46,8 @@ class UrlToVideoTests(unittest.TestCase):
         steps=workflow_for(plan,source)
         self.assertTrue(steps)
         self.assertTrue({a["action"] for a in steps}.issubset({"scroll","hover"}))
+        self.assertTrue(all(a.get("expect_selector")==a.get("selector")
+                            for a in steps if a["action"]=="hover"))
 
     def test_missing_key_does_not_generate_fake_direction(self):
         with patch.dict(os.environ,{"GEMINI_API_KEY":""}):
