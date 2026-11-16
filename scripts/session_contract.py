@@ -48,6 +48,9 @@ def verify_package(session:dict,folder:Path)->dict:
         raise ValueError('Invalid source dimensions')
     if safe_url(session['source_url'])!=session['source_url']:
         raise ValueError('Unsafe source URL')
+    if 'brand_tokens' in session:
+        from brand_extractor import validate_brand_tokens
+        validate_brand_tokens(session['brand_tokens'])
     if not session.get('states') or not session.get('events'):
         raise ValueError('Missing source evidence')
     states=session['states']

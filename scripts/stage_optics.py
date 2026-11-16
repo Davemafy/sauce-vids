@@ -19,7 +19,8 @@ def apply_stage_optics(frame:np.ndarray,window_quad:np.ndarray,
                        modal_quad:np.ndarray|None=None,
                        modal_coverage:np.ndarray|None=None,
                        fps:int=60,refraction_px:float=1.25,
-                       dispersion_px:float=1.25)->np.ndarray:
+                       dispersion_px:float=1.25,
+                       spectral_weights:tuple[float,float]=(2.,2.))->np.ndarray:
     """Refract only outside H0; modal rim may glow outside H60 by <=1.5px.
 
     The protected window mask (4px guard) guarantees unchanged browser
@@ -32,6 +33,10 @@ def apply_stage_optics(frame:np.ndarray,window_quad:np.ndarray,
         raise ValueError("Invalid deterministic stage time/seed")
     if not 0<=refraction_px<=1.5 or not 0<=dispersion_px<=1.5:
         raise ValueError("Refraction and spectral shift must be <=1.5px")
+    if len(spectral_weights)!=2 or any(
+            not isinstance(v,(float,int)) or not .5<=v<=2.
+            for v in spectral_weights):
+        raise ValueError("Spectral weights outside dim studio range")
     h,w=frame.shape[:2]
     window=_polygon((h,w),window_quad)
     protected=cv2.dilate(window,np.ones((7,7),np.uint8),iterations=1)
@@ -88,9 +93,9 @@ def apply_stage_optics(frame:np.ndarray,window_quad:np.ndarray,
         r=result[:,:,2].astype(np.float32)
         b=result[:,:,0].astype(np.float32)
         r[shadow_outside]=np.clip(r[shadow_outside]+
-                                  2.0*fringe[shadow_outside],0,255)
+                                  spectral_weights[0]*fringe[shadow_outside],0,255)
         b[shadow_outside]=np.clip(b[shadow_outside]-
-                                  2.0*fringe[shadow_outside],0,255)
+                                  spectral_weights[1]*fringe[shadow_outside],0,255)
         result[:,:,2]=np.uint8(np.rint(r))
         result[:,:,0]=np.uint8(np.rint(b))
 
@@ -108,8 +113,8 @@ def apply_stage_optics(frame:np.ndarray,window_quad:np.ndarray,
             # drawing a new rim inside the protected H60 content.
             red=result[:,:,2].astype(np.float32)
             blue=result[:,:,0].astype(np.float32)
-            red[ring]=np.clip(red[ring]+1.5*halo[ring],0,255)
-            blue[ring]=np.clip(blue[ring]-1.5*halo[ring],0,255)
+            red[ring]=np.clip(red[ring]+(.75*spectral_weights[0])*halo[ring],0,255)
+            blue[ring]=np.clip(blue[ring]-(.75*spectral_weights[1])*halo[ring],0,255)
             result[:,:,2]=np.uint8(np.rint(red))
             result[:,:,0]=np.uint8(np.rint(blue))
     return result

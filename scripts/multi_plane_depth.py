@@ -65,7 +65,7 @@ def _shadow_from_mask(out,rounded_coverage,dx,dy,sigma,opacity):
     out[:]=np.uint8(np.clip(out.astype(np.float32)*(1-coverage),0,255))
 
 
-def _rounded_outer_rim(out,coverage):
+def _rounded_outer_rim(out,coverage,rim_color=RIM_COLOR):
     """One gently feathered exterior pixel, with no rectangular corner joins.
 
     The coverage is the same projected, antialiased rounded modal mask used
@@ -81,14 +81,14 @@ def _rounded_outer_rim(out,coverage):
     strength=(soft.astype(np.float32)/255.)*.13*(
         1.-coverage.astype(np.float32)/255.)
     result=out.astype(np.float32)*(1.-strength[:,:,None])+(
-        np.asarray(RIM_COLOR,dtype=np.float32)[None,None,:]*
+        np.asarray(rim_color,dtype=np.float32)[None,None,:]*
         strength[:,:,None])
     out[:]=np.uint8(np.clip(np.rint(result),0,255))
 
 
 def composite_elevated_modal(output,modal_source,box,stage_window,
                              factor,dx,dy,tilt,focal,radius_css=0.,
-                             coverage_out=None):
+                             coverage_out=None,rim_color=RIM_COLOR):
     """Occlude real modal pixels over a separately captured modal-free plate.
 
     The overlay is ONLY enabled if the caller has separately verified that
@@ -129,7 +129,7 @@ def composite_elevated_modal(output,modal_source,box,stage_window,
     a=coverage.astype(np.float32)[:,:,None]/255.
     output[:]=np.uint8(np.clip(
         output.astype(np.float32)*(1-a)+overlay.astype(np.float32)*a,0,255))
-    _rounded_outer_rim(output,coverage)
+    _rounded_outer_rim(output,coverage,rim_color=rim_color)
     # Allow experimental RGB dispersion to use this exact rounded mask,
     # instead of rebuilding a hard H60 bounding rectangle.
     if coverage_out is not None:

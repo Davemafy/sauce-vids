@@ -12,8 +12,31 @@ import numpy as np
 STYLES = ("obsidian-grain", "fluted-glass", "chromatic-bloom")
 
 
+def brand_bloom(hex_color: str | None, strength: int,
+                neutral: tuple[float, float, float]) -> tuple[float, float, float]:
+    """A bounded BGR bloom preserving hue, not the site's absolute brightness.
+
+    Stage light must remain dim even if a source token is pure white/yellow.
+    Missing tokens return the original, verified Sauce stage coefficients.
+    """
+    if hex_color is None:
+        return neutral
+    if not isinstance(hex_color,str) or len(hex_color)!=7 or not hex_color.startswith("#"):
+        raise ValueError("Brand palette must use #rrggbb")
+    try:
+        rgb=[int(hex_color[i:i+2],16) for i in (1,3,5)]
+    except ValueError as exc:
+        raise ValueError("Invalid stage color") from exc
+    peak=max(rgb)
+    if peak<25:
+        return neutral
+    return tuple(round(2.+strength*v/peak,2) for v in reversed(rgb))
+
+
 def procedural_backdrop(style: str, width: int = 1920,
-                        height: int = 1080) -> np.ndarray:
+                        height: int = 1080,
+                        primary: str | None = None,
+                        accent: str | None = None) -> np.ndarray:
     if style not in STYLES:
         raise ValueError(f"Unsupported stage material: {style}")
     if width < 64 or height < 64:
@@ -39,9 +62,12 @@ def procedural_backdrop(style: str, width: int = 1920,
         # Constant phase down Y prevents artificial vertical wave/wobble.
         phase = x * (2. * np.pi / 45.)
         refracted_x = x + 8. * np.sin(phase)
-        bloom(260, 485, 480, 400, (27., 12., 13.), refracted_x)
-        bloom(1660, 395, 430, 420, (22., 11., 26.), refracted_x)
-        bloom(1060, 1090, 660, 275, (13., 10., 9.), refracted_x)
+        bloom(260, 485, 480, 400,
+              brand_bloom(primary,27,(27.,12.,13.)),refracted_x)
+        bloom(1660, 395, 430, 420,
+              brand_bloom(accent,26,(22.,11.,26.)),refracted_x)
+        bloom(1060, 1090, 660, 275,
+              brand_bloom(primary,13,(13.,10.,9.)),refracted_x)
         ridge = (2.1 * np.cos(phase) +
                  3.5 * np.maximum(0., np.cos(phase)) ** 18 -
                  1.3 * np.abs(np.sin(phase)) ** 10)
@@ -51,9 +77,9 @@ def procedural_backdrop(style: str, width: int = 1920,
     elif style == "chromatic-bloom":
         # Three blurred, slightly offset color lobes provide edge dispersion
         # without colored fringes on the real browser window/text.
-        bloom(335, 540, 520, 460, (24., 12., 10.))
-        bloom(1620, 485, 495, 510, (12., 13., 27.))
-        bloom(980, 980, 640, 330, (13., 9., 13.))
+        bloom(335, 540, 520, 460,brand_bloom(primary,24,(24.,12.,10.)))
+        bloom(1620, 485, 495, 510,brand_bloom(accent,27,(12.,13.,27.)))
+        bloom(980, 980, 640, 330,brand_bloom(primary,13,(13.,9.,13.)))
         # Offset each channel's luminous fringe by only 13px.
         edge = np.exp(-.5 * (((x - 1510) / 350) ** 2 +
                               ((y - 355) / 370) ** 2))
@@ -63,8 +89,8 @@ def procedural_backdrop(style: str, width: int = 1920,
     else:
         # Obsidian is the quiet matte option; subtle brand light is carried by
         # the existing RMS-gated ambient map only when real audio supplies it.
-        bloom(410, 570, 670, 550, (4.5, 2.1, 2.1))
-        bloom(1570, 510, 660, 560, (3.0, 2.0, 4.0))
+        bloom(410, 570, 670, 550,brand_bloom(primary,5,(4.5,2.1,2.1)))
+        bloom(1570, 510, 660, 560,brand_bloom(accent,5,(3.0,2.0,4.0)))
 
     # Fixed-seed, subpixel-scale analog grain. No frame-index jitter.
     rng = np.random.default_rng(20261116)

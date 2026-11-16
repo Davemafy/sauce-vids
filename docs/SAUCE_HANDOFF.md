@@ -176,3 +176,77 @@ If there is no working DevMCP connection in a new chat, first reconnect it rathe
 **Verified gates:** Same 197 frames / 3.283333s, 1920x1080@60fps H.264 at **12,317,443 bps measured video bitrate**, AAC stereo 48kHz, 152 H0/H60 frames / 0 fallback, 152 terminal-concealed frames, original frame-125 cut. Complete FFmpeg decode succeeded. Stage-optics ON vs OFF with identical synthetic foreground/source geometry after the edge fix: full-browser rectangle **SSIM = 0.99999422**, above 0.999. New corner regression explicitly checks all four projected rounded H60 vertices contain no bright rectangle stroke while text-center remains authentic, the rounded coverage is deterministic, and the optional spectral fringe uses the same mask. All test suites: **30/30 TypeScript**, **160/160 Python unittest**, **34/34 Phase 2/3 browser-backed pytest**.
 
 **Repeatability caveat, unchanged:** Two full 197-frame MP4 renders produced **identical whole-file SHA-256 `6363fedbbc223ce6b50f94dea2a28ccee1d43afa3aabf357140d130713b9c4ec`** and identical decoded video frame hashes, *using the same verified private canonical compositor cache*. Repeat-run live browser compositing still differed on 152 frames before the pinned image selection. Do not claim independent live Chromium replay determinism. The published file's checksum matches the worker copy; new public player, master and comparison returned HTTP 200 and the previous proof still returns 200. Desktop 1280x720 and mobile 390x844 Chromium playback seeked to 2.84s with no video/page errors or horizontal overflow. Engineering acceptance is separate from broader premium visual storytelling approval.
+
+## 2026-11-16: Dynamic source-derived brand-token capture and stage lighting
+
+**Goal:** Make Sauce capture/replay adapt dim studio light to each real target
+site without hardcoding a per-domain palette or recoloring source UI. Added
+`scripts/brand_extractor.py`, `docs/brand-ingestion.md`, and
+`tests/phase2/test_brand_tokens.py`. A copy of all modified engine sources
+from before this work is stored under
+`../sauce-phase2-backups/brand-tokens-2026-11-16/`.
+
+**Actual ingestion and renderer path:** At capture start, after browser
+hydration and before state zero, `session_capture.py` evaluates a bounded
+public-style-only extractor. It reads computed root/body CSS custom properties,
+public theme meta tags, semantic CTA backgrounds and accent strokes, plus
+body/heading typography. Chromium resolves modern CSS colors to sRGB. The
+canonical `sauce.brand.v1` snapshot records color provenance and whether
+colors are observed or neutral fallback. `session_contract.verify_package`
+rejects malformed snapshots; `session_replay.py` maps them to
+`CinematicStage` and its cached `_stage_base(style,primary,accent)`,
+audio pulse and 1px rounded modal rim. The opt-in spectral edge uses bounded
+brand-derived channel weights. Normal stage darkness remains limited; no
+overlays or colored pixels are applied over real UI. Private raw-raster
+cache identities now incorporate brand snapshot when present. Existing
+session JSON without a snapshot receives **exact original neutral style**.
+No camera, H0/H60 geometry, spring constant, cut, source cursor or Foley change.
+
+**Evidence:** Two browser-backed fixtures at distinct origins, with genuinely
+different CSS and theme-color sources, resolved to Cobalt
+`#2872d7/#24a896` and Copper `#eb6c18/#b52c69` and produced distinct
+cached fluted materials while source browser content stayed pixel-identical.
+Separate test covers Chromium conversion of OKLCH and HSL token forms.
+Observed live Brimble from its existing pinned HAR has source-visible
+accent stroke `#006fff`; no reliable explicit primary, so primary is
+derived from the **same** accent. Observed Brimble type was
+`IBM Plex Sans` body and `Lora` heading. The original old Brimble session
+had no brand snapshot and remains unmodified. An isolated private
+evidence-derived session using the *same existing HAR and state SHA checks*
+was created solely to prove the new renderer mapping; do not present that
+as a newly independently captured original trace.
+
+**Actual encoded proof:** Separate public release
+https://devmcp.davemafy.xyz/sauce-motion-phase2/brand-aware-ingestion/
+and master
+https://devmcp.davemafy.xyz/sauce-motion-phase2/brand-aware-ingestion/master-1080p60.mp4 .
+Two palette material comparison:
+https://devmcp.davemafy.xyz/sauce-motion-phase2/brand-aware-ingestion/two-brand-materials.jpg .
+Brimble blue-lit 10-frame contact:
+https://devmcp.davemafy.xyz/sauce-motion-phase2/brand-aware-ingestion/brand-brimble-contact.jpg .
+SHA-256 of deployed and worker master:
+`731333e92a55871b989ec7e78aed4061172a0e7e864d1a9ad3374606e528dc68`.
+Measured from actual 0.00s encoded frame versus earlier neutral
+`fluted-glass-clean` master: outer-stage 185x105 ROI mean absolute
+channel change **2.796/255**, with extracted color visibly steering
+the fluted lighting. The full contact sheet and native key frames
+0/114/125/170/196 were reviewed. H.264 1920x1080@60fps,
+197 frames / 3.283333s, AAC 48kHz stereo, 152 genuine multi-plane frames,
+zero fallback and same frame-125 action cut. Full FFmpeg decode passed.
+New page/master/material image and previous release returned HTTP 200;
+public desktop 1280x720 and mobile 390x844 player both sought to 2.85s
+without page/media errors or horizontal overflow. Prior releases remain
+untouched. Stage color effect is restrained; visual-quality certification
+still needs independent creative review.
+
+**Regression suites:** TypeScript StudioMotion **30/30**; Python unittest
+**160/160**; Phase 2/3 pytest including live Chromium **40/40**.
+Token tests validate canonical serialization, CSS priority, color fallback,
+theme-tag parsing, font capture, source pixel invariance, LRU key separation
+and malformed input rejection. Existing 3D camera and audio sync tests pass.
+
+**Known limits:** No canvas/WebGL palette extraction, cross-origin iframe
+traversal or independent nondeterministic live-replay fix. Font tokens are
+captured for future typography-aware decisions, but the renderer does not
+replace source typography. Never claim that every website exposes a
+trustworthy brand palette; neutral fallback is intentional.

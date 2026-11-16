@@ -203,6 +203,7 @@ def _raster_cache_identity(session:dict,workflow:list[dict],
                            times:list[float],hide_selector:str|None)->str:
     """Bind private canonical raster frames to recorded events and source time."""
     stable={'source_url':session['source_url'],
+            **({'brand_tokens':session['brand_tokens']} if 'brand_tokens' in session else {}),
             'states':[(v['name'],v['at_ms'],v['sha256']) for v in session['states']],
             'events':session['events'],
             'workflow':workflow,
@@ -334,10 +335,13 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     floor_config=(studio_motion_plan['stage'] if studio_motion_plan else {})
     backdrop_style=(preset_engine['preset']['stage']['backdropStyle']
                     if preset_engine else 'obsidian-grain')
+    from brand_extractor import stage_brand_colors
+    brand_primary,brand_accent=stage_brand_colors(session.get('brand_tokens'))
     if studio_motion_plan and not presentation_v15:
         raise ValueError('StudioMotion requires root CinematicStage')
     root_stage=(CinematicStage(
         backdrop_style=backdrop_style,
+        brand_primary=brand_primary,brand_accent=brand_accent,
         enable_stage_optics=experimental_orbit_optics,
         optics_seed=optics_seed,
         enable_studio_floor=bool(floor_config.get('enabled',False)),
@@ -870,6 +874,9 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'cinematic_stage_window':list(root_stage.window) if root_stage else None,
             'cinematic_stage_background':root_stage.background_hex if root_stage else None,
             'procedural_backdrop_style':root_stage.backdrop_style if root_stage else None,
+            'brand_tokens':session.get('brand_tokens'),
+            'studio_brand_primary':brand_primary if root_stage else None,
+            'studio_brand_accent':brand_accent if root_stage else None,
             'experimental_orbit_optics':bool(experimental_orbit_optics),
             'optics_seed':root_stage.optics_seed if root_stage else None,
             'cinematic_stage_glow_blur':140 if root_stage else None,

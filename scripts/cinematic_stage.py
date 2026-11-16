@@ -11,11 +11,10 @@ from typing import Callable
 import numpy as np
 import cv2
 from spatial_parallax import window_homography,map_pointer,projected_target_quad
-from multi_plane_depth import focus_background_plane,composite_elevated_modal
-from multi_plane_depth import focus_background_plane,composite_elevated_modal
-from multi_plane_depth import focus_background_plane,composite_elevated_modal
+from multi_plane_depth import (
+    focus_background_plane,composite_elevated_modal,RIM_COLOR)
 from PIL import Image, ImageDraw, ImageFilter
-from procedural_backdrops import procedural_backdrop, STYLES
+from procedural_backdrops import procedural_backdrop, STYLES, brand_bloom
 from stage_optics import apply_stage_optics
 
 MASTER_WIDTH,MASTER_HEIGHT=1920,1080
@@ -41,12 +40,28 @@ def _mix_color(base:Image.Image,mask:Image.Image,color:tuple[int,int,int])->None
     base.paste(color,(0,0),mask)
 
 
-@lru_cache(maxsize=3)
-def _stage_base(backdrop_style:str='obsidian-grain')->tuple[np.ndarray,np.ndarray,np.ndarray]:
+def brand_light_parameters(primary:str|None,accent:str|None):
+    """Bound edge dispersion / H60 exterior rim to actual captured hues."""
+    if primary is None or accent is None:
+        return RIM_COLOR,(2.,2.)
+    p=tuple(int(primary[i:i+2],16) for i in (1,3,5))
+    a=tuple(int(accent[i:i+2],16) for i in (1,3,5))
+    bgr=(a[2],a[1],a[0])
+    rim=tuple(round(.94*v+.06*c) for v,c in zip(RIM_COLOR,bgr))
+    weights=(round(1.1+.9*p[0]/255.,3),
+             round(1.1+.9*a[2]/255.,3))
+    return rim,weights
+
+
+@lru_cache(maxsize=4)
+def _stage_base(backdrop_style:str='obsidian-grain',
+                brand_primary:str|None=None,
+                brand_accent:str|None=None)->tuple[np.ndarray,np.ndarray,np.ndarray]:
     """Key the full stage cache by material; never return a stale flat plate."""
     # Procedural material is static in the output clock and appears ONLY
     # behind the original H0/H60 browser/window, never above UI text.
-    material=procedural_backdrop(backdrop_style,MASTER_WIDTH,MASTER_HEIGHT)
+    material=procedural_backdrop(backdrop_style,MASTER_WIDTH,MASTER_HEIGHT,
+                                  primary=brand_primary,accent=brand_accent)
     image=Image.fromarray(material[:,:,::-1].copy(),mode='RGB')
     ambient=material.copy()
     left,top=WINDOW_X,WINDOW_Y
@@ -114,14 +129,17 @@ def _tilt_mask()->np.ndarray:
     return np.asarray(mask,dtype=np.float32)[:,:,None]/255.
 
 
-@lru_cache(maxsize=1)
-def _ambient_pulse_field()->np.ndarray:
+@lru_cache(maxsize=4)
+def _ambient_pulse_field(brand_primary:str|None=None,
+                         brand_accent:str|None=None)->np.ndarray:
     # An inexpensive cached, blurred light map used only when RMS audio
     # is supplied; no audio means a static stage, never fake beats.
     field=Image.new('RGB',(MASTER_WIDTH,MASTER_HEIGHT),(0,0,0))
     for x,y,r,color in (
-        (470,610,415,(36,44,78)),
-        (1535,405,365,(65,29,66))):
+        (470,610,415,tuple(round(v) for v in reversed(brand_bloom(
+            brand_primary,78,(78.,44.,36.))))),
+        (1535,405,365,tuple(round(v) for v in reversed(brand_bloom(
+            brand_accent,66,(66.,29.,65.)))))):
         mask=Image.new('L',(MASTER_WIDTH,MASTER_HEIGHT),0)
         ImageDraw.Draw(mask).ellipse((x-r,y-r,x+r,y+r),fill=205)
         mask=mask.filter(ImageFilter.GaussianBlur(GLOW_BLUR))
@@ -277,6 +295,8 @@ class CinematicStage:
     window_h:int=WINDOW_HEIGHT
     background_hex:str='#090a0f'
     backdrop_style:str='obsidian-grain'
+    brand_primary:str|None=None
+    brand_accent:str|None=None
     enable_stage_optics:bool=False
     optics_seed:int=20261116
     enable_studio_floor:bool=False
@@ -287,6 +307,11 @@ class CinematicStage:
             raise ValueError('Production stage is fixed to 1920x1080')
         if self.backdrop_style not in STYLES:
             raise ValueError('Invalid procedural stage style')
+        for color in (self.brand_primary,self.brand_accent):
+            if color is not None and (not isinstance(color,str) or
+                len(color)!=7 or not color.startswith('#') or
+                any(c not in '0123456789abcdef' for c in color[1:])):
+                raise ValueError('Studio brand colors must be canonical #rrggbb')
         if not isinstance(self.optics_seed,int) or not 0<=self.optics_seed<2**31:
             raise ValueError('Optical grain seed must be a bounded integer')
         if not 0<=self.floor_reflection_intensity<=.5:
@@ -315,7 +340,8 @@ class CinematicStage:
         if website_frame.shape!=(self.window_h,self.window_w,3):
             raise ValueError('Source must be resized to the root window before wrapping')
         if not 0.<=glow<=1.:raise ValueError('RMS-driven glow must be normalized 0..1')
-        base,alpha,ambient=_stage_base(self.backdrop_style)
+        base,alpha,ambient=_stage_base(
+            self.backdrop_style,self.brand_primary,self.brand_accent)
         flat=base.copy()
         x,y,w,h=self.window
         region=flat[y:y+h,x:x+w]
@@ -335,7 +361,7 @@ class CinematicStage:
         else:
             output=flat
         if glow>0:
-            extra=_ambient_pulse_field()
+            extra=_ambient_pulse_field(self.brand_primary,self.brand_accent)
             # Glow must never overpower or re-color the content.
             # Modulate outside the transformed window only.
             area=cv2.warpPerspective(_tilt_mask()[:,:,0],
@@ -350,6 +376,8 @@ class CinematicStage:
         # second, rectangular modal silhouette at sharp corners.
         rounded_modal_coverage=(np.zeros(output.shape[:2],dtype=np.uint8)
                                 if self.enable_stage_optics else None)
+        rim_color,spectral_weights=brand_light_parameters(
+            self.brand_primary,self.brand_accent)
         if spotlight and spotlight.get('active') and spotlight.get('box'):
             if foreground is not None and foreground.get('source') is not None:
                 output=focus_background_plane(output,self.window,tilt,perspective_px,
@@ -360,7 +388,8 @@ class CinematicStage:
                     float(spotlight['factor']),float(spotlight['dx']),
                     float(spotlight['dy']),tilt,perspective_px,
                     radius_css=float(foreground.get('radiusCss',0.)),
-                    coverage_out=rounded_modal_coverage)
+                    coverage_out=rounded_modal_coverage,
+                    rim_color=rim_color)
             else:
                 # No verified modal-free plate: exact Phase 2 single-plane fallback.
                 output=apply_spotlight_focus(
@@ -382,7 +411,8 @@ class CinematicStage:
                          rounded_modal_coverage is not None and
                          np.any(rounded_modal_coverage) else None)
             output=apply_stage_optics(output,window_quad,frame_index,
-                     seed=self.optics_seed,modal_coverage=modal_alpha)
+                     seed=self.optics_seed,modal_coverage=modal_alpha,
+                     spectral_weights=spectral_weights)
         if cinematic_cursor is not None:
             cinematic_cursor(output)
         if diff_reveal and diff_reveal.get('progress',0)>0:

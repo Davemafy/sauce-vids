@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse,hashlib,json,os,re,time
 from pathlib import Path
 from session_contract import SCHEMA,safe_url,validate_actions
+from brand_extractor import extract_brand_tokens
 from cinematic_spec import enforce_hidpi,DPR_CHOICES,DEFAULT_DPR
 from playwright.sync_api import sync_playwright
 
@@ -323,6 +324,7 @@ def record(url:str, actions:list[dict],output:Path,
             page.wait_for_timeout(260)
         page.mouse.move(round(width*.78),round(height*.73))
         page.wait_for_timeout(70)
+        brand_tokens=extract_brand_tokens(page)
         actions_meta=[]
         states=[]
         started=time.monotonic()
@@ -340,6 +342,7 @@ def record(url:str, actions:list[dict],output:Path,
         context.close()
         browser.close()
     session={'schema':SCHEMA,'source_url':safe_url(url),
+             'brand_tokens':brand_tokens,
              'page':page_info,'workflow':actions_meta,'events':captured,
              'states':states,'replay_status':'unverified',
              'capture_elapsed_wall_s':round(time.monotonic()-started,3),
