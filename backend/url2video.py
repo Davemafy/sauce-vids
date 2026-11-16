@@ -99,7 +99,7 @@ def previous_feedback(jobs_dir:Path)->list[dict]:
 def direct_once(inspection:dict,api_key=None,model=None,feedback=None)->dict:
     key=api_key or os.environ.get("GEMINI_API_KEY")
     if not key: raise NeedsKey("Set GEMINI_API_KEY server-side to enable the one-call director")
-    model=model or os.getenv("SAUCE_DIRECTOR_MODEL","gemini-2.5-flash")
+    model=model or os.getenv("SAUCE_DIRECTOR_MODEL","gemini-3.5-flash-lite")
     if not model.replace("-","").replace(".","").replace("_","").isalnum():
         raise ValueError("Invalid model")
     image=base64.b64encode(Path(inspection["screenshot"]).read_bytes()).decode()
