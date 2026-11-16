@@ -346,6 +346,10 @@ class CinematicStage:
                   extra.astype(np.float32)*(glow*.68)*(1-area),0,255))
         if self.enable_studio_floor:
             _studio_floor(output,website_frame,tilt,self.floor_reflection_intensity,perspective_px)
+        # Filled by the actual H60 composite; optics must not construct a
+        # second, rectangular modal silhouette at sharp corners.
+        rounded_modal_coverage=(np.zeros(output.shape[:2],dtype=np.uint8)
+                                if self.enable_stage_optics else None)
         if spotlight and spotlight.get('active') and spotlight.get('box'):
             if foreground is not None and foreground.get('source') is not None:
                 output=focus_background_plane(output,self.window,tilt,perspective_px,
@@ -355,7 +359,8 @@ class CinematicStage:
                     foreground['box'],self.window,
                     float(spotlight['factor']),float(spotlight['dx']),
                     float(spotlight['dy']),tilt,perspective_px,
-                    radius_css=float(foreground.get('radiusCss',0.)))
+                    radius_css=float(foreground.get('radiusCss',0.)),
+                    coverage_out=rounded_modal_coverage)
             else:
                 # No verified modal-free plate: exact Phase 2 single-plane fallback.
                 output=apply_spotlight_focus(
@@ -371,15 +376,13 @@ class CinematicStage:
             src=np.float32([[[x,y],[x+w,y],[x+w,y+h],[x,y+h]]])
             H0=window_homography(x,y,w,h,*tilt,focal=perspective_px)
             window_quad=cv2.perspectiveTransform(src,H0)[0]
-            modal_quad=None
-            if foreground is not None and spotlight and spotlight.get('active'):
-                modal_quad=projected_target_quad(
-                    foreground['box'],self.window,
-                    float(spotlight['factor']),float(spotlight['dx']),
-                    float(spotlight['dy']),*tilt,
-                    perspective_px=perspective_px,z=60.)
+            # Only project chromatic dispersion when an authentic H60
+            # layer has actually been composited, using its rounded alpha.
+            modal_alpha=(rounded_modal_coverage if
+                         rounded_modal_coverage is not None and
+                         np.any(rounded_modal_coverage) else None)
             output=apply_stage_optics(output,window_quad,frame_index,
-                     seed=self.optics_seed,modal_quad=modal_quad)
+                     seed=self.optics_seed,modal_coverage=modal_alpha)
         if cinematic_cursor is not None:
             cinematic_cursor(output)
         if diff_reveal and diff_reveal.get('progress',0)>0:

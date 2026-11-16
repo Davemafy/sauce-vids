@@ -116,3 +116,52 @@ def test_rendered_pointer_avoids_verified_codex_label_without_moving_click():
     assert x>=150 and y==105  # Move beside the word.
     x,y=cursor_glyph_clear_of_text(105,105,19,23,quad)
     assert x==105 and y>=125  # Or below if a lateral jump is too large.
+
+
+def test_h60_rounded_corners_do_not_draw_rectangular_white_outlines():
+    """The old cv2.polylines(H60 quad) drew bright square corner spikes."""
+    output=np.full((1080,1920,3),65,np.uint8)
+    source=np.full((832,1480,3),245,np.uint8)
+    alpha=np.empty(output.shape[:2],np.uint8)
+    result=composite_elevated_modal(
+        output,source,BOX,WINDOW,F,0.,0.,(0.,0.),1200.,
+        radius_css=14.,coverage_out=alpha)
+    q=projected_target_quad(
+        BOX,WINDOW,F,0.,0.,0.,0.,perspective_px=1200.,z=60.)
+    (x0,y0),(x1,_),(x2,y2),(x3,_)=q
+    for xx,yy in [(x0,y0),(x1,y0),(x2,y2),(x3,y2)]:
+        x,y=round(xx),round(yy)
+        assert int(alpha[y,x])<40,(x,y,int(alpha[y,x]))
+        assert int(result[y,x].max())<125, (
+            'A rectangular rim was painted across a rounded corner',x,y,
+            result[y,x].tolist())
+    midpoint_x=round((x0+x1)/2)
+    midpoint_y=round((y0+y2)/2)
+    assert alpha[midpoint_y,midpoint_x]>=250
+    assert result[midpoint_y,midpoint_x].mean()>220
+    # The same rounded coverage can drive experimental chromatic dispersion.
+    from stage_optics import apply_stage_optics
+    stage=apply_stage_optics(
+        result,q,frame_index=90,modal_coverage=alpha)
+    assert int(stage[round(y0),round(x0)].max())<125
+    assert np.array_equal(stage[midpoint_y-30:midpoint_y+30,
+                                midpoint_x-30:midpoint_x+30],
+                          result[midpoint_y-30:midpoint_y+30,
+                                 midpoint_x-30:midpoint_x+30])
+
+
+def test_rounded_mask_output_is_reproducible_and_rejects_wrong_buffer():
+    source=np.full((832,1480,3),245,np.uint8)
+    def render():
+        bg=np.full((1080,1920,3),65,np.uint8)
+        cov=np.empty(bg.shape[:2],np.uint8)
+        result=composite_elevated_modal(bg,source,BOX,WINDOW,F,0.,0.,
+                    (.3,-.4),1200.,radius_css=14.,coverage_out=cov)
+        return result,cov
+    a,cov_a=render()
+    b,cov_b=render()
+    assert np.array_equal(a,b) and np.array_equal(cov_a,cov_b)
+    with pytest.raises(ValueError,match='coverage buffer'):
+        composite_elevated_modal(np.full_like(a,65),source,BOX,WINDOW,
+                    F,0.,0.,(.3,-.4),1200.,radius_css=14.,
+                    coverage_out=np.empty((10,10),np.uint8))

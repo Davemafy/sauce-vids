@@ -53,17 +53,42 @@ def _rounded_region_mask(shape,bounds,radius):
             cv2.circle(mask,(cx,cy),r,255,-1,cv2.LINE_AA)
     return mask
 
-def _shadow_from_quad(out,quad,dx,dy,sigma,opacity):
-    base=_mask_bounds(out,quad)
+def _shadow_from_mask(out,rounded_coverage,dx,dy,sigma,opacity):
+    """Cast only the real rounded modal silhouette, never its bounding quad."""
     shift=np.float32([[1,0,dx],[0,1,dy]])
-    moved=cv2.warpAffine(base,shift,(out.shape[1],out.shape[0]),
-                         flags=cv2.INTER_LINEAR)
+    moved=cv2.warpAffine(rounded_coverage,shift,
+                         (out.shape[1],out.shape[0]),
+                         flags=cv2.INTER_LINEAR,
+                         borderMode=cv2.BORDER_CONSTANT)
     softened=cv2.GaussianBlur(moved,(0,0),sigma).astype(np.float32)
     coverage=(softened*(opacity/255.))[:,:,None]
     out[:]=np.uint8(np.clip(out.astype(np.float32)*(1-coverage),0,255))
 
+
+def _rounded_outer_rim(out,coverage):
+    """One gently feathered exterior pixel, with no rectangular corner joins.
+
+    The coverage is the same projected, antialiased rounded modal mask used
+    for the source photograph. Do not draw a rectangular cv2.polyline: that
+    invents straight bright corners outside Brimble's actual border radius.
+    """
+    kernel=cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3))
+    raised=cv2.dilate(coverage,kernel)
+    edge=cv2.subtract(raised,coverage)
+    soft=cv2.GaussianBlur(edge,(0,0),.7)
+    # A faint warm rim only outside source pixels; the user-facing text and
+    # white dialog interior remain entirely untouched.
+    strength=(soft.astype(np.float32)/255.)*.13*(
+        1.-coverage.astype(np.float32)/255.)
+    result=out.astype(np.float32)*(1.-strength[:,:,None])+(
+        np.asarray(RIM_COLOR,dtype=np.float32)[None,None,:]*
+        strength[:,:,None])
+    out[:]=np.uint8(np.clip(np.rint(result),0,255))
+
+
 def composite_elevated_modal(output,modal_source,box,stage_window,
-                             factor,dx,dy,tilt,focal,radius_css=0.):
+                             factor,dx,dy,tilt,focal,radius_css=0.,
+                             coverage_out=None):
     """Occlude real modal pixels over a separately captured modal-free plate.
 
     The overlay is ONLY enabled if the caller has separately verified that
@@ -75,7 +100,6 @@ def composite_elevated_modal(output,modal_source,box,stage_window,
     if not 0<=radius_css<=100 or factor<=0:
         raise ValueError("Invalid evidence-backed modal shape")
     front_quad=_depth_quad(box,stage_window,factor,dx,dy,tilt,focal,DEPTH_PX)
-    base_quad=_depth_quad(box,stage_window,factor,dx,dy,tilt,focal,0.)
     if not np.isfinite(front_quad).all():
         raise ValueError("Invalid elevated projection")
     left=dx+float(box['x'])*factor
@@ -95,12 +119,21 @@ def composite_elevated_modal(output,modal_source,box,stage_window,
                                 flags=cv2.INTER_LINEAR)
     coverage=cv2.warpPerspective(region,local_H,canvas_size,
                                  flags=cv2.INTER_LINEAR)
-    # Two shadows: an ambient contact on H0 and a gentle cast under H60.
-    _shadow_from_quad(output,base_quad,9,18,18,.22)
-    _shadow_from_quad(output,front_quad,4,9,12,.27)
+    # Both shadow passes use the source-rounded mask. A rectangular quad
+    # used here previously made right-angle dark outlines at curved corners.
+    H0=window_homography(ox,oy,ww,wh,*tilt,focal=focal,z=0.)
+    base_coverage=cv2.warpPerspective(region,H0@translate,canvas_size,
+                                      flags=cv2.INTER_LINEAR)
+    _shadow_from_mask(output,base_coverage,9,18,18,.22)
+    _shadow_from_mask(output,coverage,4,9,12,.27)
     a=coverage.astype(np.float32)[:,:,None]/255.
     output[:]=np.uint8(np.clip(
         output.astype(np.float32)*(1-a)+overlay.astype(np.float32)*a,0,255))
-    cv2.polylines(output,[np.rint(front_quad).astype(np.int32)],
-                  True,RIM_COLOR,1,cv2.LINE_AA)
+    _rounded_outer_rim(output,coverage)
+    # Allow experimental RGB dispersion to use this exact rounded mask,
+    # instead of rebuilding a hard H60 bounding rectangle.
+    if coverage_out is not None:
+        if coverage_out.shape!=coverage.shape or coverage_out.dtype!=np.uint8:
+            raise ValueError('Incorrect projected modal coverage buffer')
+        coverage_out[:]=coverage
     return output

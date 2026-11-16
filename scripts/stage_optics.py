@@ -17,6 +17,7 @@ def _polygon(shape:tuple[int,int],quad:np.ndarray)->np.ndarray:
 def apply_stage_optics(frame:np.ndarray,window_quad:np.ndarray,
                        frame_index:int,seed:int=20261116,
                        modal_quad:np.ndarray|None=None,
+                       modal_coverage:np.ndarray|None=None,
                        fps:int=60,refraction_px:float=1.25,
                        dispersion_px:float=1.25)->np.ndarray:
     """Refract only outside H0; modal rim may glow outside H60 by <=1.5px.
@@ -34,8 +35,15 @@ def apply_stage_optics(frame:np.ndarray,window_quad:np.ndarray,
     h,w=frame.shape[:2]
     window=_polygon((h,w),window_quad)
     protected=cv2.dilate(window,np.ones((7,7),np.uint8),iterations=1)
-    if modal_quad is not None:
+    modal=None
+    if modal_coverage is not None:
+        if modal_coverage.shape!=(h,w) or modal_coverage.dtype!=np.uint8:
+            raise ValueError('Modal coverage must match frame dimensions')
+        modal=modal_coverage
+    elif modal_quad is not None:
+        # Backward compatibility for callers without an H60 image mask.
         modal=_polygon((h,w),modal_quad)
+    if modal is not None:
         protected=cv2.bitwise_or(protected,
                       cv2.dilate(modal,np.ones((7,7),np.uint8),iterations=1))
     outside=protected==0
@@ -86,10 +94,10 @@ def apply_stage_optics(frame:np.ndarray,window_quad:np.ndarray,
         result[:,:,2]=np.uint8(np.rint(r))
         result[:,:,0]=np.uint8(np.rint(b))
 
-        if modal_quad is not None:
-            # Subtle H60 luminous rim dispersion, only *outside* the
-            # real modal quad. Its 1.25px shift cannot touch modal text.
-            m=_polygon((h,w),modal_quad)
+        if modal is not None:
+            # Spectral fringe is derived from the projected rounded H60
+            # mask, not the polygon bounding box with squared-off corners.
+            m=modal
             r=cv2.warpAffine(m,np.float32([[1,0,dispersion_px],[0,1,0]]),
                              (w,h),flags=cv2.INTER_LINEAR)
             b=cv2.warpAffine(m,np.float32([[1,0,-dispersion_px],[0,1,0]]),
