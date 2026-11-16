@@ -25,6 +25,7 @@ from cinematic_composite import background_focus
 from cinematic_presentation_v13 import (make_dark_stage,paint_svg_pointer,paint_click_ripple)
 from online_cursor_assets import render_cursor as render_tabler_cursor
 from cinematic_stage import CinematicStage,CinematicCursor
+from modal_depth_capture import verified_modal_background
 from studio_motion_blur import directional_blur
 from studio_motion_callouts import KineticCalloutRenderer
 from spatial_parallax import inertial_tilt_track
@@ -261,7 +262,11 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     preset_frames=(preset_engine['framePlan']['frames'] if preset_engine else None)
     if preset_frames is not None and len(preset_frames)!=total:
         raise ValueError('Preset FramePlan must cover every output video frame')
+    modal_hints=[h for h in (preset_engine.get('framePlan',{}).get('heroMoments',[]) if preset_engine else [])
+                 if h.get('kind')=='modal' and h.get('box')]
     preset_spotlight_frames=0
+    multi_plane_frames=0
+    single_plane_fallback_frames=0
     diff_reveals={d['id']:d for d in (
         preset_engine.get('framePlan',{}).get('diffReveals',[]) if preset_engine else [])}
     film_mode=presentation_v12 or presentation_v13 or presentation_v14 or presentation_v15
@@ -600,6 +605,30 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                     'dimOpacity':float(preset_pose['spotlightDimOpacity']),
                     'factor':info['dpr']*factor,'dx':dx,'dy':dy}
                     if active_spotlight else None)
+                foreground=None
+                background_source=source
+                # The live DOM may display the modal before the delayed trace
+                # dialog-visible event. Hints only identify its expected real
+                # bounds; a genuinely visible dialog is mandatory to lift.
+                near_modal=next((h for h in modal_hints
+                     if abs(float(h['sourceMs'])-wanted_ms)<=350),None)
+                if spotlight is not None and (
+                        preset_frames[index].get('foregroundId') or near_modal):
+                    expected_box=(spotlight['box'] if
+                         preset_frames[index].get('foregroundId') else near_modal['box'])
+                    clean=verified_modal_background(
+                        page,expected_box,(source_px_h,source_px_w))
+                    if clean is not None:
+                        clean_pixels,live_box,radius_css=clean
+                        background_source=cv2.warpAffine(clean_pixels,matrix,(ww,wh),
+                            flags=cv2.INTER_LANCZOS4 if film_mode else cv2.INTER_LINEAR,
+                            borderMode=cv2.BORDER_REPLICATE)
+                        spotlight['box']=live_box
+                        foreground={'source':source,'box':live_box,
+                                    'radiusCss':radius_css}
+                        multi_plane_frames+=1
+                    else:
+                        single_plane_fallback_frames+=1
                 def draw_overlays(final):
                     if callout_renderer is not None:
                         callout_renderer.draw(final,index,
@@ -607,12 +636,13 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                             focal=perspective)
                     root_cursor.draw(final,
                         cursor[source_index] if cursor else None,wanted_ms/1000.,
-                        info['dpr']*factor,dx,dy,tilt=frame_tilt,focal=perspective)
+                        info['dpr']*factor,dx,dy,tilt=frame_tilt,focal=perspective,
+                        foreground_box=foreground['box'] if foreground else None)
                 output_image=root_stage.render(
-                    source,cinematic_cursor=draw_overlays,tilt=frame_tilt,
+                    background_source,cinematic_cursor=draw_overlays,tilt=frame_tilt,
                     glow=audio_levels[source_index] if audio_levels is not None else 0.,
                     perspective_px=perspective,spotlight=spotlight,
-                    diff_reveal=({'commit':diff_reveals[preset_frames[index]['diffId']],
+                    foreground=foreground,diff_reveal=({'commit':diff_reveals[preset_frames[index]['diffId']],
                                   'progress':preset_frames[index]['diffProgress']}
                        if preset_frames and preset_frames[index].get('diffId') in diff_reveals
                        else None))
@@ -719,6 +749,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'preset':preset_engine['preset']['id'] if preset_engine else None,
             'preset_camera_frames':len(preset_frames) if preset_frames else 0,
             'spotlight_frames':preset_spotlight_frames,
+            'multi_plane_frames':multi_plane_frames,
+            'single_plane_fallback_frames':single_plane_fallback_frames,
             'preset_perspective_px':preset_engine['preset']['camera']['perspectivePx']
                 if preset_engine else None,
             'max_abs_tilt_degrees':round(max(

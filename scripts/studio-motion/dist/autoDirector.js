@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.MODAL_FOREGROUND_LIFETIME_MS = void 0;
 exports.detectHeroMoments = detectHeroMoments;
 exports.buildAutoDirector = buildAutoDirector;
 /** Evidence-first director. Plans shots; never fabricates source UI actions.
@@ -102,6 +103,8 @@ function detectHeroMoments(events, startMs, durationMs, preset, sourceToOutput) 
     }
     return heroes;
 }
+exports.MODAL_FOREGROUND_LIFETIME_MS = 2400;
+const MODAL_CLOSE_TYPES = new Set(["dialog-hidden", "dialog-closed", "modal-close", "modal-closed"]);
 function buildAutoDirector(events, startMs, durationMs, preset, viewport = { width: 1280, height: 720 }) {
     const d = preset.director;
     const applyWarp = d.enabled && d.idleStrategy !== "hold" && d.maxWarpSpeed > 1;
@@ -130,6 +133,9 @@ function buildAutoDirector(events, startMs, durationMs, preset, viewport = { wid
         cooldownMs: d.callouts.cooldownMs,
         lifetimeMs: d.callouts.maxLifetimeMs
     });
+    const closingEvents = events.filter(e => (0, types_1.finite)(e.t) &&
+        MODAL_CLOSE_TYPES.has(kind(e))).map(e => e.t - startMs).sort((a, b) => a - b);
+    const modalHeroes = hero.filter(h => h.kind === "modal");
     const cuts = warp.deadZones.map(g => ({
         // Cut-candidates are metadata until a cut-safe renderer exists.
         kind: d.idleStrategy === "cut" ? "cut-candidate" : "ramp",
@@ -141,13 +147,18 @@ function buildAutoDirector(events, startMs, durationMs, preset, viewport = { wid
         const dt = diff ? i * 1000 / preset.export.fps - diff.outputMs : 0;
         const edge = diff ? Math.min(1, dt / 220, (diff.durationMs - dt) / 250) : 0;
         const diffProgress = diff ? (0, types_1.clamp)(edge, 0, 1) ** 2 * (3 - 2 * (0, types_1.clamp)(edge, 0, 1)) : 0;
+        const foreground = [...modalHeroes].reverse().find(h => h.sourceMs <= m.sourceMs &&
+            m.sourceMs - h.sourceMs < exports.MODAL_FOREGROUND_LIFETIME_MS &&
+            !closingEvents.some(t => t > h.sourceMs && t <= m.sourceMs));
         const active = [...hero].reverse().find(h => h.sourceMs <= m.sourceMs
-            && m.sourceMs - h.sourceMs < 1800);
+            && m.sourceMs - h.sourceMs < (h.kind === "modal" ? exports.MODAL_FOREGROUND_LIFETIME_MS : 1800)
+            && !(h.kind === "modal" && closingEvents.some(t => t > h.sourceMs && t <= m.sourceMs)));
         return {
             outputFrame: i,
             outputTimeMs: +(i * 1000 / preset.export.fps).toFixed(5),
             sourceMs: m.sourceMs, speed: m.speed, camera: camera[i],
             heroId: active?.id || null,
+            foregroundId: foreground?.id || null,
             diffId: diff?.id || null, diffProgress: +diffProgress.toFixed(5)
         };
     });

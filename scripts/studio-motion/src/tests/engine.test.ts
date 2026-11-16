@@ -217,3 +217,17 @@ test("screenshot saliency flow protects meaningful changes and eases gaze separa
   assert.ok(plan.framePlan.frames.every((f,i)=>i===0 ||
     f.outputTimeMs>plan.framePlan.frames[i-1]!.outputTimeMs));
 });
+
+test("elevated dialog ownership persists through child actions and expires on close",()=>{
+  const plan=buildMotionEnginePlan(input("3d-launch")).framePlan;
+  const modal=plan.heroMoments.find(h=>h.kind==="modal")!;
+  const afterCopy=plan.frames.find(f=>f.sourceMs>3000&&f.sourceMs<3100)!;
+  assert.equal(afterCopy.foregroundId,modal.id);
+  assert.ok(afterCopy.heroId);
+  const afterExpiry=plan.frames.find(f=>f.sourceMs>3700&&f.sourceMs<3800)!;
+  assert.equal(afterExpiry.foregroundId,null);
+  const closed=buildMotionEnginePlan({...input("3d-launch"),
+    events:[...richTrace,{t:2600,type:"dialog-hidden"}]}).framePlan;
+  const pastClose=closed.frames.find(f=>f.sourceMs>3000&&f.sourceMs<3100)!;
+  assert.equal(pastClose.foregroundId,null);
+});

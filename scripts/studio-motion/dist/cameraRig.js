@@ -97,8 +97,13 @@ function planCameraRig(frameMap, heroMoments, events, preset, startMs, viewport 
         const candidate = gazeIndex >= 0 ? gaze[gazeIndex] : null;
         const attention = candidate && sourceMs - candidate.sourceMs < 1500 &&
             candidate.score >= .4 ? candidate : null;
-        const active = hero && sourceMs - hero.sourceMs <=
-            (hero.kind === "modal" ? 2600 : 1800) && safeBox(hero.box) ? hero : null;
+        const modalClosed = hero?.kind === "modal" && events.some(e => {
+            const k = (e.eventType || e.type).toLowerCase().replaceAll("_", "-");
+            return ["modal-close", "modal-closed", "dialog-hidden", "dialog-closed"].includes(k)
+                && e.t - startMs > hero.sourceMs && e.t - startMs <= sourceMs;
+        });
+        const active = hero && !modalClosed && sourceMs - hero.sourceMs <
+            (hero.kind === "modal" ? 2400 : 1800) && safeBox(hero.box) ? hero : null;
         const box = active?.box || null;
         let desiredScale = 1, desiredX = centerX, desiredY = centerY, desiredRX = 0, desiredRY = 0;
         if (box) {

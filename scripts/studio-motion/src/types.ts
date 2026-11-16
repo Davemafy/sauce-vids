@@ -156,6 +156,8 @@ export interface FrameInstruction {
   speed:number;
   camera:CameraPose;
   heroId:string|null;
+  /** Evidence-backed modal plane owner, null after close/expiry. */
+  foregroundId?:string|null;
   diffId?:string|null;
   diffProgress?:number;
 }

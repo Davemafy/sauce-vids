@@ -39,13 +39,15 @@ def inertial_tilt_track(cursor:Sequence[tuple[float,float]]|None,
 
 def window_homography(x:int,y:int,w:int,h:int,
                       rotate_x:float,rotate_y:float,
-                      focal:float=FOCAL_LENGTH,max_degrees:float=6.)->np.ndarray:
+                      focal:float=FOCAL_LENGTH,max_degrees:float=6.,z:float=0.)->np.ndarray:
     if not math.isfinite(focal) or focal<=600 or focal>3000:
         raise ValueError('Invalid 3D perspective focal distance')
     if (not math.isfinite(max_degrees) or max_degrees<0 or max_degrees>6 or
         not math.isfinite(rotate_x) or not math.isfinite(rotate_y) or
         max(abs(rotate_x),abs(rotate_y))>max_degrees+1e-8):
         raise ValueError('3D window tilt exceeds permitted preset bounds')
+    if not math.isfinite(z) or z<0 or z>60:
+        raise ValueError('Invalid depth plane; expected 0..60px')
     ax,ay=math.radians(rotate_x),math.radians(rotate_y)
     cx,cy=x+w/2.,y+h/2.
     src=np.float32([[x,y],[x+w,y],[x+w,y+h],[x,y+h]])
@@ -53,8 +55,8 @@ def window_homography(x:int,y:int,w:int,h:int,
     for px,py in src:
         X,Y=px-cx,py-cy
         # Y-axis followed by X-axis rotations.
-        X1=X*math.cos(ay)
-        Z1=-X*math.sin(ay)
+        X1=X*math.cos(ay)+z*math.sin(ay)
+        Z1=-X*math.sin(ay)+z*math.cos(ay)
         Y2=Y*math.cos(ax)-Z1*math.sin(ax)
         Z2=Y*math.sin(ax)+Z1*math.cos(ax)
         scale=focal/(focal-Z2)
@@ -71,7 +73,7 @@ def map_pointer(matrix:np.ndarray,x:float,y:float)->tuple[float,float]:
 def projected_target_quad(box:dict,window:tuple[int,int,int,int],
                           source_factor:float,offset_x:float,offset_y:float,
                           rotate_x:float,rotate_y:float,
-                          perspective_px:float=FOCAL_LENGTH)->np.ndarray:
+                          perspective_px:float=FOCAL_LENGTH,z:float=0.)->np.ndarray:
     """Use the SAME window homography for screenshot, rim, and cursor.
 
     Input box is evidence-backed CSS viewport coordinates; source_factor
@@ -91,7 +93,7 @@ def projected_target_quad(box:dict,window:tuple[int,int,int,int],
       [ox+offset_x+(x+w)*source_factor,oy+offset_y+y*source_factor],
       [ox+offset_x+(x+w)*source_factor,oy+offset_y+(y+h)*source_factor],
       [ox+offset_x+x*source_factor,oy+offset_y+(y+h)*source_factor]]])
-    matrix=window_homography(*window,rotate_x,rotate_y,focal=perspective_px)
+    matrix=window_homography(*window,rotate_x,rotate_y,focal=perspective_px,z=z)
     return cv2.perspectiveTransform(coords,matrix)[0]
 
 

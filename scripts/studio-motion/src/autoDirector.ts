@@ -93,6 +93,8 @@ export function detectHeroMoments(
   }
   return heroes;
 }
+export const MODAL_FOREGROUND_LIFETIME_MS=2400;
+const MODAL_CLOSE_TYPES=new Set(["dialog-hidden","dialog-closed","modal-close","modal-closed"]);
 export interface AutoDirectorResult{
   framePlan:SauceFramePlan;
   timeWarp:TimeWarpPlan;
@@ -127,6 +129,9 @@ export function buildAutoDirector(
     cooldownMs:d.callouts.cooldownMs,
     lifetimeMs:d.callouts.maxLifetimeMs
   });
+  const closingEvents=events.filter(e=>finite(e.t) &&
+    MODAL_CLOSE_TYPES.has(kind(e))).map(e=>e.t-startMs).sort((a,b)=>a-b);
+  const modalHeroes=hero.filter(h=>h.kind==="modal");
   const cuts:EditDecision[]=warp.deadZones.map(g=>({
     // Cut-candidates are metadata until a cut-safe renderer exists.
     kind:d.idleStrategy==="cut"?"cut-candidate":"ramp",
@@ -139,13 +144,19 @@ export function buildAutoDirector(
     const dt=diff?i*1000/preset.export.fps-diff.outputMs:0;
     const edge=diff?Math.min(1,dt/220,(diff.durationMs-dt)/250):0;
     const diffProgress=diff?clamp(edge,0,1)**2*(3-2*clamp(edge,0,1)):0;
+    const foreground=[...modalHeroes].reverse().find(h=>
+      h.sourceMs<=m.sourceMs &&
+      m.sourceMs-h.sourceMs<MODAL_FOREGROUND_LIFETIME_MS &&
+      !closingEvents.some(t=>t>h.sourceMs&&t<=m.sourceMs));
     const active=[...hero].reverse().find(h=>h.sourceMs<=m.sourceMs
-      &&m.sourceMs-h.sourceMs<1800);
+      &&m.sourceMs-h.sourceMs<(h.kind==="modal"?MODAL_FOREGROUND_LIFETIME_MS:1800)
+      &&!(h.kind==="modal"&&closingEvents.some(t=>t>h.sourceMs&&t<=m.sourceMs)));
     return {
       outputFrame:i,
       outputTimeMs:+(i*1000/preset.export.fps).toFixed(5),
       sourceMs:m.sourceMs,speed:m.speed,camera:camera[i]!,
       heroId:active?.id||null,
+      foregroundId:foreground?.id||null,
       diffId:diff?.id||null,diffProgress:+diffProgress.toFixed(5)
     };
   });

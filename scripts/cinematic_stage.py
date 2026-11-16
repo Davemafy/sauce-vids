@@ -11,6 +11,9 @@ from typing import Callable
 import numpy as np
 import cv2
 from spatial_parallax import window_homography,map_pointer,projected_target_quad
+from multi_plane_depth import focus_background_plane,composite_elevated_modal
+from multi_plane_depth import focus_background_plane,composite_elevated_modal
+from multi_plane_depth import focus_background_plane,composite_elevated_modal
 from PIL import Image, ImageDraw, ImageFilter
 
 MASTER_WIDTH,MASTER_HEIGHT=1920,1080
@@ -288,7 +291,8 @@ class CinematicStage:
                tilt:tuple[float,float]=(0.,0.),glow:float=0.,
                perspective_px:float=1820.,
                spotlight:dict|None=None,
-               diff_reveal:dict|None=None)->np.ndarray:
+               diff_reveal:dict|None=None,
+                foreground:dict|None=None)->np.ndarray:
         """Outer composition: ambient -> 3D window -> final SVG pointer.
 
         tilt and glow are deterministic frame-indexed inputs. The source
@@ -329,12 +333,23 @@ class CinematicStage:
         if self.enable_studio_floor:
             _studio_floor(output,website_frame,tilt,self.floor_reflection_intensity,perspective_px)
         if spotlight and spotlight.get('active') and spotlight.get('box'):
-            output=apply_spotlight_focus(
-                output,spotlight['box'],self.window,
-                float(spotlight['factor']),float(spotlight['dx']),
-                float(spotlight['dy']),tilt,perspective_px,
-                min(6.,float(spotlight.get('blurPx',6.))),
-                float(spotlight.get('dimOpacity',.25)))
+            if foreground is not None and foreground.get('source') is not None:
+                output=focus_background_plane(output,self.window,tilt,perspective_px,
+                    min(6.,float(spotlight.get('blurPx',6.))),
+                    float(spotlight.get('dimOpacity',.25)))
+                output=composite_elevated_modal(output,foreground['source'],
+                    foreground['box'],self.window,
+                    float(spotlight['factor']),float(spotlight['dx']),
+                    float(spotlight['dy']),tilt,perspective_px,
+                    radius_css=float(foreground.get('radiusCss',0.)))
+            else:
+                # No verified modal-free plate: exact Phase 2 single-plane fallback.
+                output=apply_spotlight_focus(
+                    output,spotlight['box'],self.window,
+                    float(spotlight['factor']),float(spotlight['dx']),
+                    float(spotlight['dy']),tilt,perspective_px,
+                    min(6.,float(spotlight.get('blurPx',6.))),
+                    float(spotlight.get('dimOpacity',.25)))
         if cinematic_cursor is not None:
             cinematic_cursor(output)
         if diff_reveal and diff_reveal.get('progress',0)>0:
@@ -360,16 +375,23 @@ class CinematicCursor:
 
     def draw(self,output:np.ndarray,position:tuple[float,float]|None,
              t:float,source_factor:float,shift_x:float,shift_y:float,
-             tilt:tuple[float,float]=(0.,0.),focal:float=1820.)->None:
+              tilt:tuple[float,float]=(0.,0.),focal:float=1820.,
+              foreground_box:dict|None=None)->None:
         from cinematic_presentation_v13 import _blend,click_ring_frames
         from reference_cursor_v15 import load_cursor,press_scale
         if position is None:return
         ox,oy=self.stage.window[:2]
         homography=(window_homography(*self.stage.window,*tilt,focal=focal)
                     if abs(tilt[0])+abs(tilt[1])>1e-5 else None)
-        def point(px:float,py:float)->tuple[int,int]:
-            if homography is not None:
-                px,py=map_pointer(homography,px,py)
+        lifted_homography=(window_homography(*self.stage.window,*tilt,
+                            focal=focal,z=60.) if foreground_box is not None else None)
+        def on_foreground(px:float,py:float)->bool:
+            b=foreground_box
+            return bool(b and b['x']<=px<=b['x']+b['width']
+                        and b['y']<=py<=b['y']+b['height'])
+        def point(px:float,py:float,lifted:bool=False)->tuple[int,int]:
+            H=lifted_homography if lifted and lifted_homography is not None else homography
+            if H is not None: px,py=map_pointer(H,px,py)
             return round(px),round(py)
         # Click ripple under pointer, tied to actual pointerdown timestamp.
         rings=click_ring_frames()
@@ -378,7 +400,8 @@ class CinematicCursor:
             age=t-(ev['t']-self.start_ms)/1000.
             if not 0<=age<.33:continue
             px,py=point(ox+shift_x+ev['x']*source_factor,
-                        oy+shift_y+ev['y']*source_factor)
+                        oy+shift_y+ev['y']*source_factor,
+                        on_foreground(ev['x'],ev['y']))
             k=min(len(rings)-1,int(age/.33*len(rings)))
             _blend(output,rings[k],px-36,py-36)
 
@@ -397,6 +420,7 @@ class CinematicCursor:
             art=np.asarray(PILImage.fromarray(art,'RGBA').resize(
                 (width,height),PILImage.Resampling.LANCZOS),dtype=np.uint8)
         x,y=point(ox+shift_x+position[0]*source_factor,
-                  oy+shift_y+position[1]*source_factor)
+                  oy+shift_y+position[1]*source_factor,
+                  on_foreground(position[0],position[1]))
         _blend(output,art,round(x-image.hotspot[0]*scale),
                   round(y-image.hotspot[1]*scale))
