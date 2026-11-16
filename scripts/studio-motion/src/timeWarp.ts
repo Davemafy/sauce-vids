@@ -4,6 +4,21 @@
  */
 import {TraceEvent,FrameMap,clamp,finite} from "./types";
 export interface Interval {start:number;end:number}
+export interface GazeTarget {sourceMs:number;x:number;y:number;score:number;flow:number}
+/** Screen-space visual evidence is optional; never infer a target from cursor alone. */
+export function visualGazeTargets(events:TraceEvent[],startMs:number,durationMs:number):GazeTarget[]{
+  const targets:GazeTarget[]=[];
+  for(const e of events){
+    const a=e.attention;
+    if(!a || !finite(e.t) || !finite(e.x) || !finite(e.y) ||
+       !finite(a.score) || !finite(a.flow) || a.score<.3 || a.score>1 ||
+       a.flow<0 || a.flow>1 || e.x<0 || e.y<0 || e.x>2560 || e.y>1440)continue;
+    const t=e.t-startMs;
+    if(t<0||t>durationMs)continue;
+    targets.push({sourceMs:t,x:e.x,y:e.y,score:a.score,flow:a.flow});
+  }
+  return targets.sort((a,b)=>a.sourceMs-b.sourceMs||b.score-a.score);
+}
 export interface TimeWarpOptions {
   idleThresholdMs?:number;
   actionPreRollMs?:number;
@@ -17,6 +32,7 @@ export interface TimeWarpPlan {
   actionWindows:Interval[];
   deadZones:Interval[];
   sourceToOutput:(t:number)=>number;
+  gazeTargets:GazeTarget[];
 }
 function kindOf(e:TraceEvent):string{return (e.eventType||e.type||"").toLowerCase().replaceAll("_","-")}
 export function isHighIntent(e:TraceEvent):boolean {
@@ -75,10 +91,14 @@ export function buildTimeWarp(events:TraceEvent[],startMs:number,
       firstFocus.add(key);
       return true;
     });
-  const locks=unify(intents.map(e=>({
+  const gazeTargets=visualGazeTargets(events,startMs,sourceDurationMs);
+  const locks=unify([...intents.map(e=>({
     start:clamp(e.t-startMs-preroll,0,sourceDurationMs),
     end:clamp(e.t-startMs+postroll,0,sourceDurationMs),
-  })));
+  })),...gazeTargets.filter(g=>g.score>=.65&&g.flow>=.20).map(g=>({
+    start:clamp(g.sourceMs-100,0,sourceDurationMs),
+    end:clamp(g.sourceMs+190,0,sourceDurationMs)
+  }))]);
   let cursor=0;const gaps:Interval[]=[];
   for(const protectedWindow of locks){
     if(protectedWindow.start-cursor>idle)gaps.push({start:cursor,end:protectedWindow.start});
@@ -169,5 +189,5 @@ export function buildTimeWarp(events:TraceEvent[],startMs:number,
   for(let i=1;i<count;i++)if(frameMap[i]!.sourceMs<=frameMap[i-1]!.sourceMs)
     throw new Error("Time map is not strictly increasing at requested fps");
   return {sourceDurationMs,outputDurationMs:+total.toFixed(5),
-          frameMap,actionWindows:locks,deadZones:dead,sourceToOutput};
+          frameMap,actionWindows:locks,deadZones:dead,sourceToOutput,gazeTargets};
 }

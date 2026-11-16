@@ -162,3 +162,58 @@ test("plan is pure and deterministic; full JSON roundtrip is stable",()=>{
  assert.deepEqual(JSON.parse(JSON.stringify(a)),a);
  assert.equal(a.motionEngine?.framePlan.frames.length,a.frameMap.length);
 });
+
+test("verified feature commit reveals an actual diff on the 60fps frame clock",()=>{
+  const commit={sha:"a1b2c3d4e5f6a7b8",file:"src/engine.ts",title:"Ship real capture",
+    lines:["@@ -2,2 +2,2 @@","-const mode = 'draft';","+const mode = 'ready';"]};
+  const event:TraceEvent={t:2100,type:"feature-commit",commit};
+  const captured={events:[...richTrace,event],startMs:0,durationMs:8000,
+    fps:60,preset:"3d-launch" as const};
+  const one=buildMotionEnginePlan(captured),two=buildMotionEnginePlan(captured);
+  assert.deepEqual(one,two);
+  const diff=one.framePlan.diffReveals?.[0];
+  assert.ok(diff);
+  assert.equal(diff!.sha,commit.sha);
+  assert.deepEqual(diff!.lines,commit.lines);
+  const active=one.framePlan.frames.filter(f=>f.diffId===diff!.id);
+  assert.ok(active.length>20);
+  assert.ok(active.some(f=>f.diffProgress!>0.5));
+  assert.ok(active.every(f=>f.diffProgress!>=0&&f.diffProgress!<=1));
+  assert.ok(one.framePlan.heroMoments.some(h=>h.kind==="feature"));
+  const changed=one.framePlan.frames.find(f=>f.sourceMs>2200&&f.sourceMs<2600);
+  assert.ok(changed && changed.camera.rotateYDeg>0.02);
+});
+
+test("unverified or private Git snippets are rejected rather than fabricated",()=>{
+  const publicDiff={sha:"f".repeat(40),file:"src/index.ts",title:"Build feature",
+    lines:["@@ -1 +1 @@","+export const enabled = true;"]};
+  for(const commit of [
+    {...publicDiff,sha:"main"},
+    {...publicDiff,file:"../../keys.txt"},
+    {...publicDiff,lines:["+const apiKey='private_key' "]},
+    {...publicDiff,lines:Array.from({length:20},()=>"+x")}
+  ]){
+    const plan=buildMotionEnginePlan({...input("3d-launch"),events:[
+      {t:1800,type:"feature-commit",commit}
+    ]});
+    assert.equal(plan.framePlan.diffReveals?.length,0);
+    assert.equal(plan.framePlan.heroMoments.length,0);
+  }
+});
+
+test("screenshot saliency flow protects meaningful changes and eases gaze separately from cursor",()=>{
+  const gaze:TraceEvent={type:"visual-attention",t:1400,x:980,y:190,
+    attention:{score:.9,flow:.7}};
+  const warp=buildTimeWarp([gaze],0,3500,60,3,true);
+  assert.equal(warp.gazeTargets.length,1);
+  assert.ok(warp.actionWindows.some(w=>w.start<=1400&&w.end>=1400));
+  const plan=buildMotionEnginePlan({...input("3d-launch"),durationMs:3500,
+     events:[gaze,{t:2000,type:"pointermove",x:50,y:50}]});
+  const f=plan.framePlan.frames.find(f=>f.sourceMs>1800&&f.sourceMs<1950);
+  assert.ok(f);
+  assert.ok(f!.camera.focusX>640);
+  assert.ok(f!.camera.focusY<360);
+  assert.ok(f!.camera.scale>1);
+  assert.ok(plan.framePlan.frames.every((f,i)=>i===0 ||
+    f.outputTimeMs>plan.framePlan.frames[i-1]!.outputTimeMs));
+});

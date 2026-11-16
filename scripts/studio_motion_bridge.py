@@ -30,10 +30,16 @@ def _enrich_events(session:dict)->list[dict]:
 
 def plan_studio_motion(session:dict,duration_s:float,fps:int,
                        config:dict,preset:str|None=None,
-                       preset_overrides:dict|None=None)->dict:
+                       preset_overrides:dict|None=None,
+                       session_dir:Path|None=None)->dict:
     if not BUNDLE.is_file():
         raise RuntimeError('Missing StudioMotion JS bundle. Run: cd scripts/studio-motion && npm ci && npm run build')
-    data={'events':_enrich_events(session),
+    events=_enrich_events(session)
+    if preset is not None and session_dir is not None:
+        from spatial_parallax import evidence_attention_events
+        events.extend(evidence_attention_events(session_dir,session))
+        events.sort(key=lambda e:e['t'])
+    data={'events':events,
           'startMs':session['states'][0]['at_ms'],
           'durationMs':duration_s*1000.,
           'fps':fps,

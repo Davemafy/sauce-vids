@@ -1,2 +1,5 @@
 node_modules/
 .npm/
+
+dist/*.d.ts
+dist/tests/

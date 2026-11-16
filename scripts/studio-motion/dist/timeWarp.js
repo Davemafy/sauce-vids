@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.visualGazeTargets = visualGazeTargets;
 exports.isHighIntent = isHighIntent;
 exports.buildTimeWarp = buildTimeWarp;
 /** Monotonic offline time remapping, rather than changing wall-clock playback rate.
@@ -7,13 +8,30 @@ exports.buildTimeWarp = buildTimeWarp;
  * ramps with zero slope at both boundaries. Source time never runs backward.
  */
 const types_1 = require("./types");
+/** Screen-space visual evidence is optional; never infer a target from cursor alone. */
+function visualGazeTargets(events, startMs, durationMs) {
+    const targets = [];
+    for (const e of events) {
+        const a = e.attention;
+        if (!a || !(0, types_1.finite)(e.t) || !(0, types_1.finite)(e.x) || !(0, types_1.finite)(e.y) ||
+            !(0, types_1.finite)(a.score) || !(0, types_1.finite)(a.flow) || a.score < .3 || a.score > 1 ||
+            a.flow < 0 || a.flow > 1 || e.x < 0 || e.y < 0 || e.x > 2560 || e.y > 1440)
+            continue;
+        const t = e.t - startMs;
+        if (t < 0 || t > durationMs)
+            continue;
+        targets.push({ sourceMs: t, x: e.x, y: e.y, score: a.score, flow: a.flow });
+    }
+    return targets.sort((a, b) => a.sourceMs - b.sourceMs || b.score - a.score);
+}
 function kindOf(e) { return (e.eventType || e.type || "").toLowerCase().replaceAll("_", "-"); }
 function isHighIntent(e) {
     const k = kindOf(e);
-    if (["click", "pointerdown", "submit", "modal-open", "dialog-visible", "modal-opened"].includes(k))
+    if (["click", "pointerdown", "submit", "modal-open", "dialog-visible", "modal-opened", "copy", "paste"].includes(k))
         return true;
     if (["focus", "focusin"].includes(k))
-        return e.isInitial === true || e.role === "textbox" || e.tag === "input";
+        return e.isInitial === true ||
+            (e.isInitial !== false && (e.role === "textbox" || e.tag === "input" || e.tag === "textarea"));
     return false;
 }
 function unify(rows) {
@@ -43,25 +61,50 @@ function sourceSpeed(t, dead, maxSpeed) {
     // cubic Hermite at both boundaries, 1x exactly before protected actions
     return 1 + (maxSpeed - 1) * Math.min(head, tail);
 }
-function buildTimeWarp(events, startMs, sourceDurationMs, fps, maxWarpSpeed = 4, enabled = true) {
+function buildTimeWarp(events, startMs, sourceDurationMs, fps, maxWarpSpeed = 4, enabled = true, options = {}) {
     if (!(0, types_1.finite)(startMs) || !(0, types_1.finite)(sourceDurationMs) || sourceDurationMs <= 0 || sourceDurationMs > 600000)
         throw new Error("Invalid source duration or trace origin");
     if (!(0, types_1.finite)(fps) || fps < 1 || fps > 120)
         throw new Error("FPS outside supported interval");
     if (!(0, types_1.finite)(maxWarpSpeed) || maxWarpSpeed < 1 || maxWarpSpeed > 4)
         throw new Error("maxWarpSpeed must be 1–4");
-    const locks = unify(events.filter(e => (0, types_1.finite)(e.t) && isHighIntent(e)).map(e => ({
-        start: (0, types_1.clamp)(e.t - startMs - 400, 0, sourceDurationMs),
-        end: (0, types_1.clamp)(e.t - startMs + 300, 0, sourceDurationMs),
-    })));
+    const idle = options.idleThresholdMs ?? 800;
+    const preroll = options.actionPreRollMs ?? 400;
+    const postroll = options.actionPostRollMs ?? 300;
+    if (![idle, preroll, postroll].every(types_1.finite) || idle < 200 || idle > 10000 ||
+        preroll < 0 || preroll > 1500 || postroll < 0 || postroll > 1500)
+        throw new Error("Invalid temporal director thresholds");
+    // Only initial focus for each target is an action. Later refocus must
+    // not keep dead zones locked at 1x forever.
+    const firstFocus = new Set();
+    const intents = events.filter(e => (0, types_1.finite)(e.t) && isHighIntent(e))
+        .sort((a, b) => a.t - b.t).filter(e => {
+        const kind = kindOf(e);
+        if (kind !== "focus" && kind !== "focusin")
+            return true;
+        const key = e.selector || e.ariaLabel ||
+            JSON.stringify([e.tag, e.role, e.box?.x, e.box?.y]);
+        if (firstFocus.has(key))
+            return false;
+        firstFocus.add(key);
+        return true;
+    });
+    const gazeTargets = visualGazeTargets(events, startMs, sourceDurationMs);
+    const locks = unify([...intents.map(e => ({
+            start: (0, types_1.clamp)(e.t - startMs - preroll, 0, sourceDurationMs),
+            end: (0, types_1.clamp)(e.t - startMs + postroll, 0, sourceDurationMs),
+        })), ...gazeTargets.filter(g => g.score >= .65 && g.flow >= .20).map(g => ({
+            start: (0, types_1.clamp)(g.sourceMs - 100, 0, sourceDurationMs),
+            end: (0, types_1.clamp)(g.sourceMs + 190, 0, sourceDurationMs)
+        }))]);
     let cursor = 0;
     const gaps = [];
     for (const protectedWindow of locks) {
-        if (protectedWindow.start - cursor > 800)
+        if (protectedWindow.start - cursor > idle)
             gaps.push({ start: cursor, end: protectedWindow.start });
         cursor = Math.max(cursor, protectedWindow.end);
     }
-    if (sourceDurationMs - cursor > 800)
+    if (sourceDurationMs - cursor > idle)
         gaps.push({ start: cursor, end: sourceDurationMs });
     // Explicitly observed loading states and continuous static scrolls are
     // compressible even when shorter than 800ms. They NEVER override action
@@ -167,5 +210,5 @@ function buildTimeWarp(events, startMs, sourceDurationMs, fps, maxWarpSpeed = 4,
         if (frameMap[i].sourceMs <= frameMap[i - 1].sourceMs)
             throw new Error("Time map is not strictly increasing at requested fps");
     return { sourceDurationMs, outputDurationMs: +total.toFixed(5),
-        frameMap, actionWindows: locks, deadZones: dead, sourceToOutput };
+        frameMap, actionWindows: locks, deadZones: dead, sourceToOutput, gazeTargets };
 }

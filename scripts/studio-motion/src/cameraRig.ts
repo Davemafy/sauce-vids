@@ -2,6 +2,7 @@
  * All values are computed sequentially once; any output frame is seekable.
  */
 import {CameraPose,FrameMap,HeroMoment,Rect,SaucePreset,TraceEvent,clamp,finite} from "./types";
+import {visualGazeTargets} from "./timeWarp";
 
 class Spring {
   position:number;velocity=0;
@@ -71,12 +72,18 @@ export function planCameraRig(
   const rx=newSpring(0),ry=newSpring(0);
   const heroes=[...heroMoments].sort((a,b)=>a.sourceMs-b.sourceMs);
   const cursors=sampleCursor(events,startMs);
+  const gaze=visualGazeTargets(events,startMs,
+      frameMap.length?frameMap[frameMap.length-1]!.sourceMs:0);
   const out:CameraPose[]=[];
-  let heroIndex=-1,cursorIndex=0;
+  let heroIndex=-1,cursorIndex=0,gazeIndex=-1;
   for(let i=0;i<frameMap.length;i++){
     const sourceMs=frameMap[i]!.sourceMs;
     while(heroIndex+1<heroes.length&&heroes[heroIndex+1]!.sourceMs<=sourceMs)heroIndex++;
     const hero=heroIndex>=0?heroes[heroIndex]!:null;
+    while(gazeIndex+1<gaze.length&&gaze[gazeIndex+1]!.sourceMs<=sourceMs)gazeIndex++;
+    const candidate=gazeIndex>=0?gaze[gazeIndex]!:null;
+    const attention=candidate && sourceMs-candidate.sourceMs<1500 &&
+      candidate.score>=.4 ? candidate:null;
     const active=hero&&sourceMs-hero.sourceMs<=
       (hero.kind==="modal"?2600:1800)&&safeBox(hero.box)?hero:null;
     const box=active?.box||null;
@@ -90,6 +97,12 @@ export function planCameraRig(
       desiredX=clamp(box.x+box.width/2,0,viewport.width);
       desiredY=clamp(box.y+box.height/2,0,viewport.height);
     }
+    if(p.mode==="perspective" && !box && attention){
+      // Small contextual emphasis only; a verified action always wins.
+      desiredScale=clamp(1+attention.score*.065,1,p.scaleRange[1]);
+      desiredX=clamp(attention.x,viewport.width*.22,viewport.width*.78);
+      desiredY=clamp(attention.y,viewport.height*.22,viewport.height*.78);
+    }
     if(p.mode==="perspective"){
       const v=velocityAt(sourceMs,cursors,cursorIndex);
       cursorIndex=v.index;
@@ -97,6 +110,11 @@ export function planCameraRig(
       // zoom. The camera can tilt slightly during approach.
       desiredRX=clamp(-p.maxTiltDeg*Math.tanh(v.y/1550),-p.maxTiltDeg,p.maxTiltDeg);
       desiredRY=clamp(p.maxTiltDeg*Math.tanh(v.x/1550),-p.maxTiltDeg,p.maxTiltDeg);
+      if(hero?.kind==="feature" && sourceMs-hero.sourceMs<2100){
+        // Micro-pivot explicitly tied to the recorded commit event.
+        desiredRY=clamp(desiredRY+1.65,-p.maxTiltDeg,p.maxTiltDeg);
+        desiredRX=clamp(desiredRX-.65,-p.maxTiltDeg,p.maxTiltDeg);
+      }
       if(box){
         desiredRX+=clamp((desiredY-centerY)/viewport.height*.6,-.35,.35);
         desiredRY+=clamp((desiredX-centerX)/viewport.width*.6,-.35,.35);

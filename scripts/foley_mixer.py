@@ -175,3 +175,43 @@ def render_foley_plan(plan:dict,output_wav:Path,
        'duration_s':n/RATE,'cue_count':len(plan.get('cues',[])) if enabled else 0,
        'muted':not enabled,'asset_sources':sources,'peak':round(peak,6),
        'music_ducking':bool(music is not None and plan.get('duckIntervals') and enabled)}
+
+
+def foley_shader_envelopes(plan:dict,frames:int,
+                           asset_dir:Path|None=None,fps:int=60)->dict[str,list[float]]:
+    """Deterministic shader uniforms from the SAME Foley samples as the mix.
+
+    At 60 fps each video frame corresponds to exactly 800 48-kHz samples;
+    outputSample (not source time, wall time or ffmpeg PTS) drives pulses.
+    """
+    if plan.get('schema')!='sauce-foley-plan-v1' or plan.get('sampleRate')!=RATE:
+        raise ValueError('Invalid shader FoleyPlan')
+    if not isinstance(frames,int) or frames<1 or frames>36000 or fps!=60:
+        raise ValueError('Shader envelope requires deterministic 60fps')
+    names={'click_crisp':'click','pop_glass':'glass'}
+    samples_per_frame=RATE//fps
+    output={channel:np.zeros(frames*samples_per_frame,dtype=np.float32)
+            for channel in names.values()}
+    if bool(plan.get('muted')):return {key:[0.]*frames for key in output}
+    for cue in plan.get('cues',[]):
+        name=cue.get('sound')
+        if name not in SOUNDS:raise ValueError('Invalid shader sound')
+        if name not in names:continue
+        index=cue.get('outputSample')
+        gain=cue.get('gain')
+        if not isinstance(index,int) or index<0 or index>=frames*samples_per_frame or not isinstance(gain,(float,int)) or not 0<=gain<=1:
+            raise ValueError('Invalid shader cue clock')
+        asset=_sample_asset(name,asset_dir)
+        wave=(asset if asset is not None else _synthesis(name)).mean(axis=1)
+        block=output[names[name]]
+        end=min(len(block),index+len(wave))
+        block[index:end]+=wave[:end-index]*gain*float(plan['masterGain'])
+    result={}
+    for name,arr in output.items():
+        rms=np.sqrt(np.mean(arr.reshape(frames,samples_per_frame).astype(np.float64)**2,
+                            axis=1))
+        # Audio peak is bounded; protect perceived transients without creating
+        # shader pulses where no actual audio waveform exists.
+        level=np.clip(rms/.10,0.,1.)
+        result[name]=[float(round(q,5)) for q in level]
+    return result

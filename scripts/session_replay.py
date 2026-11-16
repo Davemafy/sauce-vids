@@ -262,6 +262,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     if preset_frames is not None and len(preset_frames)!=total:
         raise ValueError('Preset FramePlan must cover every output video frame')
     preset_spotlight_frames=0
+    diff_reveals={d['id']:d for d in (
+        preset_engine.get('framePlan',{}).get('diffReveals',[]) if preset_engine else [])}
     film_mode=presentation_v12 or presentation_v13 or presentation_v14 or presentation_v15
     vector_mode=presentation_v13 or presentation_v14 or presentation_v15
     if (presentation_v14 or presentation_v15) and cursor_style not in ('ink','outline'):
@@ -609,7 +611,11 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 output_image=root_stage.render(
                     source,cinematic_cursor=draw_overlays,tilt=frame_tilt,
                     glow=audio_levels[source_index] if audio_levels is not None else 0.,
-                    perspective_px=perspective,spotlight=spotlight)
+                    perspective_px=perspective,spotlight=spotlight,
+                    diff_reveal=({'commit':diff_reveals[preset_frames[index]['diffId']],
+                                  'progress':preset_frames[index]['diffProgress']}
+                       if preset_frames and preset_frames[index].get('diffId') in diff_reveals
+                       else None))
             else:
                 output_image=base.copy()
                 area=output_image[wy:wy+wh,wx:wx+ww]

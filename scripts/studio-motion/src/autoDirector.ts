@@ -3,7 +3,7 @@
  */
 import {
   EditDecision,HeroMoment,SauceFramePlan,SaucePreset,TraceEvent,
-  finite,Rect
+  finite,Rect,DiffReveal,CommitDiff,clamp
 } from "./types";
 import {buildTimeWarp,TimeWarpPlan} from "./timeWarp";
 import {planCameraRig} from "./cameraRig";
@@ -17,6 +17,20 @@ function validBox(b:Rect|null|undefined):b is Rect{
     b.width>=2&&b.height>=2;
 }
 const PRIVATE=/password|secret|api.?key|token|credit.?card|otp|[\w.+-]+@[\w.-]+\.[a-z]{2,}/i;
+function safeCommit(value:CommitDiff|undefined):CommitDiff|null {
+  if(!value || typeof value!=="object" || !/^[a-f0-9]{7,40}$/i.test(value.sha) ||
+    typeof value.file!=="string" || !/^[A-Za-z0-9_.\/-]{1,140}$/.test(value.file) ||
+    value.file.includes("..") || typeof value.title!=="string" ||
+    !Array.isArray(value.lines) || value.lines.length<1 || value.lines.length>16)
+    return null;
+  const secret=/(?:secret|password|token|api.?key|private.?key|authorization|[\w.+-]+@[\w.-]+\.[a-z]{2,})/i;
+  const lines=value.lines;
+  if(lines.some(line=>typeof line!=="string" || line.length>160 ||
+    !/^[ +\-@]/.test(line) || secret.test(line) || /[\x00-\x08\x0B-\x1F]/.test(line)))return null;
+  if(value.title.length>72 || secret.test(value.title))return null;
+  return {sha:value.sha.toLowerCase(),file:value.file,title:value.title,
+          lines:lines.slice()};
+}
 function safeLabel(e:TraceEvent):string|null{
   const raw=e.ariaLabel||e.innerText;
   if(!raw||PRIVATE.test(raw))return null;
@@ -28,6 +42,7 @@ function rank(e:TraceEvent):{kind:HeroMoment["kind"];score:number}|null{
   const k=kind(e);
   if(["modal-open","modal-opened","dialog-visible"].includes(k))
     return {kind:"modal",score:95};
+  if(k==="feature-commit" && e.commit)return {kind:"feature",score:99};
   if(k==="submit")return {kind:"submit",score:90};
   if(k==="copy"||k==="paste")return {kind:k,score:82};
   if(k==="click"||k==="pointerdown"){
@@ -47,6 +62,7 @@ export function detectHeroMoments(
   const heroes:HeroMoment[]=[];
   for(let i=0;i<ordered.length;i++){
     const event=ordered[i]!,found=rank(event);
+    if(found?.kind==="feature" && !safeCommit(event.commit))continue;
     if(!found||found.score<preset.director.heroScoreThreshold)continue;
     const t=event.t-startMs;
     if(t<0||t>durationMs)continue;
@@ -94,6 +110,16 @@ export function buildAutoDirector(
       actionPostRollMs:d.actionPostRollMs
     });
   const hero=detectHeroMoments(events,startMs,durationMs,preset,warp.sourceToOutput);
+  const diffs:DiffReveal[]=[];
+  for(const event of [...events].sort((a,b)=>a.t-b.t)){
+    if((event.eventType||event.type).toLowerCase().replaceAll("_","-")!=="feature-commit")continue;
+    const commit=safeCommit(event.commit),sourceMs=event.t-startMs;
+    if(!commit || !finite(sourceMs) || sourceMs<0 || sourceMs>durationMs ||
+       !hero.some(h=>h.kind==="feature"&&Math.abs(h.sourceMs-sourceMs)<.001))continue;
+    const outputMs=warp.sourceToOutput(sourceMs);
+    diffs.push({...commit,id:"diff-"+diffs.length,sourceMs,outputMs,
+      durationMs:Math.max(0,Math.min(2100,warp.outputDurationMs-outputMs))});
+  }
   const camera=planCameraRig(warp.frameMap,hero,events,preset,startMs,viewport);
   const approvedEvents=events.filter(e=>hero.some(h=>Math.abs(h.sourceMs-(e.t-startMs))<.001));
   const callouts=buildCallouts(approvedEvents,startMs,warp.sourceToOutput,{
@@ -107,13 +133,20 @@ export function buildAutoDirector(
     sourceStartMs:g.start,sourceEndMs:g.end,speedCap:d.maxWarpSpeed
   }));
   const frames=warp.frameMap.map((m,i)=>{
+    const diff=[...diffs].reverse().find(d=>
+      i*1000/preset.export.fps>=d.outputMs &&
+      i*1000/preset.export.fps<d.outputMs+d.durationMs);
+    const dt=diff?i*1000/preset.export.fps-diff.outputMs:0;
+    const edge=diff?Math.min(1,dt/220,(diff.durationMs-dt)/250):0;
+    const diffProgress=diff?clamp(edge,0,1)**2*(3-2*clamp(edge,0,1)):0;
     const active=[...hero].reverse().find(h=>h.sourceMs<=m.sourceMs
       &&m.sourceMs-h.sourceMs<1800);
     return {
       outputFrame:i,
       outputTimeMs:+(i*1000/preset.export.fps).toFixed(5),
       sourceMs:m.sourceMs,speed:m.speed,camera:camera[i]!,
-      heroId:active?.id||null
+      heroId:active?.id||null,
+      diffId:diff?.id||null,diffProgress:+diffProgress.toFixed(5)
     };
   });
   return {
@@ -122,7 +155,7 @@ export function buildAutoDirector(
       fps:preset.export.fps,sourceDurationMs:durationMs,
       outputDurationMs:warp.outputDurationMs,
       frames,actionWindows:warp.actionWindows,deadZones:warp.deadZones,
-      heroMoments:hero,editDecisions:cuts,callouts
+      heroMoments:hero,editDecisions:cuts,callouts,diffReveals:diffs
     },
     timeWarp:warp
   };

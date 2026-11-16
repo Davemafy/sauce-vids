@@ -1,5 +1,21 @@
 /** Shared contracts. Browser evidence is treated as untrusted; redact at capture. */
 export interface Rect { x:number; y:number; width:number; height:number }
+export interface CommitDiff {
+  sha:string;
+  file:string;
+  title:string;
+  lines:string[];
+}
+export interface AttentionEvidence {
+  score:number;
+  flow:number;
+}
+export interface DiffReveal extends CommitDiff {
+  id:string;
+  sourceMs:number;
+  outputMs:number;
+  durationMs:number;
+}
 export interface TraceEvent {
   t:number;
   type:string;
@@ -18,6 +34,10 @@ export interface TraceEvent {
   isInitial?:boolean;
   isLoading?:boolean;
   scrollMode?:"static"|"animated";
+  /** Optional trusted screenshot-derived gaze proposal, not a cursor target. */
+  attention?:AttentionEvidence;
+  /** Optional verified, sanitized and explicitly supplied local Git evidence. */
+  commit?:CommitDiff;
 }
 export interface StudioMotionConfig {
   enableTimeWarp:boolean;
@@ -116,7 +136,7 @@ export interface CameraPose {
 }
 export interface HeroMoment {
   id:string;
-  kind:"click"|"modal"|"submit"|"copy"|"paste";
+  kind:"click"|"modal"|"submit"|"copy"|"paste"|"feature";
   sourceMs:number;
   outputMs:number;
   score:number;
@@ -136,6 +156,8 @@ export interface FrameInstruction {
   speed:number;
   camera:CameraPose;
   heroId:string|null;
+  diffId?:string|null;
+  diffProgress?:number;
 }
 export interface SauceFramePlan {
   schema:"sauce-frame-plan-v1";
@@ -148,6 +170,7 @@ export interface SauceFramePlan {
   deadZones:{start:number;end:number}[];
   heroMoments:HeroMoment[];
   editDecisions:EditDecision[];
+  diffReveals?:DiffReveal[];
   callouts:MappedCallout[];
 }
 export interface FoleyCue {

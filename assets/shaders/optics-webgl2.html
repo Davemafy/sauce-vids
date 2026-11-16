@@ -17,6 +17,9 @@ precision highp float;
 in vec2 uv;
 uniform sampler2D img;
 uniform float seed;
+uniform float studioEffects;
+uniform float clickEnergy;
+uniform float glassEnergy;
 out vec4 fragColor;
 float hash12(vec2 p) {
   vec3 p3=fract(vec3(p.xyx)*.1031);
@@ -34,6 +37,44 @@ void main(){
   vec3 clr=vec3(texture(img,sampleUv+shift).r,
                 texture(img,sampleUv).g,
                 texture(img,sampleUv-shift).b);
+  if(studioEffects>.5){
+    // Real screen-space reflection: re-sample visible window pixels from
+    // this composited frame, mapped across the virtual floor's perspective.
+    // uv origin is bottom-left; source image texture is top-left.
+    const float horizon=124./1080.;
+    vec2 d=uv;
+    if(d.y<horizon && d.x>220./1920. && d.x<1700./1920.){
+      float depth=clamp((horizon-d.y)/horizon,0.,1.);
+      vec2 reflected=vec2(.5+(d.x-.5)*(1.-depth*.17),
+                          956./1080. - (horizon-d.y)*.76);
+      vec2 ripple=vec2(sin(d.y*135. + seed*.013)*.0014,
+                        cos(d.x*160. - seed*.012)*.0007);
+      vec3 reflectedColor=texture(img,clamp(reflected+ripple,0.,1.)).rgb;
+      float fade=(1.-depth)*(1.-depth)*.18;
+      clr=mix(clr,reflectedColor,fade);
+      // Acoustic caustics only occur for actual click/glass sample energy.
+      // Deterministic frame uniform makes arbitrary frame seeking safe.
+      float standing=sin(d.x*126. + sin(d.y*88.+seed*.075)*2.8);
+      float crossing=cos(d.y*146. - seed*.062);
+      float caustic=pow(max(0.,standing*crossing),3.);
+      float gain=clamp(clickEnergy*.65+glassEnergy*.85,0.,1.);
+      clr+=vec3(.18,.235,.30)*caustic*gain*(1.-depth)*.24;
+    }
+    // Refractive window GLASS EDGE. 2px-or-less offsets leave every
+    // captured word and center-screen interaction legible and unchanged.
+    float border=min(min(d.x-220./1920.,1700./1920.-d.x),
+                     min(d.y-124./1080.,956./1080.-d.y));
+    if(border>=0. && border<.012){
+      float rim=1.-smoothstep(.001,.012,border);
+      vec2 direction=normalize(vec2(d.x-.5,d.y-.5)+vec2(.000001));
+      vec2 refractUv=sampleUv+direction*.00065*rim;
+      vec2 spectrum=direction*.00036*rim;
+      vec3 refracted=vec3(texture(img,refractUv+spectrum).r,
+                          texture(img,refractUv).g,
+                          texture(img,refractUv-spectrum).b);
+      clr=mix(clr,refracted,.83*rim);
+    }
+  }
   float mono=hash12(floor(gl_FragCoord.xy)+seed*17.0)-.5;
   clr+=mono*.020; // 2% monochrome film grain amplitude
   float vignette=1.-.080*pow(clamp(length(centered)/.707,0.,1.),2.0);
@@ -66,15 +107,21 @@ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
 gl.uniform1i(gl.getUniformLocation(program,"img"),0);
 const noise=gl.getUniformLocation(program,"seed");
+const studioUniform=gl.getUniformLocation(program,"studioEffects");
+const clickUniform=gl.getUniformLocation(program,"clickEnergy");
+const glassUniform=gl.getUniformLocation(program,"glassEnergy");
 gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
 gl.viewport(0,0,1920,1080);
 window.opticsRenderer="WebGL2";
-window.sauceOptics=async function(encoded,frameIndex){
+window.sauceOptics=async function(encoded,frameIndex,studioMode=false,click=0,glass=0){
   const blob=await(await fetch("data:image/png;base64,"+encoded)).blob();
   const bitmap=await createImageBitmap(blob);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,bitmap);
   bitmap.close();
   gl.uniform1f(noise,frameIndex);
+  gl.uniform1f(studioUniform,studioMode?1.:0.);
+  gl.uniform1f(clickUniform,Math.max(0,Math.min(1,click)));
+  gl.uniform1f(glassUniform,Math.max(0,Math.min(1,glass)));
   gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   gl.finish();
   const error=gl.getError();

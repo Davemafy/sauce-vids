@@ -62,6 +62,14 @@ def verify_package(session:dict,folder:Path)->dict:
     events=session['events']
     if any(events[i+1]['t']<events[i]['t'] for i in range(len(events)-1)):
         raise ValueError('Nonmonotone event timestamps')
+    from git_evidence import validate_commit
+    for event in events:
+        if event.get('type')=='feature-commit':
+            if not isinstance(event.get('t'),(float,int)) or not isinstance(event.get('commit'),dict):
+                raise ValueError('Malformed Git feature event')
+            validate_commit(event['commit'])
+        elif 'commit' in event:
+            raise ValueError('Git metadata requires an explicit feature event')
     workflow=session['workflow']
     if any('value' in item or 'password' in item or 'secret' in item for item in workflow):
         raise ValueError('Sensitive workflow value leaked into trace')

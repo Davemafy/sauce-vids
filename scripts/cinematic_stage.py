@@ -287,7 +287,8 @@ class CinematicStage:
                cinematic_cursor:Callable[[np.ndarray],None]|None=None,
                tilt:tuple[float,float]=(0.,0.),glow:float=0.,
                perspective_px:float=1820.,
-               spotlight:dict|None=None)->np.ndarray:
+               spotlight:dict|None=None,
+               diff_reveal:dict|None=None)->np.ndarray:
         """Outer composition: ambient -> 3D window -> final SVG pointer.
 
         tilt and glow are deterministic frame-indexed inputs. The source
@@ -336,6 +337,15 @@ class CinematicStage:
                 float(spotlight.get('dimOpacity',.25)))
         if cinematic_cursor is not None:
             cinematic_cursor(output)
+        if diff_reveal and diff_reveal.get('progress',0)>0:
+            from code_diff_reveal import peel_browser_frame
+            group=_tilt_mask()[:,:,0]
+            if abs(tilt[0])+abs(tilt[1])>1e-5:
+                group=cv2.warpPerspective(group,
+                    window_homography(x,y,w,h,*tilt,focal=perspective_px),
+                    (self.width,self.height),flags=cv2.INTER_LINEAR)
+            output=peel_browser_frame(output,ambient,diff_reveal['commit'],
+                     float(diff_reveal['progress']),group)
         return output
 
 

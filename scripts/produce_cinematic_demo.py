@@ -134,7 +134,7 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             'enableCallouts':enable_callouts,
             'calloutCooldownMs':callout_cooldown_ms,
             'maxCalloutLifetimeMs':1800},
-            preset=preset,preset_overrides=(
+            preset=preset,session_dir=session_dir,preset_overrides=(
               {'sound':dict({'muted':bool(mute_audio)},
                     **({'masterGain':foley_volume} if foley_volume is not None else {}))}
               if preset and (mute_audio or foley_volume is not None) else None))
@@ -167,7 +167,18 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
     if webgl_optics:
         from postprocess_webgl_video import apply_video
         webgl_master=out_dir/'webgl-master-1080p60.mp4'
-        webgl_report=apply_video(master,webgl_master)
+        shader_uniforms=None
+        stage_fx=preset in ('3d-launch','hyper-cut')
+        if stage_fx:
+            from foley_mixer import foley_shader_envelopes
+            shader_uniforms=foley_shader_envelopes(
+                studio_plan['motionEngine']['foleyPlan'],
+                int(round(report['seconds']*FPS)),foley_assets)
+        if stage_fx:
+            webgl_report=apply_video(master,webgl_master,
+                foley_uniforms=shader_uniforms,studio=True)
+        else:
+            webgl_report=apply_video(master,webgl_master)
         os.replace(webgl_master,master)
         verify_mp4(master,*MASTER_SIZE,FPS)
     preset_foley=None

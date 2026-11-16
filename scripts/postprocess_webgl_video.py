@@ -9,7 +9,8 @@ from webgl_optics import WebGLOptics
 
 CHROME='/opt/devmcp-browsers/chromium_headless_shell-1254/chrome-headless-shell-linux64/chrome-headless-shell'
 
-def apply_video(input_path:Path,output:Path,*,limit_frames:int|None=None)->dict:
+def apply_video(input_path:Path,output:Path,*,limit_frames:int|None=None,
+                foley_uniforms:dict|None=None,studio:bool=False)->dict:
     if input_path.resolve()==output.resolve():raise ValueError('Separate source/output required')
     cap=cv2.VideoCapture(str(input_path))
     w,h,fps=(int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
@@ -19,6 +20,11 @@ def apply_video(input_path:Path,output:Path,*,limit_frames:int|None=None)->dict:
         raise ValueError('WebGL optics supports 1920x1080 at 60fps')
     frame_count=int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     if frame_count<=0:raise RuntimeError('Missing input video frames')
+    if foley_uniforms is not None:
+        if set(foley_uniforms)!={'click','glass'} or any(
+            len(foley_uniforms[k])<min(frame_count,limit_frames or frame_count)
+            for k in ('click','glass')):
+            raise ValueError('Shader Foley uniform/frame clock mismatch')
     output.parent.mkdir(parents=True,exist_ok=True)
     video_only=output.with_name(output.stem+'-optics-video-only.mp4')
     encoder=subprocess.Popen([
@@ -41,7 +47,12 @@ def apply_video(input_path:Path,output:Path,*,limit_frames:int|None=None)->dict:
                 if limit_frames and frames>=limit_frames:break
                 ok,frame=cap.read()
                 if not ok:break
-                output_frame=shader.apply(frame,frames)
+                if studio:
+                    output_frame=shader.apply(frame,frames,studio=True,
+                        click_energy=foley_uniforms['click'][frames] if foley_uniforms else 0.,
+                        glass_energy=foley_uniforms['glass'][frames] if foley_uniforms else 0.)
+                else:
+                    output_frame=shader.apply(frame,frames)
                 encoder.stdin.write(output_frame.tobytes())
                 frames+=1
                 if frames%60==0:print(f'WEBGL {frames}/{frame_count}',flush=True)
@@ -66,7 +77,8 @@ def apply_video(input_path:Path,output:Path,*,limit_frames:int|None=None)->dict:
     if frames!=min(frame_count,limit_frames or frame_count):
         raise RuntimeError(f'WebGL optics processed only {frames} frames')
     return {'renderer':'WebGL2','frames':frames,'resolution':[w,h],
-            'fps':fps,'shader':'optics-webgl2.html','source':str(input_path),
+            'fps':fps,'shader':'optics-webgl2.html','studio_refraction':studio,
+            'foley_uniforms':foley_uniforms is not None,'source':str(input_path),
             'master':str(output),'grain':.02,'edge_aberration_max_uv':.00085,
             'vignette_max':.08}
 

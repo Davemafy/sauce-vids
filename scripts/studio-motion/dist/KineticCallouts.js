@@ -46,7 +46,9 @@ function buildCallouts(events, startMs, sourceToOutput, options) {
         if (!label || !e.box)
             continue;
         const t = Math.max(0, e.t - startMs), mapped = sourceToOutput(t);
-        if (mapped - last < options.cooldownMs)
+        // Never overlap even when the configurable cooldown is shorter than
+        // the maximum visible lifetime. Defaults remain 2500ms / 1800ms.
+        if (mapped - last < Math.max(options.cooldownMs, hold))
             continue;
         const b = e.box;
         if (![b.x, b.y, b.width, b.height].every(types_1.finite) || b.width < 2 || b.height < 2)
