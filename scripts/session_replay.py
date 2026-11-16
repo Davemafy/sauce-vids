@@ -270,6 +270,11 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     preset_spotlight_frames=0
     multi_plane_frames=0
     single_plane_fallback_frames=0
+    concealed_terminal_frames=0
+    live_modal_hold_frames=0
+    # Presentation-only exception: verified Brimble dark terminal shell.
+    hide_brimble_terminal=(session['source_url'].rstrip('/')==
+                           'https://www.brimble.io')
     diff_reveals={d['id']:d for d in (
         preset_engine.get('framePlan',{}).get('diffReveals',[]) if preset_engine else [])}
     film_mode=presentation_v12 or presentation_v13 or presentation_v14 or presentation_v15
@@ -611,16 +616,42 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                     if active_spotlight else None)
                 foreground=None
                 background_source=source
+                live_modal_hold=False
+                # A verified dialog can remain visible after the planner's
+                # nominal 2400ms hero lifetime. Hide its terminal until the
+                # actual DOM closes, rather than resurrecting it in the outro.
+                if (hide_brimble_terminal and modal_hints
+                    # A transient copied-command feature spotlight can
+                    # outlive the planner's foregroundId, while Chromium's
+                    # dialog stays open. Keep the real modal plane in front
+                    # even across that feature highlight rather than briefly
+                    # returning to the black terminal background.
+                    and (spotlight is None or
+                         not preset_frames[index].get('foregroundId'))
+                    and not any(e.get('type') in
+                        ('dialog-hidden','dialog-closed','modal-close','modal-closed')
+                        and e['t']-start_ms<=wanted_ms
+                        for e in session['events'])):
+                    live=page.get_by_role('dialog').first
+                    if live.count() and live.is_visible():
+                        spotlight={'active':True,
+                            'box':modal_hints[-1]['box'],
+                            'blurPx':6.,'dimOpacity':.25,
+                            'factor':info['dpr']*factor,'dx':dx,'dy':dy}
+                        live_modal_hold=True
                 # The live DOM may display the modal before the delayed trace
                 # dialog-visible event. Hints only identify its expected real
                 # bounds; a genuinely visible dialog is mandatory to lift.
-                expected_box=expected_modal_box(modal_hints,
-                    preset_frames[index].get('foregroundId'),wanted_ms)
+                expected_box=(modal_hints[-1]['box'] if live_modal_hold else
+                    expected_modal_box(modal_hints,
+                        preset_frames[index].get('foregroundId'),wanted_ms))
                 if spotlight is not None and expected_box is not None:
                     clean=verified_modal_background(
-                        page,expected_box,(source_px_h,source_px_w))
+                        page,expected_box,(source_px_h,source_px_w),
+                        hide_dark_panel=hide_brimble_terminal)
                     if clean is not None:
-                        clean_pixels,live_box,radius_css=clean
+                        clean_pixels,live_box,radius_css,terminal_hidden=clean
+                        concealed_terminal_frames+=int(terminal_hidden)
                         background_source=cv2.warpAffine(clean_pixels,matrix,(ww,wh),
                             flags=cv2.INTER_LANCZOS4 if film_mode else cv2.INTER_LINEAR,
                             borderMode=cv2.BORDER_REPLICATE)
@@ -628,8 +659,28 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                         foreground={'source':source,'box':live_box,
                                     'radiusCss':radius_css}
                         multi_plane_frames+=1
+                        live_modal_hold_frames+=int(live_modal_hold)
                     else:
-                        single_plane_fallback_frames+=1
+                        if live_modal_hold:
+                            # No verified modal pixels; never invent a layer.
+                            spotlight=None
+                        else:
+                            single_plane_fallback_frames+=1
+                protected_text=None
+                if foreground is not None and hide_brimble_terminal:
+                    # Real DOM text range is narrower than the clickable span.
+                    protected_text=page.evaluate("""() => {
+                      const dialog=document.querySelector('[role=dialog]');
+                      if(!dialog)return null;
+                      const el=[...dialog.querySelectorAll('span')].find(
+                        n=>n.textContent.trim()==='Codex');
+                      if(!el)return null;
+                      const range=document.createRange();
+                      range.selectNodeContents(el);
+                      const r=range.getBoundingClientRect();
+                      return r.width>8&&r.height>8 ? {
+                        x:r.x,y:r.y,width:r.width,height:r.height} : null;
+                    }""")
                 def draw_overlays(final):
                     if callout_renderer is not None:
                         callout_renderer.draw(final,index,
@@ -638,7 +689,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                     root_cursor.draw(final,
                         cursor[source_index] if cursor else None,wanted_ms/1000.,
                         info['dpr']*factor,dx,dy,tilt=frame_tilt,focal=perspective,
-                        foreground_box=foreground['box'] if foreground else None)
+                        foreground_box=foreground['box'] if foreground else None,
+                        protected_text_box=protected_text)
                 output_image=root_stage.render(
                     background_source,cinematic_cursor=draw_overlays,tilt=frame_tilt,
                     glow=audio_levels[source_index] if audio_levels is not None else 0.,
@@ -646,6 +698,11 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                     foreground=foreground,diff_reveal=({'commit':diff_reveals[preset_frames[index]['diffId']],
                                   'progress':preset_frames[index]['diffProgress']}
                        if preset_frames and preset_frames[index].get('diffId') in diff_reveals
+                          # A separate 600px commit card peels out on the right and
+                          # looks like an accidental cut-off terminal behind
+                          # Brimble's genuine open dialog. The real command is
+                          # already visible; never cover or shrink its source UI.
+                          and not (hide_brimble_terminal and foreground is not None)
                        else None))
             else:
                 output_image=base.copy()
@@ -752,6 +809,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'spotlight_frames':preset_spotlight_frames,
             'beat_cut_frames':sorted(beat_cut_frames),
             'multi_plane_frames':multi_plane_frames,
+            'concealed_terminal_frames':concealed_terminal_frames,
+            'live_modal_hold_frames':live_modal_hold_frames,
             'single_plane_fallback_frames':single_plane_fallback_frames,
             'preset_perspective_px':preset_engine['preset']['camera']['perspectivePx']
                 if preset_engine else None,

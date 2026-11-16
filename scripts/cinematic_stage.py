@@ -260,6 +260,18 @@ def apply_spotlight_focus(frame:np.ndarray,box:dict,
     return out
 
 
+def cursor_glyph_clear_of_text(left:int,top:int,width:int,height:int,
+                               label_quad:np.ndarray)->tuple[int,int]:
+    """Keep the drawn pointer off actual DOM text, not the recorded click."""
+    lx=float(np.min(label_quad[:,0]));rx=float(np.max(label_quad[:,0]))
+    ty=float(np.min(label_quad[:,1]));by=float(np.max(label_quad[:,1]))
+    if left+width<=lx-4 or left>=rx+4 or top+height<=ty-4 or top>=by+4:
+        return left,top
+    right=round(rx+5)
+    # The pointer normally clears a short word by moving to its right.
+    return (right,top) if right-left<=2*width else (left,round(by+5))
+
+
 @dataclass(frozen=True)
 class CinematicStage:
     """Absolute root video wrapper, never an optional nested UI decoration."""
@@ -376,7 +388,8 @@ class CinematicCursor:
     def draw(self,output:np.ndarray,position:tuple[float,float]|None,
              t:float,source_factor:float,shift_x:float,shift_y:float,
               tilt:tuple[float,float]=(0.,0.),focal:float=1820.,
-              foreground_box:dict|None=None)->None:
+              foreground_box:dict|None=None,
+              protected_text_box:dict|None=None)->None:
         from cinematic_presentation_v13 import _blend,click_ring_frames
         from reference_cursor_v15 import load_cursor,press_scale
         if position is None:return
@@ -422,5 +435,15 @@ class CinematicCursor:
         x,y=point(ox+shift_x+position[0]*source_factor,
                   oy+shift_y+position[1]*source_factor,
                   on_foreground(position[0],position[1]))
-        _blend(output,art,round(x-image.hotspot[0]*scale),
-                  round(y-image.hotspot[1]*scale))
+        glyph_x=round(x-image.hotspot[0]*scale)
+        glyph_y=round(y-image.hotspot[1]*scale)
+        if protected_text_box is not None:
+            b=protected_text_box
+            lifted=on_foreground(b['x']+b['width']/2,b['y']+b['height']/2)
+            quad=projected_target_quad(
+                b,self.stage.window,source_factor,shift_x,shift_y,*tilt,
+                perspective_px=focal,z=60. if lifted else 0.)
+            # Only the cursor art can move; click ripple stays source-true.
+            glyph_x,glyph_y=cursor_glyph_clear_of_text(
+                glyph_x,glyph_y,art.shape[1],art.shape[0],quad)
+        _blend(output,art,glyph_x,glyph_y)

@@ -291,3 +291,21 @@ test("cut begins on the visible frame after an observed action, never beforehand
   const cue=plan.foleyPlan.cues.find(c=>c.trigger==="click"&&c.sourceMs===2700);
   assert.equal(cue?.outputSample,mapped!.outputFrame*800);
 });
+
+test("modal Z-plane holds one restrained 3D tilt through pointer travel",()=>{
+  const plan=buildMotionEnginePlan(input("3d-launch")).framePlan;
+  const approach=plan.frames.filter(f=>f.sourceMs>=250&&f.sourceMs<=800);
+  assert.ok(approach.length>5);
+  assert.ok(approach.every(f=>Math.abs(f.camera.rotateXDeg)<.000001&&
+    Math.abs(f.camera.rotateYDeg)<.000001));
+  const stable=plan.frames.filter(f=>f.sourceMs>=1760&&f.sourceMs<=1950);
+  assert.ok(stable.length>=5);
+  assert.ok(stable.every(f=>f.foregroundId!==null));
+  for(const f of stable){
+    assert.ok(Math.abs(f.camera.rotateXDeg-.30)<.02);
+    assert.ok(Math.abs(f.camera.rotateYDeg+.40)<.02);
+  }
+  // The verified feature commit remains allowed its existing micro-pivot.
+  const feature=plan.frames.find(f=>f.sourceMs>=2020 && f.sourceMs<2090);
+  assert.ok(feature);
+});

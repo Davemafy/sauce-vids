@@ -94,6 +94,7 @@ def test_modal_hide_restores_original_style_after_background_screenshot():
     result=verified_modal_background(page,BOX,(720,1280))
     assert result is not None
     assert np.array_equal(result[0],actual)
+    assert result[3] is False
     assert page.actions==['hide','screenshot','restore']
 
 
@@ -105,3 +106,13 @@ def test_child_button_spotlight_does_not_steal_modal_plane_ownership():
     assert expected_modal_box(hints,'hero-modal',2350.)==BOX
     assert expected_modal_box(hints,None,910.)==BOX
     assert expected_modal_box(hints,None,3000.) is None
+
+
+def test_rendered_pointer_avoids_verified_codex_label_without_moving_click():
+    from cinematic_stage import cursor_glyph_clear_of_text
+    quad=np.float32([[100,100],[145,100],[145,120],[100,120]])
+    assert cursor_glyph_clear_of_text(200,100,20,24,quad)==(200,100)
+    x,y=cursor_glyph_clear_of_text(139,105,19,23,quad)
+    assert x>=150 and y==105  # Move beside the word.
+    x,y=cursor_glyph_clear_of_text(105,105,19,23,quad)
+    assert x==105 and y>=125  # Or below if a lateral jump is too large.

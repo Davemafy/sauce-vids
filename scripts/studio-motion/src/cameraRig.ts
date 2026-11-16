@@ -128,6 +128,19 @@ export function planCameraRig(
       desiredRX=clamp(desiredRX,-p.maxTiltDeg,p.maxTiltDeg);
       desiredRY=clamp(desiredRY,-p.maxTiltDeg,p.maxTiltDeg);
     }
+    const modalOwner=[...heroes].reverse().find(h=>
+      h.kind==="modal" && h.sourceMs<=sourceMs &&
+      sourceMs-h.sourceMs<2400 && !events.some(e=>{
+        const k=(e.eventType||e.type).toLowerCase().replaceAll("_","-");
+        return ["dialog-hidden","dialog-closed","modal-close","modal-closed"].includes(k)
+          &&e.t-startMs>h.sourceMs&&e.t-startMs<=sourceMs;
+      }));
+    if(preset.id==="3d-launch"&&p.mode==="perspective"&&hero?.kind!=="feature"){
+      // Level opening and ending, one shallow stable modal depth tilt.
+      // No cursor-velocity wobble; preserve the approved 180/24/1 springs.
+      desiredRX=modalOwner?.30:0;
+      desiredRY=modalOwner?-.40:0;
+    }
     if(cutFrames.has(i)){
       // Explicit editorial hard cut to the next verified action's composition.
       // Do not mutate the 180/24/1 physical spring parameters.
