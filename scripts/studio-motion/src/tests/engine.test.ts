@@ -309,3 +309,57 @@ test("modal Z-plane holds one restrained 3D tilt through pointer travel",()=>{
   const feature=plan.frames.find(f=>f.sourceMs>=2020 && f.sourceMs<2090);
   assert.ok(feature);
 });
+
+test("Codex child click retains dialog-wide framing across executed cut",()=>{
+  const events:TraceEvent[]=[
+    {t:786,type:"pointerdown",tag:"button",
+      box:{x:200.19,y:344.21,width:208.06,height:32.32}},
+    {t:916,type:"dialog-visible",role:"dialog",ariaLabel:"Connect your agent",
+      box:{x:440,y:182.59,width:400,height:360}},
+    {t:2069,type:"pointerdown",tag:"span",innerText:"Codex",
+      box:{x:487,y:451,width:254,height:20}},
+  ];
+  const plan=buildMotionEnginePlan({
+    events,startMs:0,durationMs:4200,fps:60,preset:"3d-launch"
+  }).framePlan;
+  const modal=plan.heroMoments.find(h=>h.kind==="modal");
+  const codex=plan.heroMoments.find(h=>h.kind==="click"&&h.sourceMs===2069);
+  assert.ok(modal&&codex);
+  const before=plan.frames.find(f=>f.sourceMs>=1900)!;
+  const after=plan.frames.find(f=>f.sourceMs>=2250)!;
+  for(const point of [before,after]){
+    assert.ok(Math.abs(point.camera.scale-1.31)<.001);
+    assert.ok(Math.abs(point.camera.focusX-640)<.002);
+    assert.ok(Math.abs(point.camera.focusY-362.59)<.002);
+    assert.deepEqual(point.camera.spotlightBox,modal!.box);
+  }
+  const cut=plan.editDecisions.find(e=>e.kind==="cut"&&
+    e.sourceEndMs>=2069);
+  assert.ok(cut,"Keep real beat cut rather than removing the action");
+  const pre=plan.frames[cut!.outputFrame!-1]!.camera;
+  const post=plan.frames[cut!.outputFrame!]!.camera;
+  assert.ok(Math.abs(pre.scale-post.scale)<.0005);
+  assert.ok(Math.abs(pre.focusX-post.focusX)<.002);
+  assert.ok(Math.abs(pre.focusY-post.focusY)<.002);
+  const ending=plan.frames[plan.frames.length-1]!.camera;
+  assert.ok(Math.abs(ending.scale-1.31)<.002);
+  assert.ok(Math.abs(ending.focusX-640)<.01);
+});
+
+test("camera releases dialog only on an observed close event",()=>{
+  const events:TraceEvent[]=[
+    {t:916,type:"dialog-visible",role:"dialog",
+      box:{x:440,y:182.59,width:400,height:360}},
+    {t:2069,type:"pointerdown",tag:"span",innerText:"Codex",
+      box:{x:487,y:451,width:254,height:20}},
+    {t:2600,type:"dialog-hidden"},
+  ];
+  const plan=buildMotionEnginePlan({
+    events,startMs:0,durationMs:4700,fps:60,preset:"3d-launch"
+  }).framePlan;
+  const open=plan.frames.find(f=>f.sourceMs>=2400)!;
+  const closed=plan.frames.find(f=>f.sourceMs>=4300)!;
+  assert.ok(Math.abs(open.camera.scale-1.31)<.01);
+  assert.ok(closed.camera.scale<1.10);
+  assert.equal(closed.camera.spotlightBox,null);
+});

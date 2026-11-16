@@ -102,13 +102,31 @@ function planCameraRig(frameMap, heroMoments, events, preset, startMs, viewport 
             return ["modal-close", "modal-closed", "dialog-hidden", "dialog-closed"].includes(k)
                 && e.t - startMs > hero.sourceMs && e.t - startMs <= sourceMs;
         });
+        // An open dialog owns the camera even when a nested click becomes the
+        // newest hero. The 2400ms foreground timer is not a camera cut signal.
+        // Release only on an observed dialog-close event.
+        const modalOwner = preset.id === "3d-launch" ? [...heroes].reverse().find(h => h.kind === "modal" && safeBox(h.box) && h.sourceMs <= sourceMs &&
+            !events.some(e => {
+                const k = (e.eventType || e.type).toLowerCase().replaceAll("_", "-");
+                return ["dialog-hidden", "dialog-closed", "modal-close", "modal-closed"].includes(k)
+                    && e.t - startMs > h.sourceMs && e.t - startMs <= sourceMs;
+            })) : undefined;
         const active = hero && !modalClosed && sourceMs - hero.sourceMs <
             (hero.kind === "modal" ? 2400 : 1800) && safeBox(hero.box) ? hero : null;
-        const box = active?.box || null;
+        const nestedInModal = !!(modalOwner && hero && safeBox(hero.box) &&
+            hero.box.x + hero.box.width / 2 >= modalOwner.box.x &&
+            hero.box.x + hero.box.width / 2 <= modalOwner.box.x + modalOwner.box.width &&
+            hero.box.y + hero.box.height / 2 >= modalOwner.box.y &&
+            hero.box.y + hero.box.height / 2 <= modalOwner.box.y + modalOwner.box.height);
+        // Only a genuine modal or an action inside it inherits modal framing.
+        // A feature commit without a spatial target keeps its own camera beat.
+        const modalCameraLocked = !!(modalOwner && (hero?.kind === "modal" || nestedInModal));
+        const cameraHero = modalCameraLocked ? modalOwner : active;
+        const box = cameraHero?.box || null;
         let desiredScale = 1, desiredX = centerX, desiredY = centerY, desiredRX = 0, desiredRY = 0;
         if (box) {
             const maxSafe = Math.min(p.scaleRange[1], (viewport.width - 96) / box.width, (viewport.height - 90) / box.height);
-            desiredScale = (0, types_1.clamp)((active.kind === "modal" ? 1.31 : 1.19), p.scaleRange[0], Math.max(p.scaleRange[0], maxSafe));
+            desiredScale = (0, types_1.clamp)((cameraHero.kind === "modal" ? 1.31 : 1.19), p.scaleRange[0], Math.max(p.scaleRange[0], maxSafe));
             desiredX = (0, types_1.clamp)(box.x + box.width / 2, 0, viewport.width);
             desiredY = (0, types_1.clamp)(box.y + box.height / 2, 0, viewport.height);
         }
@@ -137,17 +155,13 @@ function planCameraRig(frameMap, heroMoments, events, preset, startMs, viewport 
             desiredRX = (0, types_1.clamp)(desiredRX, -p.maxTiltDeg, p.maxTiltDeg);
             desiredRY = (0, types_1.clamp)(desiredRY, -p.maxTiltDeg, p.maxTiltDeg);
         }
-        const modalOwner = [...heroes].reverse().find(h => h.kind === "modal" && h.sourceMs <= sourceMs &&
-            sourceMs - h.sourceMs < 2400 && !events.some(e => {
-            const k = (e.eventType || e.type).toLowerCase().replaceAll("_", "-");
-            return ["dialog-hidden", "dialog-closed", "modal-close", "modal-closed"].includes(k)
-                && e.t - startMs > h.sourceMs && e.t - startMs <= sourceMs;
-        }));
-        if (preset.id === "3d-launch" && p.mode === "perspective" && hero?.kind !== "feature") {
-            // Level opening and ending, one shallow stable modal depth tilt.
-            // No cursor-velocity wobble; preserve the approved 180/24/1 springs.
-            desiredRX = modalOwner ? .30 : 0;
-            desiredRY = modalOwner ? -.40 : 0;
+        if (preset.id === "3d-launch" && p.mode === "perspective" &&
+            (modalCameraLocked || hero?.kind !== "feature")) {
+            // One deliberate modal angle across its real child clicks; unrelated
+            // feature commits keep their verified independent micro-pivot.
+            // The approved 180/24/1 spring and 1200px projection are unchanged.
+            desiredRX = modalCameraLocked ? .30 : 0;
+            desiredRY = modalCameraLocked ? -.40 : 0;
         }
         if (cutFrames.has(i)) {
             // Explicit editorial hard cut to the next verified action's composition.
