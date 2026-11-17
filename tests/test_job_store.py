@@ -62,6 +62,19 @@ class ProductJobRecoveryTests(unittest.TestCase):
         self.assertEqual(jobs[self.job_id]["status"], "needs_review")
         self.assertFalse(pending)
 
+    def test_legacy_verified_video_restores_source_true_label(self):
+        self.record(status="needs_review", stage="needs_review")
+        export = self.root/self.job_id/"export"
+        export.mkdir()
+        (export/"preview.mp4").write_bytes(b"x" * 2048)
+        (export/"release.json").write_text(json.dumps({
+            "continuous_motion": True, "source_verified": True,
+            "render_mode": "continuous-browser-capture",
+            "film_mode": "interactive"}))
+        jobs, _ = recover_jobs(self.root)
+        self.assertEqual(jobs[self.job_id]["render_mode"], "continuous-browser-capture")
+        self.assertEqual(jobs[self.job_id]["capture_mode"], "interactive")
+
     def test_failed_job_is_not_automatically_retried(self):
         self.record(status="failed", stage="failed")
         _, pending = recover_jobs(self.root)
