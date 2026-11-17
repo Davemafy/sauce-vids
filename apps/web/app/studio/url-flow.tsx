@@ -68,6 +68,7 @@ export function UrlFlowScreen(){
   const previous=shared&&/^[a-f0-9]{24}$/.test(shared)?shared:(sessionStorage.getItem("sauce-url-job")||recentFilmIds()[0]);
   if(previous&&/^[a-f0-9]{24}$/.test(previous)){
     setJobId(previous);sessionStorage.setItem("sauce-url-job",previous);
+    rememberFilm(previous);
   }
   fetch(api+"/auth",{cache:"no-store"}).then(r=>r.json()).then(data=>{
    if(live)setUnlocked(data.authorized===true);
