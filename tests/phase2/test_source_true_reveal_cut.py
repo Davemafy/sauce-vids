@@ -22,8 +22,9 @@ def test_evidence_checked_cut_preserves_click_jcut():
     assert evidence["removedFrames"]==9
     assert evidence["firstRemoved"]==47
     assert evidence["firstRetainedAfter"]==56
-    assert evidence["audioHeadSamples"]==48*800
-    assert evidence["audioTailSamples"]==57*800
+    assert evidence["audioCarryFrames"]==5
+    assert evidence["audioHeadSamples"]==52*800
+    assert evidence["audioTailSamples"]==61*800
     assert evidence["audioTailSamples"]-evidence["audioHeadSamples"]==9*800
     assert SAMPLES_PER_FRAME==800
 
