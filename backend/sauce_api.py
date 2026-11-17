@@ -224,6 +224,10 @@ class PrivateUnixHandler(Handler):
         return True
 
 class PrivateUnixServer(socketserver.ThreadingMixIn,socketserver.UnixStreamServer):
+    # A five-connection default backlog caused 13 failed socket connects in
+    # a bounded 12-client status/media load test. Accept short bursts while
+    # the synchronous request threads service existing connections.
+    request_queue_size=64
     daemon_threads=True
 
 if __name__=="__main__":
@@ -234,4 +238,6 @@ if __name__=="__main__":
     private=PrivateUnixServer(str(socket_path),PrivateUnixHandler)
     os.chmod(socket_path,0o600)
     threading.Thread(target=private.serve_forever,daemon=True).start()
-    ThreadingHTTPServer((HOST,PORT),Handler).serve_forever()
+    class LocalTCPServer(ThreadingHTTPServer):
+        request_queue_size=64
+    LocalTCPServer((HOST,PORT),Handler).serve_forever()
