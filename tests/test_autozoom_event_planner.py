@@ -84,6 +84,41 @@ class CameraTests(unittest.TestCase):
   with self.assertRaises(ValueError):
    plan(EV,SCREEN,12.0,profile="unverified")
 
+ def test_action_first_waits_for_actual_result_then_holds(self):
+  real=[
+   {"t":2.238,"kind":"click","label":"Reviews","semanticGoal":"inspect code"},
+   {"t":2.5871,"kind":"state_change","evidence":"real Diff tab visible",
+    "resultRect":{"x":559.9,"y":97,"width":750.6,"height":616}},
+   {"t":4.7501,"kind":"interaction_complete","label":"code read"},
+   {"t":6.3612,"kind":"click","label":"Faster app launch","semanticGoal":"inspect task"},
+   {"t":6.6551,"kind":"state_change","evidence":"real task body visible",
+    "resultRect":{"x":296.4,"y":97,"width":661.7,"height":614}},
+   {"t":9.4801,"kind":"interaction_complete","label":"task read"},
+  ]
+  shots=plan(real,SCREEN,12.,profile="action-first")
+  self.assertEqual(len(shots),2)
+  for i,shot in enumerate(shots):
+   click=real[3*i]
+   outcome=real[3*i+1]
+   self.assertGreater(shot.start,outcome["t"])
+   self.assertGreater(shot.settle,shot.start+.3)
+   self.assertGreater(shot.release,shot.settle+.5)
+   self.assertGreater(shot.release-shot.settle,1.0)
+   self.assertGreater(shot.end,shot.release)
+   self.assertEqual(sample_camera(click["t"],shots),(1.,.5,.5))
+   self.assertEqual(sample_camera(outcome["t"],shots),(1.,.5,.5))
+   self.assertAlmostEqual(sample_camera(shot.settle+.1,shots)[0],shot.zoom,places=3)
+  self.assertLess(shots[0].end,shots[1].start)
+  self.assertEqual(sample_camera(11.5,shots),(1.,.5,.5))
+
+ def test_action_first_rejects_unsupported_changed_result(self):
+  self.assertEqual(plan(EV[:2],SCREEN,14.,profile="action-first"),[])
+  no_evidence=[EV[0],dict(EV[1],evidence=""),EV[2]]
+  self.assertEqual(plan(no_evidence,SCREEN,14.,profile="action-first"),[])
+  original=plan(EV,SCREEN,14.,profile="screenstudio")
+  self.assertLess(original[0].start,EV[0]["t"])
+  self.assertGreater(plan(EV,SCREEN,14.,profile="action-first")[0].start,EV[1]["t"])
+
  def test_invalid_region_rejected(self):
   invalid=[EV[0],dict(EV[1],resultRect={"x":0,"y":0,"width":0,"height":0}),EV[2]]
   self.assertEqual(plan(invalid,SCREEN,14),[])
