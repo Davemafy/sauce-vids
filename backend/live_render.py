@@ -39,6 +39,16 @@ def source_video_profile(stream:dict,receipt:dict):
  dpr=receipt.get('source_dpr',1)
  if quality=='high' and (size!=[1920,1080] or dpr!=2):
   raise RuntimeError('High-density source proof mismatch')
+ # Playwright pads a 1920x1080 record_video frame if the captured CSS
+ # viewport is only 1280x720. Validate the *actual CSS capture viewport*
+ # before accepting the high-density label; container dimensions alone
+ # cannot establish sharp, full-frame source footage.
+ viewport=receipt.get('viewport_css_size')
+ if quality=='high' and (
+     not isinstance(viewport,dict)
+     or viewport.get('width') != 1920
+     or viewport.get('height') != 1080):
+  raise RuntimeError('High-density CSS viewport does not fill recorded frame')
  native=size==[1920,1080]
  filter_graph=('setsar=1,fps=60,format=yuv420p' if native
                else 'scale=1920:1080:flags=lanczos,setsar=1,fps=60,format=yuv420p')
