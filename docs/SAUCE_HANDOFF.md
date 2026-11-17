@@ -458,3 +458,77 @@ the two requested edits did not introduce or resolve it. Do not report
 it as fixed. Independent live browser replay determinism remains a
 separate known limitation; film technical gates alone are not premium
 creative signoff.
+
+## 2026-11-17 — Cursor H0/H60 edge-crossing discontinuity eliminated
+
+**User visual report:** The pointer appeared to crack/jerk when gliding from
+the Connect Agent trigger into the opened Brimble dialog, roughly 1.6s into
+the new 5.23s result-aware film. Reopened and inspected the actual
+`phase2-modal-first-result-dwell-v2` MP4 and the source cursor samples
+around frames 92–107, not just the player UI. The original CSS pointer
+recording remains continuous; the compositor was switching the *rendered
+pointer hotspot* instantaneously between the background H0 projection
+and foreground H60 homography based on a rectangular in-modal hit test.
+At source t=1.617s, the two projected locations were 16.63px apart.
+Old motion fell from 27.41 to 17.73 pixels in one frame, then jumped
+to 30.24px on the next. This was an artificial depth switch, not real
+hand movement.
+
+**Fix (main only, no baseline overwrite):** Added
+`scripts/cursor_plane_motion.py` with a deterministic 0.14-second
+quintic-eased single-pointer depth transition. In
+`scripts/cinematic_stage.py` the actual pointer position is projected
+onto both H0 and H60, then interpolated using that state only where
+real DOM foreground coverage/recorded cursor coordinates identify
+modal entry or exit. Unlike a hard Boolean switch, the new depth
+projection preserves continuous velocity and acceleration at each
+endpoint. It changes neither the CSS input/Playwright click path nor
+actual source UI, camera spring parameters, multi-plane compositing,
+spotlight, brand tint, Codex cursor text-protection, shot cut, or Foley.
+Discontinuous >200ms source-clock cuts reset the transition instead of
+adding a fake tween over omitted frames. Original compositor backed up
+privately under
+`../sauce-phase2-backups/cursor-plane-glide-2026-11-17/`.
+
+**Frame-specific proof:** Derived all projected pixel locations from
+the actual source events, exact spring cursor-track, recorded Brimble
+modal rectangle and exported 3D Launch camera plan. At frame 97 (1.617s),
+old pointer step was 17.73px vs new 27.71px, following the previous
+27.41px step. At frames 98/99/100 the old path was
+30.24/31.65/32.16px per frame versus 28.56/29.26/29.23px after fix.
+The absolute speed discontinuity at the crossing dropped from
+**9.68px/frame to 0.30px/frame**. New depth weight increases smoothly
+from zero at frame 97 to fully H60 by frame 106, well before the
+actual source Codex click. Re-rendered the exact Brimble HAR-derived,
+brand-aware session with
+`--preset 3d-launch --result-aware-editorial --no-webgl-optics`;
+inspected genuine decoded frames 92/94/96/97/98/99/101/104/107
+side-by-side with the previous master (including original-size frames).
+Public comparison:
+https://devmcp.davemafy.xyz/sauce-motion-phase2/cursor-depth-glide/cursor-plane-glide-before-after.jpg .
+Public review:
+https://devmcp.davemafy.xyz/sauce-motion-phase2/cursor-depth-glide/ .
+Master:
+https://devmcp.davemafy.xyz/sauce-motion-phase2/cursor-depth-glide/master-1080p60.mp4 .
+Its SHA-256 from both worker and deployed copy is
+`3cdd250c25ec0b411dba8bbe8a741c529748c4d508719bcf94e354391112715a`.
+Old public release remains online.
+
+**Checked:** 1920x1080 H.264 60fps, 314 frames / 5.233333s;
+AAC stereo 48kHz, exactly 251,200 Foley samples (800/frame);
+96 unchanged-source-sharp result-hold frames + 21 fade frames;
+152 real H0/H60 frames, no single-plane fallbacks, action cut 125
+unchanged. Full FFmpeg decode completed. Desktop player 1280x720
+and mobile 390x844 both returned HTTP 200 and correctly seeked into
+the transition at 1.68s; no page/media errors or horizontal overflow.
+Test gates: 31/31 StudioMotion TypeScript, 174/174 Python unittest,
+62/62 pytest, plus 13 nested subtests. Four new depth-specific tests
+cover the exact Brimble entry, graceful exit, beat-cut reset,
+determinism. No general independent-live-Chromium frame-hash
+repeatability claim: this known separate limitation remains.
+
+**Creative review:** The post-click glide no longer makes an unintended
+3D jump; real trace speed still determines how quickly the cursor moves.
+The pre-existing cropped terminal/wedge during early modal entrance
+(~0.72–0.82s) is unrelated and remains unresolved. Do not call this
+entire product film premium-approved on green tests alone.

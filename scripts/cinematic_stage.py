@@ -435,6 +435,8 @@ class CinematicCursor:
         if style not in ('ink','outline'):raise ValueError('Unsupported cursor style')
         self.stage,self.events,self.start_ms,self.style,self.scale=(
             stage,events,start_ms,style,scale)
+        from cursor_plane_motion import CursorPlaneGlide
+        self._plane_glide=CursorPlaneGlide()
 
     def draw(self,output:np.ndarray,position:tuple[float,float]|None,
              t:float,source_factor:float,shift_x:float,shift_y:float,
@@ -483,9 +485,17 @@ class CinematicCursor:
             height=max(2,round(art.shape[0]*scale))
             art=np.asarray(PILImage.fromarray(art,'RGBA').resize(
                 (width,height),PILImage.Resampling.LANCZOS),dtype=np.uint8)
-        x,y=point(ox+shift_x+position[0]*source_factor,
-                  oy+shift_y+position[1]*source_factor,
-                  on_foreground(position[0],position[1]))
+        px=ox+shift_x+position[0]*source_factor
+        py=oy+shift_y+position[1]*source_factor
+        background_x,background_y=point(px,py)
+        foreground_x,foreground_y=point(px,py,lifted=True)
+        # Crossing the modal edge used to jump instantly between H0/H60,
+        # moving the pointer ~17px in one frame in the Brimble proof.
+        # Transition ONLY the rendered hotspot, never the real input event.
+        lift=self._plane_glide.sample(
+            t,on_foreground(position[0],position[1]))
+        x=round(background_x+(foreground_x-background_x)*lift)
+        y=round(background_y+(foreground_y-background_y)*lift)
         glyph_x=round(x-image.hotspot[0]*scale)
         glyph_y=round(y-image.hotspot[1]*scale)
         if protected_text_box is not None:
