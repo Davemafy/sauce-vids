@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
+from contextlib import contextmanager
 
 _HIDE_VERIFIED_MODAL = r"""(options) => {
   const expected=options.expected;
@@ -110,3 +111,83 @@ def expected_modal_box(modal_hints:list[dict],foreground_id:str|None,
     imminent=next((h for h in modal_hints
         if abs(float(h['sourceMs'])-source_ms)<=350),None)
     return imminent['box'] if imminent is not None else None
+
+
+# On Brimble, the authentic dialog starts its CSS fade at ~0 opacity while
+# its separate decorative terminal occupies the same screen pixels. During the
+# first few visible frames the dark panel literally shows through the partly
+# transparent dialog (the known ~0.80s gray rectangle in the exported film).
+# This OPTIONAL presentation-only capture correction renders the real dialog
+# at its own final opacity while keeping genuine Chromium text, layout and
+# interaction intact. No synthetic pixels, rectangular matte, or time warp.
+# The site animation's opacity declaration is restored in all cases.
+_OPAQUE_VERIFIED_OPENING = r"""expected => {
+ const dialogs=[...document.querySelectorAll(
+   '[role="dialog"],dialog[open],[aria-modal="true"]')].filter(el=>{
+     const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+     return r.width>32&&r.height>32&&s.visibility!=='hidden'
+       &&s.display!=='none';
+   });
+ if(dialogs.length!==1)return false;
+ const el=dialogs[0],box=el.getBoundingClientRect();
+ const distance=Math.hypot(box.x+box.width/2-(expected.x+expected.width/2),
+   box.y+box.height/2-(expected.y+expected.height/2));
+ const ratio=Math.max(box.width/expected.width,expected.width/box.width,
+   box.height/expected.height,expected.height/box.height);
+ if(distance>70||ratio>1.6)return false;
+ const fade=Number(getComputedStyle(el).opacity);
+ if(!Number.isFinite(fade)||fade<.25||fade>=.995)return false;
+ // Only the observed Brimble decorative terminal, not an arbitrary app
+ // panel or user content. Both geometry and native computed color must match.
+ const panels=[...document.querySelectorAll('div')].filter(node=>{
+   if(!node.classList.contains('bg-[#222528]')||
+      !node.classList.contains('rounded-[13.25px]'))return false;
+   const r=node.getBoundingClientRect(),s=getComputedStyle(node);
+   return r.width>=430&&r.width<=500&&r.height>=230&&r.height<=330
+     &&r.left<box.right&&r.right>box.left+100
+     &&r.top<box.bottom&&r.bottom>box.top
+     &&s.backgroundColor==='rgb(34, 37, 40)'
+     &&s.visibility!=='hidden'&&s.display!=='none'
+     &&!el.contains(node);
+ });
+ if(panels.length!==1||window.__sauceOpacityFrameState)return false;
+ const original=el.style.getPropertyValue('opacity');
+ const priority=el.style.getPropertyPriority('opacity');
+ el.style.setProperty('opacity','1','important');
+ if(Number(getComputedStyle(el).opacity)<.995){
+   if(original)el.style.setProperty('opacity',original,priority);
+   else el.style.removeProperty('opacity');
+   return false;
+ }
+ window.__sauceOpacityFrameState={element:el,original,priority};
+ return true;
+}"""
+
+_RESTORE_OPAQUE_OPENING = r"""() => {
+ const state=window.__sauceOpacityFrameState;
+ if(!state)return;
+ if(state.original)state.element.style.setProperty(
+    'opacity',state.original,state.priority);
+ else state.element.style.removeProperty('opacity');
+ delete window.__sauceOpacityFrameState;
+}"""
+
+
+@contextmanager
+def stabilized_verified_dialog_opening(page,expected_box:dict|None):
+    """Temporarily remove only a real Brimble dialog's occluding CSS fade.
+
+    Caller must additionally gate this helper to verified Brimble film replay;
+    raw capture and every other product are not presentation-adjusted.
+    """
+    changed=False
+    if isinstance(expected_box,dict):
+        try:
+            changed=bool(page.evaluate(_OPAQUE_VERIFIED_OPENING,expected_box))
+        except Exception:
+            changed=False
+    try:
+        yield changed
+    finally:
+        if changed:
+            page.evaluate(_RESTORE_OPAQUE_OPENING)
