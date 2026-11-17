@@ -345,3 +345,42 @@ full URL -> MP4 outcome remains a next technical acceptance milestone.
 Rollback: remove the separate URL Studio systemd WorkingDirectory
 override and restore the previous isolated Sauce Studio build.
 No worker sessions, credentials or raw captures were committed.
+
+## Continuous-browser URL film engine — 17 November 2026
+
+The owner rejected the screenshot-montage URL output as a slideshow. The
+active pipeline is backend/url_engine.py -> backend/product_explorer.py ->
+backend/live_capture.py -> backend/live_render.py, NOT backend/state_film.py.
+Never restore still-frame montage as the default URL output.
+
+Live capture records an actual Chromium WebM stream with pointer motion,
+scrolling and visible application changes. A publicly accessible paste-text
+control may type one benign demo fixture; no submission is performed.
+Showcases use paced frame-driven DOM scrolling. Rendering trims browser
+loading dead air, validates the input SHA-256, and exports H.264 1080p master
+and 720p preview. It reports real encoder frames. Receipt properties
+continuous_motion=true and replay_verified=false are intentional and
+different: an original recording is NOT an independent browser replay.
+
+Real end-to-end smoke:
+- SEAL (seal-verify.vercel.app): ~7.97-second film, opens the public
+  paste-text interface and types non-submitted example text.
+- Igor (igor-taste.vercel.app): continuous hero-to-product preview scroll.
+- Paldey (paldey.com): continuous public-site showcase, never a claim of
+  accessing the private scholarship matching workflow.
+- A separate paced-scroll Igor capture passed after scroll easing updates.
+
+Studio live: https://devmcp.davemafy.xyz/sauce-app/studio
+Old still-frame drafts are clearly labelled historical. On public HTTPS,
+a 390x844 authenticated Chromium session accessed the protected SEAL MP4
+with HTTP 200; no JavaScript page errors or horizontal overflow.
+
+Verification: 184 Python tests passed, 5 skipped, 56 subtests; 13 web unit
+tests; 11 Playwright browser tests; Next production build passed.
+Explorer safety tests protect against arbitrary model CSS, cross-origin
+navigation, mutation controls and form submit. Source and credentials
+remain private.
+
+Remaining: these are authentic recordings, not yet world-class editorial
+product films. Better focal framing, app-specific motion and deeper
+multistep safe exploration are needed before creative quality signoff.

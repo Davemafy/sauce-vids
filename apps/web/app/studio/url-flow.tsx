@@ -9,8 +9,8 @@ type Job={id:string;url:string;stage:Stage;status:string;reason?:string;error?:s
 const steps:[Stage,string,string][]=[
  ["inspecting","Explore","Reading real page structure"],
  ["directing","Direct","Finding the story worth showing"],
- ["capturing","Capture","Recording verified browser states"],
- ["rendering","Produce","Compositing and exporting your film"],
+ ["capturing","Capture","Recording actual browser motion"],
+ ["rendering","Produce","Encoding continuous browser footage"],
 ];
 const elapsed=(ms:number)=>{
  const seconds=Math.max(0,Math.floor(ms/1000));
@@ -32,8 +32,8 @@ const details:Record<string,string>={
  queued:"Your request was accepted. Waiting for a free capture slot.",
  inspecting:"Reading real page structure, visible controls, and design signals.",
  directing:"One AI call decides whether this product can be filmed faithfully.",
- capturing:"Collecting real browser states for the chosen sequence.",
- rendering:"Compositing actual frames and producing the playable edit.",
+ capturing:"Recording real scrolling, pointer motion, and visible UI changes.",
+ rendering:"Encoding the continuous browser recording into your playable film.",
 };
 
 export function UrlFlowScreen(){
@@ -222,9 +222,13 @@ export function UrlFlowScreen(){
    </section>}
 
    {terminal&&<section className={s.result} aria-live="polite">
-    <div className={s.resultHead}><span>{ready?"Draft film · Review required":blocked?"Capture paused":"Production stopped"}</span><time>{elapsed(duration)}</time></div>
+    <div className={s.resultHead}><span>{ready?(job?.render_mode==="continuous-browser-capture"?"Continuous recording · Review required":"Earlier still-frame draft"):blocked?"Capture paused":"Production stopped"}</span><time>{elapsed(duration)}</time></div>
     {ready&&<><h2>Your first cut is ready.</h2>
-     <p>{job?.capture_mode==="interactive"?"A safe on-page interaction was captured.":"This is a public-site visual preview; sign-in-only product features are not demonstrated."} The video is assembled from real captured browser pixels, not a verified continuous application replay. Review before sharing.</p>
+     <p>{job?.render_mode==="continuous-browser-capture"?
+       (job?.capture_mode==="interactive"?
+       "Continuous real browser footage, including a safe observed interaction. Private functionality and independent replay remain unverified. Review before sharing.":
+       "Continuous public-website footage with real scrolling. Sign-in-only product features are not demonstrated. Review before sharing."):
+       "This older draft was assembled from still screenshots. Re-create this URL to get a continuous browser recording instead."}</p>
      <video src={api+"/jobs/"+jobId+"/media"} className={s.video} controls preload="metadata" playsInline aria-label="AI-directed Sauce video preview"/>
      <div className={s.outputLinks}>
        <a href={api+"/jobs/"+jobId+"/media"} download={"sauce-"+(job?.capture_mode||"preview")+".mp4"}>Download MP4 <span aria-hidden="true">↓</span></a>

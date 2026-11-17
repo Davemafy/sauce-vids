@@ -1,7 +1,7 @@
-"""Sauce URL -> one model direction -> safe real capture -> verified source-state film.
+"""Sauce URL -> one AI direction -> real continuous browser capture -> MP4.
 
-No website-specific selectors. A source-state film is explicitly not a successful
-semantic DOM replay; it is an authentic preview of captured browser pixels.
+Public browser motions and source streams are SHA-verified. No generated CSS
+selectors or fabricated UI, and no false claims of deterministic DOM replay.
 """
 from __future__ import annotations
 import base64,json,os,subprocess,sys
@@ -98,47 +98,57 @@ def execute(url:str,folder:Path,progress=None):
        **plan,'ai_calls':calls,'direction_source':source},indent=2))
     stage('capturing')
     steps=workflow(plan,report)
-    verified=preflight(url,steps)
-    if len(verified)<len(steps):
+    checked=preflight(url,steps)
+    if len(checked)<len(steps):
         plan=normalize({'mode':'showcase','heading_ids':plan['heading_ids'],
-                        'title':plan['title'],'reason':'Unstable control target'},report)
-        verified=preflight(url,workflow(plan,report))
+                        'title':plan['title'],'reason':'A selected control changed before recording'},report)
+    capture_dir=private/'motion'
+    planfile=private/'motion-plan.json'
+    planfile.write_text(json.dumps(plan,indent=2))
+    env=dict(os.environ,SAUCE_SAFE_PUBLIC_ONLY='1')
+    def run_capture():
+        with (private/'motion-capture.log').open('w') as log:
+            result=subprocess.run([sys.executable,'-m','backend.live_capture',
+              '--url',url,'--out',str(capture_dir),
+              '--inspection',str(private/'inspection.json'),
+              '--plan',str(planfile)],cwd=ROOT,env=env,
+              stdout=log,stderr=subprocess.STDOUT,timeout=140)
+        if result.returncode!=0:raise RuntimeError('Continuous browser capture failed')
     try:
-        capture=captured(private,url,verified)
+        run_capture()
     except (RuntimeError,subprocess.TimeoutExpired):
-        # One bounded, honest degradation: a public-site state film instead
-        # of aborting because a dynamic SPA re-rendered an action target.
+        # The only fallback is still a real continuous recording, not snapshots.
         plan=normalize({'mode':'showcase','heading_ids':plan['heading_ids'],
-                        'title':plan['title'],
-                        'reason':'Public preview: interactive capture unavailable'},report)
-        fallback=preflight(url,workflow(plan,report))
-        try:
-            capture=captured(private,url,fallback,tag='fallback')
-        except (RuntimeError,subprocess.TimeoutExpired):
-            capture=captured(private,url,[{'action':'wait','ms':900,'settle_ms':250}],
-                             tag='minimal')
+          'title':plan['title'],'reason':'Interactive control unavailable'},report)
+        planfile.write_text(json.dumps(plan,indent=2))
+        run_capture()
+    record=json.loads((capture_dir/'continuous-capture.json').read_text())
+    if not record.get('continuous_recording'):
+        raise RuntimeError('No continuous motion stream captured')
+    if not any(a.get('kind') in ('link','button') for a in record.get('actions',[])):
+        plan['mode']='showcase'
     stage('rendering')
-    # Renders only hash-verified browser pixels. No unverified DOM replay claims.
     export=folder/'export'
-    command=[sys.executable,'-m','backend.state_film',
-        '--session',str(capture),'--out',str(export),
-        '--title',plan['title'],'--description',
-        ('Captured public product interaction' if plan['mode']=='interactive'
-         else 'Public website preview; private functionality not demonstrated'),
-        '--mode',plan['mode']]
     with (folder/'render.log').open('w') as log:
-        finished=subprocess.run(command,cwd=ROOT,
-             stdout=log,stderr=subprocess.STDOUT,check=False,timeout=270)
+        finished=subprocess.run([sys.executable,'-m','backend.live_render',
+          '--source',str(capture_dir),'--out',str(export),
+          '--title',plan['title'],
+          '--story',('Actual public UI interaction' if plan['mode']=='interactive'
+                   else 'Public website preview; private features not demonstrated'),
+          '--mode',plan['mode']],cwd=ROOT,env=env,
+          stdout=log,stderr=subprocess.STDOUT,check=False,timeout=350)
     if finished.returncode!=0:
-        raise RuntimeError('Source-state video encoder failed')
-    release_file=export/'release.json'
-    if not release_file.is_file() or not (export/'preview.mp4').is_file():
-        raise RuntimeError('No verified source-state export')
-    receipt=json.loads(release_file.read_text())
+        raise RuntimeError('Continuous motion video encoder failed')
+    release=export/'release.json'
+    if not release.is_file() or not (export/'preview.mp4').is_file():
+        raise RuntimeError('No real-motion export produced')
+    receipt=json.loads(release.read_text())
+    if not receipt.get('continuous_motion') or not receipt.get('source_verified'):
+        raise RuntimeError('Source motion evidence was not verified')
     stage('needs_review')
     return {'status':'needs_review','ai_calls':calls,'title':plan['title'],
        'direction_source':source,'capture_mode':plan['mode'],
        'render_mode':receipt['render_mode'],
        'quality':'human-review-required','video_type':
-       'Public browser-state film, not authenticated feature verification',
+       'Real continuous browser recording; authenticated features not verified',
        'preview':'preview.mp4'}

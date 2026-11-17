@@ -44,7 +44,7 @@ test("Refresh reconnects to job, then review can be saved",async({page})=>{
  let ready=false;
  await page.route("**/api/studio/url/jobs/"+id,route=>route.fulfill({
   status:200,contentType:"application/json",
-  body:JSON.stringify({job:ready?{...job,status:"needs_review",stage:"needs_review"}:job}),
+  body:JSON.stringify({job:ready?{...job,status:"needs_review",stage:"needs_review",capture_mode:"interactive",render_mode:"continuous-browser-capture"}:job}),
  }));
  await page.route("**/api/studio/url/jobs/"+id+"/feedback",route=>route.fulfill({
   status:200,contentType:"application/json",body:JSON.stringify({saved:true}),
@@ -60,6 +60,7 @@ test("Refresh reconnects to job, then review can be saved",async({page})=>{
  await expect(page.getByRole("region",{name:"Live URL film production status"})).toBeVisible();
  ready=true;
  await expect(page.getByRole("heading",{name:"Your first cut is ready."})).toBeVisible({timeout:6500});
+ await expect(page.getByText(/Continuous real browser footage/)).toBeVisible();
  await expect(page.getByLabel("AI-directed Sauce video preview")).toBeVisible();
  await expect(page.getByRole("link",{name:/Download MP4/})).toHaveAttribute("download",/sauce-/);
  await expect(page.getByRole("link",{name:/Open review link/})).toHaveAttribute("href",new RegExp("job="+id));

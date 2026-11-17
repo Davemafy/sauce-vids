@@ -4,8 +4,8 @@ Primary experience: https://devmcp.davemafy.xyz/sauce-app/studio
 
 A submitted public URL follows the existing Sauce engine:
 inspection in Playwright -> one multimodal Gemini direction call ->
-validated read-only workflow -> verified browser capture ->
-Sauce compositor/FFmpeg -> private playable MP4 -> user review.
+browser-evidence-bound safe workflow -> continuous Chromium video recording ->
+H.264 postproduction -> private playable MP4 -> user review.
 
 The default Studio page is now URL-first. Bounded sample recordings
 remain available under /studio/samples.
@@ -54,10 +54,10 @@ percentage. Job IDs are recoverable after a tab reload within the
 authenticated pilot session. Interrupted status polling does not
 cancel the backend job.
 
-The final outcome is needs_review, needs_access or failed. If the
-public website only advertises an authenticated product workflow,
-the AI must choose needs_access. Paldey was verified to stop without
-inventing scholarship applications. Prior user feedback is included
+The final outcome is needs_review or failed for accessible public pages.
+A marketing-only site may produce a labelled *public website preview*,
+never a fabricated authenticated product walkthrough. Paldey was captured
+as such a public preview without inventing scholarship applications. Prior user feedback is included
 as untrusted context in the NEXT direction call; approved videos
 are not automatically regenerated.
 
@@ -65,11 +65,10 @@ are not automatically regenerated.
 
 - Public HTTP(S), global DNS, standard ports only. Browser
   requests are GET/HEAD-only; network redirects are checked.
-- Director can choose sections from observed headings but cannot
-  yet perform meaningful click-based tasks. Current autonomous
-  capture is constrained to scroll/hover with observed visual-region assertions; it must not claim
-  authenticated behavior, form submissions, or real app actions
-  that were not observed.
+- The director can select observed, reversible public controls by evidence ID.
+  Safe interactions are filmed live, with a small benign text fixture only
+  after an explicit public paste-text control. No purchases, authenticated
+  flows, submissions, or arbitrary fabricated product outcomes.
 - One Gemini direction call per job, no silent retries. The provider
   may fail or become unavailable. The backend returns an honest
   error and no fabricated video.
@@ -94,12 +93,20 @@ produces a deterministic public showcase rather than inventing functionality.
 A browser-side interaction that is unstable downgrades to a conservative public
 preview. Private account workflows are never simulated.
 
-`backend/state_film.py` validates the SHA-256 hashes of every captured browser
-screenshot and produces an 8-second 720p30 H.264 preview and 1080p60 master
-with gentle real-image camera movement, without reconstructing site UI. This is
-**not** a semantically verified DOM replay: the release manifest says
-`replay_verified: false`. Existing Sauce replay verification remains enabled in
-the original renderer and is not bypassed or misreported.
+`backend/state_film.py` was the previous still-frame montage renderer and is
+**retired from the URL production path**. It remains only for diagnostics or
+historical receipts. Its exports felt like slideshows because a handful of
+screenshots were held and crossfaded; it is no longer an acceptable default.
+
+`backend/live_capture.py` records the actual moving Chromium viewport to WebM
+while the browser physically scrolls, moves its pointer, opens public examples,
+and observes real state changes. `backend/live_render.py` SHA-checks that
+continuous stream and transcodes to H.264 720p30 preview plus 1080p60 master.
+The recorded source was captured at Chromium's native video cadence; 60fps
+master output resamples frames but does not invent higher-frequency animation.
+The receipt says `continuous_motion: true`, `source_verified: true`, and
+`replay_verified: false`: source evidence is verified but a second independent
+DOM replay is not claimed.
 
 The Studio result screen identifies public showcases versus observed public
 interactions and provides a protected MP4 download and a review link.
@@ -123,3 +130,32 @@ Supported scope: websites that render public content to automated Chromium.
 Captchas, bot blocks, private products and services requiring authenticated
 sessions remain explicitly unsupported for automated filming. The generated
 visual preview still requires human quality review.
+
+
+## Continuous-motion replacement acceptance (17 November 2026)
+
+An actual production job at `seal-verify.vercel.app` now records the real
+"Paste text instead" transition followed by safe non-submitted demo typing.
+The measured public preview lasts approximately 7.97 seconds, with source
+recording preserved and SHA-256 verified. The video was fully decoded by
+FFmpeg and verified at 1280x720 30fps; its 1080p master was verified at 60fps.
+
+Independent public domains `igor-taste.vercel.app` and `paldey.com` also
+produced complete continuous screen recordings. Those are labelled public-site
+showcases because their private app functions were not demonstrated.
+
+Do not equate successful encoding with editorial signoff. Continuous motion
+fixes the slideshow failure mode, but persuasive automated product storytelling,
+meaningful multi-action flows, and cinematic pacing still need improvement.
+
+### Playwright video runtime dependency
+
+The production service must have Playwright's bundled FFmpeg in the user-owned
+browser cache, in addition to system FFmpeg used for encoding:
+
+    runuser -u devmcp -- env HOME=/var/lib/sauce-url2video \
+      /opt/sauce-vids/.venv/bin/python -m playwright install ffmpeg
+
+The container uses a private Unix socket and runs the browser as the restricted
+non-root devmcp service account. A missing Playwright recorder is a capture
+failure, not a reason to silently fall back to screenshot montages.

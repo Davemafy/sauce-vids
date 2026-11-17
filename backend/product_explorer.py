@@ -30,7 +30,7 @@ for(const e of document.querySelectorAll('a[href],button,[role="button"],summary
  if(!visible(e)||!text(e)||e.closest('[data-private],[data-secret],[data-sensitive]'))continue;
  const tag=e.tagName.toLowerCase(),kind=tag==='a'?'link':'button';
  const href=kind==='link'?e.href:null;
- controls.push({id:'a'+controls.length,text:text(e),tag,kind,href,selector:path(e),y:Math.round(e.getBoundingClientRect().top+scrollY)});
+ controls.push({id:'a'+controls.length,text:text(e),tag,kind,href,selector:path(e),button_type:tag==='button'?e.type||'':'',y:Math.round(e.getBoundingClientRect().top+scrollY)});
  if(controls.length>=80)break;
 }
 const root=getComputedStyle(document.documentElement),body=getComputedStyle(document.body);
@@ -45,10 +45,10 @@ CHROME='/opt/devmcp-browsers/chromium_headless_shell-1254/chrome-headless-shell-
 def allowed(c,origin):
  label=c['text']
  if UNSAFE_LABEL.search(label):return False
- if c['kind']=='button':return bool(SAFE_LABEL.search(label))
+ if c['kind']=='button':return c.get('button_type')!='submit' and bool(SAFE_LABEL.search(label))
  try:
   u=urlsplit(c['href']);base=urlsplit(origin)
-  return u.scheme==base.scheme and u.netloc.lower()==base.netloc.lower() and not UNSAFE_PATH.search(u.path)
+  return u.scheme==base.scheme and u.netloc.lower()==base.netloc.lower() and not u.query and not UNSAFE_PATH.search(u.path)
  except Exception:return False
 
 def inspect(url,private):
