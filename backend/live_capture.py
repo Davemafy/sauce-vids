@@ -135,9 +135,14 @@ def capture_quality():
  quality=os.environ.get('SAUCE_CAPTURE_QUALITY','standard')
  if quality not in ('standard','high'):
   raise ValueError('Invalid SAUCE_CAPTURE_QUALITY (standard or high)')
+ # Playwright records CSS viewport pixels, then pads when the output
+ # video size exceeds that viewport. Preserve a full-frame native capture:
+ # a 1920px recording must use a real 1920px CSS viewport (not 1280px
+ # pixels parked in the top-left of a nominally 1080p file).
+ width,height=(1920,1080) if quality=='high' else (1280,720)
  return {'quality':quality,'dpr':2 if quality=='high' else 1,
-         'video_size':{'width':1920 if quality=='high' else 1280,
-                       'height':1080 if quality=='high' else 720}}
+         'viewport':{'width':width,'height':height},
+         'video_size':{'width':width,'height':height}}
 
 def capture(url:str,private:Path,report:dict,plan:dict):
  quality=capture_quality()
@@ -154,7 +159,7 @@ def capture(url:str,private:Path,report:dict,plan:dict):
    args=['--no-sandbox','--disable-dev-shm-usage'])
   try:
    folder=private/'live-video';folder.mkdir(exist_ok=True)
-   context=b.new_context(viewport={'width':1280,'height':720},
+   context=b.new_context(viewport=quality['viewport'],
     device_scale_factor=quality['dpr'],record_video_dir=str(folder),
     record_video_size=quality['video_size'],service_workers='block')
    context.route('**/*',guard_route)
@@ -256,6 +261,7 @@ def capture(url:str,private:Path,report:dict,plan:dict):
       'source_url':url.split('?')[0],'mode':plan.get('mode','showcase'),
       'capture_quality':quality['quality'],'source_dpr':quality['dpr'],
       'requested_video_size':quality['video_size'],
+      'viewport_css_size':quality['viewport'],
       'presentation_cursor':cursor_style}
    (private/'continuous-capture.json').write_text(json.dumps(receipt,indent=2))
    return receipt
