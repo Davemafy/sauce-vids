@@ -1,6 +1,6 @@
 # Sauce — living handoff for new agents and new chats
 
-**Reviewed:** 2026-11-16. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
+**Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
 ## Read in this order
 
@@ -623,3 +623,16 @@ re-edit of earlier source waiting. The previously documented brief
 terminal overlap during initial modal entry and independent arbitrary
 live Chromium replay nondeterminism remain separate issues. Creative
 approval and broad generalized-quality validation are still outstanding.
+
+
+## 2026-11-17 — Research-only launch-quality build contract (no renderer changes)
+
+**Research artifact on main:** [docs/SAUCE_LAUNCH_RESEARCH_BRIEF.md](SAUCE_LAUNCH_RESEARCH_BRIEF.md), authored after checking the latest main repository, the separate URL pilot pipeline, primary Playwright/Screen Studio/OpenCV/OWASP documentation, and an independent live MP4 probe. This is a builder specification, not a film quality approval or claim of completed implementation.
+
+**Independent proof inspected:** https://devmcp.davemafy.xyz/sauce-motion-phase2/result-payoff-camera/master-1080p60.mp4 — SHA256 `ef297669e8fc0c1599a59e35b7dcff5a662773ce63c99789585e18d19f6c9e9a` as fetched onto the existing Vultr workspace. `ffprobe` confirmed H.264 1920x1080/60fps, 295 frames/4.916667s and AAC 48kHz; full `ffmpeg -v error -xerror` decode passed. Actually opened the 12-panel encoded contact sheet, the frame-32–76 opening montage, and full-size frame 44 (0.733s), 48 (0.800s), and 250 (4.167s). **Frame 48 still has a gray rectangular overlap obscuring the right-hand portion of the genuine dialog.** Frame 250 has legible genuine Codex command but an offscreen-cropped dialog header and wrapped URL. The 42-frame reading hold may be too brief; this is a visual editorial hypothesis requiring A/B owner review, not a completed defect fix. The underlying original-vs-compositor root cause of the rectangle is not proven.
+
+**Current server surface checked:** HTTPS `/sauce-app/studio`, `/sauce-app/studio/samples`, `/sauce-motion-phase2/result-payoff-camera/` and `/sauce-app/api/studio/url/auth` returned HTTP 200 on read-only probes. That does **not** prove a new end-to-end URL render in this research pass.
+
+**Structural quality split:** Phase 2 flagship compositor is still distinct from active URL pilot `backend/live_capture.py` → `backend/live_render.py` (1280x720 DPR1 Playwright WebM with a circular in-page pointer, then upscaled to 1080p and resampled at 60fps). The real source video is authentic continuous motion, but resolution and editorial language do not yet equal flagship Phase 2. Pilot remains permission-gated. No code/tests were changed or re-run in this research-only pass. This milestone commits documentation only.
+
+**Next builder sequence:** independently isolate and remove the exact modal entry occluder without inventing pixels → constrain payoff crop/hold to real result and context → benchmark genuine high-density URL source capture → unify the justified camera/pointer/editorial primitives while keeping video provenance distinctions → inspect three different public-site outputs with full film QA → invite-only beta gate. Each improvement must render, be visually compared against source and references, and record SHA/test/URL and remaining failures here. Do not reopen broad access or claim premium quality because HTTP/tests are green.
