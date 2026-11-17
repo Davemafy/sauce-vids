@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from .url_engine import execute
 from .url2video import inspect_url,validate_public_url,NeedsKey,NeedsAccess
+from .job_store import recover_jobs, save_job
 
 HOST="127.0.0.1"
 PORT=int(os.getenv("SAUCE_API_PORT","8767"))
@@ -26,26 +27,12 @@ OUT.mkdir(parents=True,exist_ok=True)
 os.chmod(OUT,0o700)
 POOL=ThreadPoolExecutor(max_workers=1)
 LOCK=threading.Lock()
-JOBS={}
-# Persistent jobs cannot be resumed after worker death. Mark them terminal
-# on startup so the browser never spins forever with a stale progress stage.
-for old_status in OUT.glob("*/status.json"):
-    try:
-        old=json.loads(old_status.read_text())
-        if old.get("status")=="queued" and old.get("stage") not in (
-            "needs_review","needs_access","failed","needs_key"):
-            old.update({"status":"failed","last_stage":old.get("stage"),
-                 "stage":"failed","updated_at":time.time(),
-                 "message":"The render worker restarted before this video finished. Please retry."})
-            old_status.write_text(json.dumps(old,indent=2))
-    except (ValueError,OSError,TypeError):
-        pass
+# Recover completed jobs, and resume only untouched pending jobs.
+# A job past the queued stage may already have consumed its AI call.
+JOBS, PENDING = recover_jobs(OUT)
 
 def save(job_id):
-    j=JOBS[job_id]
-    folder=OUT/job_id
-    folder.mkdir(parents=True,exist_ok=True)
-    (folder/"status.json").write_text(json.dumps(j,indent=2))
+    save_job(OUT,job_id,JOBS[job_id])
 
 def worker(job_id):
     folder=OUT/job_id
@@ -96,6 +83,11 @@ def worker(job_id):
                 safe_message="Sauce could not finish this job."
             JOBS[job_id].update(status="failed",stage="failed",last_stage=last_stage,error=category,message=safe_message)
             save(job_id)
+
+# Restore work accepted before process shutdown without creating extra
+# direction charges or replaying an already-started browser workflow.
+for pending_id in PENDING:
+    POOL.submit(worker,pending_id)
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args):
