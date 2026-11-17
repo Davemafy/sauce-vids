@@ -38,14 +38,17 @@ def validated_cut(session:dict,start_frame:int,settled_frame:int)->dict:
     if not any(abs(round((e['t']-start_ms)*FPS/1000)-start_frame)<=1
                for e in real_clicks):
         raise ValueError("Reveal cut must begin at observed pointerdown event")
-    # Cut the translucent source frames [start,settled) while bringing the
-    # actual settled DOM frame forward. Keep the recorded click Foley in
-    # audio frame start as a one-frame J-cut; suppress 1 extra beat of
-    # transition audio so all later real cues remain aligned on 800 samples.
+    # Cut the translucent source frames [start,settled), keeping only
+    # authentic, already-encoded source footage. Preserve the first click
+    # and its audible ~80 ms decay: a 1-frame J-cut truncates the sound and
+    # materially weakens it. Later cues resume at the same source clock as
+    # the video, after an exactly equal-sized 800-sample/frame audio cut.
+    removed=settled_frame-start_frame
+    audio_carry=min(5,removed)
     return {'firstRemoved':start_frame,'firstRetainedAfter':settled_frame,
-            'removedFrames':settled_frame-start_frame,
-            'audioHeadSamples':(start_frame+1)*SAMPLES_PER_FRAME,
-            'audioTailSamples':(settled_frame+1)*SAMPLES_PER_FRAME}
+            'removedFrames':removed,'audioCarryFrames':audio_carry,
+            'audioHeadSamples':(start_frame+audio_carry)*SAMPLES_PER_FRAME,
+            'audioTailSamples':(settled_frame+audio_carry)*SAMPLES_PER_FRAME}
 
 
 def ffprobe(path:Path)->dict:
@@ -83,9 +86,9 @@ def splice(source:Path,session_file:Path,output:Path,start:int,settled:int):
     temporary=output.with_name('.'+output.stem+'.partial.mp4')
     if temporary.exists():raise ValueError("An incomplete export already exists")
     length=cut['removedFrames']
-    # Video: throw away ONLY the observed native transition, not its final
-    # source frame. Audio: retain the verified click at the splice boundary,
-    # then skip the same number of samples, offset by one 60fps frame.
+    # Video: remove ONLY the observed native transition. Audio: preserve
+    # the actual click and decay, then remove an equal-duration later window
+    # so post-cut event samples realign to the corresponding video frames.
     graph=(
         f"[0:v:0]select='not(between(n,{start},{settled-1}))',"
         f"setpts=N/({FPS}*TB)[v];"
@@ -129,7 +132,7 @@ def splice(source:Path,session_file:Path,output:Path,start:int,settled:int):
              'removedSourceFrames':[start,settled-1],
              'firstRetainedSettledFrame':settled,
              'sourceVerifiedPointerdownFrame':start,
-             'audioJcutFrameOffset':1,
+             'audioJcutFrameOffset':cut['audioCarryFrames'],
              'audioSamplesPerFrame':SAMPLES_PER_FRAME,
              'outputDurationSeconds':expected/FPS,
              'preservesRealCapturedPixels':True,
