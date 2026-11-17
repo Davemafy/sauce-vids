@@ -25,8 +25,8 @@ parser.add_argument("--music",type=Path,help="Optional licensed audio recording"
 parser.add_argument("--preview",type=float)
 parser.add_argument("--seconds",type=float)
 parser.add_argument("--static",action="store_true")
-parser.add_argument("--camera-profile",choices=["standard","screenstudio"],default="standard",
-                    help="Timing/easing preset; all camera targets still require recorded DOM evidence")
+parser.add_argument("--camera-profile",choices=["standard","screenstudio","action-first"],default="standard",
+                    help="Reference or post-result timing; all focus targets still require observed DOM change")
 parser.add_argument("--presentation",choices=["window","fullscreen"],default="window",
                     help="Window uses a licensed browser frame; fullscreen preserves raw product pixels without invented chrome")
 args=parser.parse_args()
