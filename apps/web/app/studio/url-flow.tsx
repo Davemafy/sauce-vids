@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useState,type FormEvent} from "react";
 import Link from "next/link";
 import s from "./url-flow.module.css";
+import {FilmLibrary,rememberFilm,recentFilmIds} from "./film-library";
 
 const api=(process.env.NEXT_PUBLIC_SAUCE_BASE_PATH||"")+"/api/studio/url";
 type Stage="queued"|"inspecting"|"directing"|"capturing"|"rendering"|"needs_access"|"needs_review"|"failed"|"needs_key";
@@ -64,7 +65,7 @@ export function UrlFlowScreen(){
  useEffect(()=>{
   let live=true;
   const shared=new URLSearchParams(window.location.search).get("job");
-  const previous=shared&&/^[a-f0-9]{24}$/.test(shared)?shared:sessionStorage.getItem("sauce-url-job");
+  const previous=shared&&/^[a-f0-9]{24}$/.test(shared)?shared:(sessionStorage.getItem("sauce-url-job")||recentFilmIds()[0]);
   if(previous&&/^[a-f0-9]{24}$/.test(previous)){
     setJobId(previous);sessionStorage.setItem("sauce-url-job",previous);
   }
@@ -118,6 +119,7 @@ export function UrlFlowScreen(){
    const id=body.jobId as string;
    if(!/^[a-f0-9]{24}$/.test(id))throw Error("Invalid job identifier");
    setJobId(id);sessionStorage.setItem("sauce-url-job",id);
+   rememberFilm(id);
    setJob({id,url:publicUrl,stage:"queued",status:"queued",created_at:Date.now()/1000});
   }catch(e){setError(e instanceof Error?e.message:"Could not start this film");}
   finally{setSending(false);}
@@ -147,6 +149,12 @@ export function UrlFlowScreen(){
  const count=Math.min(total,Math.max(0,job?.frames_rendered||0));
  const duration=job?.created_at?now-job.created_at*1000:0;
  function clearJob(){setJobId(null);setJob(null);setPollError(false);setError("");sessionStorage.removeItem("sauce-url-job");}
+ function openSavedFilm(id:string){
+  setJob(null);setJobId(id);setPollError(false);setError("");
+  sessionStorage.setItem("sauce-url-job",id);
+  rememberFilm(id);
+  void readJob(id).catch(()=>setPollError(true));
+ }
  return <div className={s.shell}>
   <header className={s.topbar}>
    <Link href="/" className={s.brand} aria-label="Sauce home">Sauce</Link>
@@ -203,7 +211,7 @@ export function UrlFlowScreen(){
       <span className={s.domain}>{host(job?.url||urlValue(url))}</span>
       <h2>{sending?"Opening the render desk.":titles[stage]||"Continuing production."}</h2>
       <p aria-live="polite" aria-atomic="true">{pollError?"Status connection interrupted. Reconnecting without stopping the job…":details[stage]||"Sauce is working on the edit."}</p>
-      {stage==="rendering"&&<small>CPU rendering can take a while. The film continues processing on the server.</small>}
+      <small>You can close this tab. Sauce will finish the job on the server and keep the review link for your return.</small>
      </div>
     </div>
     <div className={s.productionFooter}>
@@ -246,6 +254,7 @@ export function UrlFlowScreen(){
     {failed&&<><h2>We couldn't complete this cut.</h2><p>{job?.message||"The attempt ended before Sauce produced a verified video. Nothing was published."}</p><div className={s.notice}>Try another accessible public URL. If this site requires sign-in or blocks automated browsers, Sauce cannot capture it anonymously.</div></>}
     <button type="button" className={s.another} onClick={clearJob}>↻ Make another film</button>
    </section>}
+   <FilmLibrary authorized={unlocked} activeId={jobId} refreshKey={(jobId||"")+":"+(job?.stage||"")+":"+(job?.status||"")} onOpen={openSavedFilm}/>
    <footer className={s.footer}><span>Made with Sauce</span><span>One direction call. Real browser capture. Human-reviewed output.</span></footer>
   </main>
  </div>;
