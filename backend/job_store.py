@@ -98,5 +98,17 @@ def recover_jobs(root: Path) -> tuple[dict[str, dict], list[str]]:
                              "Start a new job if you still need this film."),
                 )
                 save_job(root, folder.name, job)
+        # Older successful jobs may predate the continuous-footage status
+        # fields. Recover their label ONLY from an existing verified receipt.
+        if job.get("status") == "needs_review" and _has_verified_export(folder):
+            missing_mode = job.get("render_mode") != "continuous-browser-capture"
+            missing_capture = job.get("capture_mode") not in ("interactive", "showcase")
+            if missing_mode or missing_capture:
+                receipt = json.loads((folder / "export" / "release.json").read_text())
+                if missing_mode:
+                    job["render_mode"] = "continuous-browser-capture"
+                if missing_capture and receipt.get("film_mode") in ("interactive", "showcase"):
+                    job["capture_mode"] = receipt["film_mode"]
+                save_job(root, folder.name, job)
         jobs[folder.name] = job
     return jobs, pending
