@@ -2,7 +2,7 @@
 import os
 from unittest.mock import patch
 import pytest
-from backend.live_capture import capture_quality
+from backend.live_capture import capture_quality,capture_cursor_style,ARROW_CURSOR_JS
 from backend.live_render import source_video_profile
 
 
@@ -64,3 +64,24 @@ def test_high_quality_claim_rejected_when_dpr_is_wrong():
 def test_unsupported_recordings_cannot_be_mislabeled():
     with pytest.raises(RuntimeError,match='dimensions'):
         source_video_profile({'width':640,'height':360},{})
+
+
+def test_default_cursor_is_unchanged_for_existing_pilot():
+    with patch.dict(os.environ, {}, clear=True):
+        assert capture_cursor_style()=='circle'
+
+
+def test_real_arrow_requires_explicit_opt_in():
+    with patch.dict(os.environ, {'SAUCE_CAPTURE_CURSOR':'arrow'}, clear=True):
+        assert capture_cursor_style()=='arrow'
+    assert "point.x-2.5" in ARROW_CURSOR_JS
+    assert "point.y-2" in ARROW_CURSOR_JS
+    assert "aria-hidden" in ARROW_CURSOR_JS
+    assert "window.__sauceGetPointer" in ARROW_CURSOR_JS
+    assert 'path d=' in ARROW_CURSOR_JS
+
+
+def test_unrecognized_cursor_is_rejected():
+    with patch.dict(os.environ, {'SAUCE_CAPTURE_CURSOR':'giant-glass-dot'}, clear=True):
+        with pytest.raises(ValueError):
+            capture_cursor_style()
