@@ -24,10 +24,15 @@ POSE={"scale":1.31,"focusX":640,"focusY":362.59}
 def test_real_command_target_builds_bounded_animated_camera_shot():
     p=create_payoff_plan(EVIDENCE,ANCHOR,POSE)
     assert p is not None and p["sourceKind"]=="pre"
-    assert 1.6<p["endScale"]<=1.82
-    assert 440<p["endFocusY"]<470
+    assert 1.45<p["endScale"]<1.62
+    # The source-true camera must retain the actual dialog title and
+    # command, not clip the heading to center only the last <pre>.
+    assert 315<p["endFocusY"]<335
+    span=ANCHOR["target"]["y"]+ANCHOR["target"]["height"]-ANCHOR["dialog"]["y"]
+    projected_span=span*p["endScale"]*(1480/1280)*(1200/1140)
+    assert projected_span<=832-64+0.05
     assert abs(p["endFocusX"]-648)<20
-    assert p["totalFrames"]==98
+    assert p["totalFrames"]==122
     at_start=pose_at(p,0)
     assert at_start==(1.31,640.,362.59)
     at_end=pose_at(p,ANTICIPATION_FRAMES+DOLLY_FRAMES-1)
@@ -59,7 +64,7 @@ def test_native_source_footage_outro_has_camera_move_and_sharp_locked_end():
         def __init__(self):self.packets=0;self.key={}
         def write(self,data):
             self.packets+=1
-            if self.packets in (1,8,9,44,45,86,98):
+            if self.packets in (1,8,9,44,45,110,122):
                 self.key[self.packets]=hashlib.sha256(data).hexdigest()
     class Encoder:pass
     encoder=Encoder()
@@ -77,8 +82,8 @@ def test_native_source_footage_outro_has_camera_move_and_sharp_locked_end():
     assert result['fadeFrames']==12
     assert result['mode']=='source-result-dolly'
     assert encoder.stdin.key[1]==encoder.stdin.key[8]
-    assert encoder.stdin.key[44]==encoder.stdin.key[45]==encoder.stdin.key[86]
-    assert encoder.stdin.key[98]!=encoder.stdin.key[86]
+    assert encoder.stdin.key[44]==encoder.stdin.key[45]==encoder.stdin.key[110]
+    assert encoder.stdin.key[122]!=encoder.stdin.key[110]
     assert np.all(first==111)
 
 
