@@ -47,7 +47,7 @@ class Shot:
 
 def plan(events:list, viewport:dict,duration:float, profile:str="standard")->list[Shot]:
     """Camera profile affects motion timing, never the evidence requirements."""
-    if profile not in ("standard", "screenstudio"):
+    if profile not in ("standard", "screenstudio", "action-first"):
         raise ValueError("Unsupported camera profile")
     shots=[]
     w,h=viewport["width"],viewport["height"]
@@ -83,11 +83,24 @@ def plan(events:list, viewport:dict,duration:float, profile:str="standard")->lis
         if max_zoom < 1.15:
             # A whole-screen update is not a close-up target.
             continue
-        zoom=(clamp(max_zoom*1.16,1.36,1.62) if profile=="screenstudio"
+        zoom=(clamp(max_zoom*1.16,1.36,1.62) if profile in ("screenstudio", "action-first")
               else clamp(max_zoom,1.16,1.36))
         end_evt=next((e for e in events if e.get("kind")=="interaction_complete"
                     and changed["t"]<e.get("t",-1)<duration),None)
-        if profile=="screenstudio":
+        if profile=="action-first":
+            # The click and a verified DOM result happen BEFORE the camera
+            # starts. Do not predict an outcome or push into the click target.
+            # Require a recorded completion to reserve real reading time.
+            if (not isinstance(changed.get("evidence"),str)
+                    or not changed["evidence"].strip() or end_evt is None):
+                continue
+            start=max(0.0,float(changed["t"])+.06)
+            release=min(duration-.95,float(end_evt["t"])+.08)
+            settle=min(start+.72,release-.60)
+            end=min(duration-.08,release+.80)
+            if settle<=start+.30 or release<=settle+.50:
+                continue
+        elif profile=="screenstudio":
             release=(min(duration-1.15,end_evt["t"]+.08) if end_evt is not None
                      else min(duration-1.15,changed["t"]+2.2))
             start=max(0.0,ct-.34)
