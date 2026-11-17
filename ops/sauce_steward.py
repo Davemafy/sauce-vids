@@ -32,7 +32,7 @@ URLS = (
     "https://devmcp.davemafy.xyz/sauce-app/studio/samples",
     "https://devmcp.davemafy.xyz/sauce-motion-phase2/result-payoff-camera/",
 )
-KINDS = frozenset(("sync-main", "audit-proof", "smoke-web", "test-main"))
+KINDS = frozenset(("sync-main", "audit-proof", "smoke-web", "test-main", "value-report"))
 POLL_SECONDS = 600
 PROOF_INTERVAL_SECONDS = 24 * 3600
 SMOKE_INTERVAL_SECONDS = 3600
@@ -205,6 +205,13 @@ def audit_proof() -> dict:
     return result
 
 
+def value_report() -> dict:
+    from sauce_value_report import calculate, write_report
+    report = calculate(Path("/var/lib/sauce-url2video/jobs"))
+    write_report(report, STATE / "value-report.json")
+    return report
+
+
 def test_main() -> dict:
     dest = STATE / "source-main"
     if not (dest / ".git").is_dir():
@@ -226,6 +233,7 @@ OPERATIONS = {
     "smoke-web": smoke_web,
     "audit-proof": audit_proof,
     "test-main": test_main,
+    "value-report": value_report,
 }
 
 
@@ -257,7 +265,9 @@ def run_next(db: sqlite3.Connection) -> bool:
                      **({"proof_audit": result}
                         if row["kind"] == "audit-proof" else {}),
                      **({"web_smoke": result}
-                        if row["kind"] == "smoke-web" else {})})
+                        if row["kind"] == "smoke-web" else {}),
+                     **({"value_report": result}
+                        if row["kind"] == "value-report" else {})})
         print(f"{now()} DONE job={job_id}", flush=True)
     except Exception as ex:
         db.execute(
@@ -278,10 +288,12 @@ def daemon() -> None:
     enqueue(db, "sync-main")
     enqueue(db, "smoke-web")
     enqueue(db, "audit-proof")
+    enqueue(db, "value-report")
     next_poll = 0.
     last_sha = None
     last_proof = time.monotonic()
     last_smoke = time.monotonic()
+    last_value_report = time.monotonic()
     print(f"{now()} Sauce Steward online, {POLL_SECONDS}s polling", flush=True)
     while True:
         tick = time.monotonic()
@@ -305,6 +317,9 @@ def daemon() -> None:
         if tick - last_proof >= PROOF_INTERVAL_SECONDS:
             enqueue(db, "audit-proof")
             last_proof = tick
+        if tick - last_value_report >= SMOKE_INTERVAL_SECONDS:
+            enqueue(db, "value-report")
+            last_value_report = tick
         if not run_next(db):
             time.sleep(5)
 
