@@ -23,6 +23,29 @@ def probe(src):
    '-show_entries','stream=codec_type,codec_name,width,height,r_frame_rate:format=duration',
    '-of','json',str(src)],text=True,timeout=20))
 
+def source_video_profile(stream:dict,receipt:dict):
+ """Validate real recorded dimensions, then select native-source encoding.
+
+ No input is silently upscaled and mislabeled as a high-resolution capture.
+ The legacy 720p pilot remains supported without changing its receipts.
+ """
+ size=[stream.get('width'),stream.get('height')]
+ if size not in ([1280,720],[1920,1080]):
+  raise RuntimeError('Invalid browser footage dimensions')
+ expected=receipt.get('requested_video_size')
+ if expected and size != [expected.get('width'),expected.get('height')]:
+  raise RuntimeError('Recorded footage differs from verified capture size')
+ quality=receipt.get('capture_quality','standard')
+ dpr=receipt.get('source_dpr',1)
+ if quality=='high' and (size!=[1920,1080] or dpr!=2):
+  raise RuntimeError('High-density source proof mismatch')
+ native=size==[1920,1080]
+ filter_graph=('setsar=1,fps=60,format=yuv420p' if native
+               else 'scale=1920:1080:flags=lanczos,setsar=1,fps=60,format=yuv420p')
+ return {'dimensions':size,'native_1080p':native,'source_dpr':dpr,
+         'source_fps':stream.get('r_frame_rate'),'filter':filter_graph}
+
+
 def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
  source_dir=Path(source_dir);out=Path(out)
  receipt=json.loads((source_dir/'continuous-capture.json').read_text())
@@ -31,8 +54,8 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
   raise RuntimeError('Continuous browser evidence missing or modified')
  evidence=probe(src)
  stream=next((s for s in evidence['streams'] if s.get('codec_type')=='video'),None)
- if not stream or stream['width']!=1280 or stream['height']!=720:
-  raise RuntimeError('Invalid browser footage dimensions')
+ if not stream:raise RuntimeError('No recorded browser video stream')
+ profile=source_video_profile(stream,receipt)
  full_duration=float(evidence['format']['duration'])
  if full_duration<1.7 or full_duration>75:raise RuntimeError('Invalid live source duration')
  # Playwright starts the recorder before the initial page is ready. Remove
@@ -45,7 +68,7 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
  # montages, transition slides or synthesized screenshots.
  command=['ffmpeg','-hide_banner','-loglevel','error','-y','-nostdin',
   '-ss',str(round(trim,3)),'-i',str(src),'-map','0:v:0',
-  '-vf','scale=1920:1080:flags=lanczos,setsar=1,fps=60,format=yuv420p',
+  '-vf',profile['filter'],
   '-an','-c:v','libx264','-preset','medium','-crf','17',
   '-movflags','+faststart','-progress','pipe:1',str(master)]
  total=max(1,int(round(duration*60)))
@@ -84,6 +107,10 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
   'discarded_initial_loading_seconds':round(trim,2),
   'source_sha256':receipt['sha256'],
   'source_pixel_stream_recorded':True,
+  'recorded_source_dimensions':profile['dimensions'],
+  'recorded_source_fps':profile['source_fps'],
+  'recorded_source_dpr':profile['source_dpr'],
+  'native_1080p_source':profile['native_1080p'],
   'continuous_motion':True,'source_verified':True,'replay_verified':False,
   'observed_actions':receipt['actions'],
   'master_dimensions':[1920,1080],'master_fps':60,'preview_dimensions':[1280,720],
