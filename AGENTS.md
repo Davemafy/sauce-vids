@@ -11,6 +11,18 @@ For a **new chat or recovered worker**, use `docs/SAUCE_NEW_CHAT.md` as the shor
 4. Compare working-tree status with `origin/main`; preserve unrelated local changes and private artifacts. **Main only**; do not create branches by default.
 5. Identify the actual output pipeline. Changing the web player does NOT change pixels in the MP4. Never substitute preview CSS for composition work.
 
+## Commercial engineering objective (owner decision, 2026-11-17)
+
+**Optimize for a credible first paying customer within seven days of a quality-approved launch, while remaining viable for six months with no revenue.** This is a target, not a forecast or a reason to expose unapproved films.
+
+Use this decision order for scope and tradeoffs:
+1. **Make the output worth paying for.** Fix known film-level defects before new dashboards, agent frameworks, or generalized infrastructure. Review the *encoded* landscape film against references; preserve real source pixels, readable action/results, purposeful camera and cursor motion. Three distinct source-true demos must earn quality approval before public launch.
+2. **Make one paid pilot possible with minimal manual work.** After visual approval, prioritize bounded, reliable capture → return → preview/download → explicit review, a clear offer, and a simple legitimate way to accept one payment. Do not build a full billing platform or open self-service access speculatively. Obtain owner consent for real purchases, communication and paid infrastructure.
+3. **Protect runway.** Keep single-worker production until longer real-film capacity, limits and storage are measured. Prefer small, reversible, dependency-light changes and existing Vultr capacity. A 4 GiB Sauce-only host is plausible for one short render, **not** verified for all current shared-VPS services. No deletion, migration, new VM or inference spend without authorization.
+4. **Measure actual customer value separately from technical success.** Verified source clips, human-approved films, qualified buyer conversations, genuine payment and repeat purchases are distinct counts. Green CI, a 60fps encoded stream, localhost load tests and internal test jobs never count as revenue or creative acceptance.
+
+**Immediate creative P0:** inspect and fix the Brimble modal occlusion and clipped result payoff in the real MP4; compare against reference and re-render. Then address native source sharpness, cursor semantics and compelling editorial holds for URL-produced films. Avoid speculative feature expansion until the saleable film gate is satisfied.
+
 ## Non-negotiables
 
 - Real product footage, real recorded events and verified DOM outcomes. Do not fabricate screenshots, authenticated actions, UI or pointer data.
