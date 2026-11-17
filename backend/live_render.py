@@ -111,6 +111,7 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
   'recorded_source_fps':profile['source_fps'],
   'recorded_source_dpr':profile['source_dpr'],
   'native_1080p_source':profile['native_1080p'],
+  'presentation_cursor':receipt.get('presentation_cursor','circle'),
   'continuous_motion':True,'source_verified':True,'replay_verified':False,
   'observed_actions':receipt['actions'],
   'master_dimensions':[1920,1080],'master_fps':60,'preview_dimensions':[1280,720],
