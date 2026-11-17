@@ -34,6 +34,42 @@ CURSOR_JS=r"""(() => {
  },true);
  window.__sauceGetPointer=()=>point;
 })();"""
+ARROW_CURSOR_JS=r"""(() => {
+ if(window.__saucePointerInstalled)return;
+ window.__saucePointerInstalled=true;
+ // Genuine Chromium mouse events drive one native-shaped presentation cursor.
+ // SVG tip starts at (3,2); translate it back to the actual event hotspot.
+ const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 30">'
+  +'<path d="M3 2.5v22.2l5.65-5.8 4.64 9.18 4.4-2.26-4.55-8.48h8.15L3 2.5Z"'
+  +' fill="#17191e" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>'
+  +'</svg>';
+ const marker=document.createElement('div');
+ marker.id='sauce-motion-pointer';
+ marker.setAttribute('aria-hidden','true');
+ marker.style.cssText='position:fixed;left:0;top:0;width:20px;height:25px;'
+  +'z-index:2147483646;pointer-events:none;transform:translate3d(-99px,-99px,0);'
+  +'background-size:100% 100%;background-repeat:no-repeat;'
+  +'filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));will-change:transform';
+ marker.style.backgroundImage='url("data:image/svg+xml,'+encodeURIComponent(svg)+'")';
+ const install=()=>{if(!marker.isConnected)(document.body||document.documentElement).appendChild(marker)};
+ install();
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});
+ let point={x:-35,y:-35};
+ window.addEventListener('pointermove',e=>{
+   point={x:e.clientX,y:e.clientY};
+   marker.style.transform='translate3d('+(point.x-2.5)+'px,'+(point.y-2)+'px,0)';
+ },true);
+ window.addEventListener('pointerdown',()=>{marker.style.opacity='.82'},true);
+ window.addEventListener('pointerup',()=>{marker.style.opacity='1'},true);
+ window.__sauceGetPointer=()=>point;
+})();"""
+
+def capture_cursor_style():
+ style=os.environ.get('SAUCE_CAPTURE_CURSOR','circle')
+ if style not in ('circle','arrow'):
+  raise ValueError('Invalid SAUCE_CAPTURE_CURSOR (circle or arrow)')
+ return style
+
 def hash_file(path:Path):
  h=hashlib.sha256()
  with path.open('rb') as f:
@@ -105,6 +141,8 @@ def capture_quality():
 
 def capture(url:str,private:Path,report:dict,plan:dict):
  quality=capture_quality()
+ cursor_style=capture_cursor_style()
+ cursor_script=ARROW_CURSOR_JS if cursor_style=='arrow' else CURSOR_JS
  ensure_video_helper()
  validate_public_url(url)
  private=Path(private);private.mkdir(parents=True,exist_ok=True)
@@ -120,14 +158,14 @@ def capture(url:str,private:Path,report:dict,plan:dict):
     device_scale_factor=quality['dpr'],record_video_dir=str(folder),
     record_video_size=quality['video_size'],service_workers='block')
    context.route('**/*',guard_route)
-   context.add_init_script(CURSOR_JS)
+   context.add_init_script(cursor_script)
    video_begin=time.monotonic()
    page=context.new_page()
    response=page.goto(url,wait_until='domcontentloaded',timeout=30000)
    if response and response.status>=400:raise RuntimeError('Source page returned HTTP '+str(response.status))
    validate_public_url(page.url)
    page.wait_for_timeout(600)
-   page.evaluate(CURSOR_JS)
+   page.evaluate(cursor_script)
    video=page.video
    if video is None:raise RuntimeError('Browser video recording unavailable')
    start=time.monotonic()
@@ -217,7 +255,8 @@ def capture(url:str,private:Path,report:dict,plan:dict):
       'actions':events,'evidence':evidence,
       'source_url':url.split('?')[0],'mode':plan.get('mode','showcase'),
       'capture_quality':quality['quality'],'source_dpr':quality['dpr'],
-      'requested_video_size':quality['video_size']}
+      'requested_video_size':quality['video_size'],
+      'presentation_cursor':cursor_style}
    (private/'continuous-capture.json').write_text(json.dumps(receipt,indent=2))
    return receipt
   finally:b.close()
