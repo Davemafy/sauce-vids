@@ -10,6 +10,7 @@ def test_legacy_pilot_capture_remains_720p_and_dpr1():
     with patch.dict(os.environ, {}, clear=True):
         p=capture_quality()
     assert p == {'quality':'standard','dpr':1,
+                 'viewport':{'width':1280,'height':720},
                  'video_size':{'width':1280,'height':720}}
 
 
@@ -17,6 +18,7 @@ def test_opt_in_capture_uses_hidpi_chromium_at_real_1080p():
     with patch.dict(os.environ, {'SAUCE_CAPTURE_QUALITY':'high'}, clear=True):
         p=capture_quality()
     assert p == {'quality':'high','dpr':2,
+                 'viewport':{'width':1920,'height':1080},
                  'video_size':{'width':1920,'height':1080}}
 
 
@@ -29,6 +31,7 @@ def test_invalid_quality_is_not_silently_promoted(quality):
 
 def test_native_source_preserved_without_spatial_upscale():
     receipt={'capture_quality':'high','source_dpr':2,
+             'viewport_css_size':{'width':1920,'height':1080},
              'requested_video_size':{'width':1920,'height':1080}}
     profile=source_video_profile(
         {'width':1920,'height':1080,'r_frame_rate':'30/1'},receipt)
@@ -85,3 +88,20 @@ def test_unrecognized_cursor_is_rejected():
     with patch.dict(os.environ, {'SAUCE_CAPTURE_CURSOR':'giant-glass-dot'}, clear=True):
         with pytest.raises(ValueError):
             capture_cursor_style()
+
+def test_padded_1080_container_is_not_native_source():
+    # This actually happened during the first real Chromium high-DPR
+    # experiment. The video probed 1920x1080 but the UI occupied only
+    # 1280x720 CSS pixels with blank padding to the right and bottom.
+    with pytest.raises(RuntimeError,match='CSS viewport'):
+        source_video_profile({'width':1920,'height':1080},{
+            'capture_quality':'high','source_dpr':2,
+            'requested_video_size':{'width':1920,'height':1080},
+            'viewport_css_size':{'width':1280,'height':720}})
+
+
+def test_high_density_requires_source_viewport_evidence():
+    with pytest.raises(RuntimeError,match='CSS viewport'):
+        source_video_profile({'width':1920,'height':1080},{
+            'capture_quality':'high','source_dpr':2,
+            'requested_video_size':{'width':1920,'height':1080}})
