@@ -4,7 +4,7 @@ Unlike still-state montages this records every real browser animation frame,
 including scroll, pointer movement and safe state transitions.
 """
 from __future__ import annotations
-import hashlib,json,math,shutil,time,re
+import hashlib,json,math,shutil,time,re,os
 from pathlib import Path
 from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright
@@ -75,7 +75,22 @@ def smooth_to(page,target):
  }""",{'y':y,'duration':duration})
  page.wait_for_timeout(180)
 
+def ensure_video_helper(browser_dir:Path=Path('/opt/devmcp-browsers')):
+ """Use an existing shared Playwright FFmpeg helper on Vultr.
+
+ Chromium itself can be available even when Playwright's recording helper is
+ missing from the service user's home cache. This path only applies if a
+ genuine installed ffmpeg-* helper exists; don't download or install anything.
+ An explicit browser cache selection from the operator is always respected.
+ """
+ if os.environ.get('PLAYWRIGHT_BROWSERS_PATH'):
+  return os.environ['PLAYWRIGHT_BROWSERS_PATH']
+ if any(p.is_file() for p in browser_dir.glob('ffmpeg-*/ffmpeg-linux')):
+  os.environ['PLAYWRIGHT_BROWSERS_PATH']=str(browser_dir)
+ return os.environ.get('PLAYWRIGHT_BROWSERS_PATH','')
+
 def capture(url:str,private:Path,report:dict,plan:dict):
+ ensure_video_helper()
  validate_public_url(url)
  private=Path(private);private.mkdir(parents=True,exist_ok=True)
  actions={c['id']:c for c in report.get('controls',[])}
