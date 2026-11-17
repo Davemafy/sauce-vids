@@ -552,3 +552,74 @@ Previously approved and rejected proof URLs remain accessible, unchanged.
 **Gates:** FFmpeg full decode passed; ffprobe H.264 1920x1080 at 60fps, 314 frames / 5.233333 seconds, AAC stereo 48kHz. Same 96 sharp result-hold frames, 21 fade frames, 251200 Foley samples, 152 actual H0/H60 frames, zero fallback and cut at frame 125. Public desktop 1280x720 and mobile 390x844 players each sought to 1.62s with no page/media errors or overflow. Regression tests: 31/31 TypeScript, 174/174 Python unittest, 62/62 pytest plus 13 nested subtests. Four targeted tests cover one-frame-only change, immediate restoration, pointerdown exactness, edit-cut reset and reproducibility.
 
 **Limits:** The revised motion is available for the owner's subjective review, not yet premium approved. A separate pre-existing black terminal overlap at the start of modal entrance remains unresolved. Independent live-browser frame determinism is still a separate known limitation.
+
+## 2026-11-17 — Replace the 1.6-second frozen Codex ending with a source-true payoff
+
+**User's critique:** The previous 5.233-second Brimble film felt empty:
+197 real-action frames were followed by 96 copies of one static frame and
+21 fade frames. The clip was technically green but badly paced.
+
+**Change:** Introduced opt-in `--result-payoff-push` (requires existing
+`--result-aware-editorial`), implemented in
+`scripts/result_payoff.py` and wired through
+`scripts/session_replay.py` / `scripts/produce_cinematic_demo.py`.
+The stage does not introduce a fictitious action, extra copied message,
+new code or giant callout. It queries a real visible non-private source
+result rectangle and the open dialog geometry at the verified end state.
+Brimble's observed `pre` box was (487,471,334,52) CSS pixels in the
+dialog (440,122,400,476). The focal shot zooms the **existing** H0/H60
+compositor from 1.31x to 1.7554x, moves the focus toward (649.1,449.05),
+reprojects the unaltered original DPR2 Chromium screenshot and modal-free
+background at each frame via Lanczos4, and briefly fades the pointer
+during the post-action dolly. This remains true elevated multi-plane
+rendering, not zooming an encoded thumbnail or painting new UI.
+
+**Actual editorial change:** The previously static 96-frame hold is
+replaced with 8 original composition frames + 36 active camera-move
+frames + 42 sharp *close-up* reading frames + 12 eased fade frames.
+Thus 197+98 = **295 frames / 4.916667s**, compared with the former
+314 / 5.233333s. The source action frame plan, original 180/24/1
+spring, real cursor flight and one-frame H0/H60 seam correction,
+frame-125 action cut and 152 genuine multi-plane frames are untouched.
+Audio receipt: AAC stereo 48kHz, Foley WAV **236,000 samples = 295×800**
+with four original event cues; no music or fake copy sound added.
+The flat-tail version stays accessible. Non-result DOM flows fall back to
+the conservative prior hold.
+
+**Visual and technical verification:** Opened native encoded frame 250
+at actual pixel resolution and read the genuine Codex command and
+confirmation. Contact sheet shows the camera is actively reframing at
+frames 209/218/227/236/241, settled and holding at 250/260/275,
+then fading by 284/294. Mean pixel difference between source frame 196
+and moving frame 218: 8.98/255 across the composition. Mean difference
+between encoded locked close-up frames 250 and 275: ~0.00084/255.
+The original browser text remains legible; no synthetic card or zoomed
+low-res player pixels were introduced. Full FFmpeg decode passed;
+`ffprobe`: H.264, **1920×1080, 60fps, 295 frames, 4.916667s**;
+stereo AAC 48kHz. Exact master SHA-256:
+`ef297669e8fc0c1599a59e35b7dcff5a662773ce63c99789585e18d19f6c9e9a`,
+matching the independently installed public file.
+
+**Proof:** https://devmcp.davemafy.xyz/sauce-motion-phase2/result-payoff-camera/
+with master and contact/native source-backed close-up links in
+`docs/result-aware-editorial.md`. Public page, master, contact and
+native close-up returned HTTP 200; Chromium desktop 1280x720 and
+mobile 390x844 both loaded, sought to 4.26s, and had no media error,
+page error or horizontal overflow. The distinct downscaled preview
+reported 4.933s; **do not confuse this with authoritative 1080p master
+duration**.
+
+**Tests:** Studio Motion 31/31; Python unittest 174/174; Phase 2/3
+plus URL backend pytest 66/66, 13 nested subtests. Four new payoff
+tests cover verified live Brimble HAR DOM result geometry, shot profile,
+negative cases that may not fabricate output, and stable, sharp raw
+frame output clock. No untracked footage, private HAR or session data
+was committed.
+
+**Limits:** The film still retains its real original 197-frame source
+section (including some source idle around the result). The camera push
+makes the added ending purposeful, but this is not a complete beat-level
+re-edit of earlier source waiting. The previously documented brief
+terminal overlap during initial modal entry and independent arbitrary
+live Chromium replay nondeterminism remain separate issues. Creative
+approval and broad generalized-quality validation are still outstanding.

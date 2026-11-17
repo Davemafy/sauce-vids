@@ -230,7 +230,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            raster_cache_dir:Path|None=None,
            experimental_orbit_optics:bool=False,
            optics_seed:int=20261116,
-           result_aware_editorial:bool=False) -> dict:
+           result_aware_editorial:bool=False,
+           result_payoff_push:bool=False) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -455,6 +456,19 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     result_candidates=[]
     last_rendered_image=None
     added_hold={"holdFrames":0,"fadeFrames":0,"totalFrames":0}
+    payoff_raw_source=None
+    payoff_background_raw=None
+    payoff_modal_box=None
+    payoff_modal_radius=None
+    payoff_pose=None
+    payoff_tilt=None
+    payoff_perspective=None
+    payoff_cursor=None
+    if result_payoff_push and not result_aware_editorial:
+        raise ValueError('Result payoff requires result-aware editorial')
+    if result_payoff_push:
+        from result_payoff import (
+            FOCUS_ANCHOR_JS,create_payoff_plan,append_payoff)
     if result_aware_editorial:
         if fps!=60 or not preset_engine or preset_engine['preset']['id']!='3d-launch':
             raise ValueError('Result-aware editorial requires 3d-launch at 60fps')
@@ -722,6 +736,19 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                         spotlight['box']=live_box
                         foreground={'source':source,'box':live_box,
                                     'radiusCss':radius_css}
+                        # Retain the *genuine* 2x Chromium modal and clean H0
+                        # plate from the final verified frame for a native
+                        # re-rendered 3D command close-up. No raster zoom.
+                        if result_payoff_push and index==total-1:
+                            payoff_raw_source=decoded.copy()
+                            payoff_background_raw=clean_pixels.copy()
+                            payoff_modal_box=dict(live_box)
+                            payoff_modal_radius=float(radius_css)
+                            payoff_pose=dict(preset_pose)
+                            payoff_tilt=tuple(frame_tilt)
+                            payoff_perspective=float(perspective)
+                            payoff_cursor=(tuple(cursor[source_index])
+                                           if cursor else None)
                         multi_plane_frames+=1
                         live_modal_hold_frames+=int(live_modal_hold)
                     else:
@@ -838,8 +865,69 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                            and (frame_map[-1]['sourceMs'] if frame_map else length*1000)
                                -r['sourceMs']<=2600),None)
             if evidence:
-                added_hold=append_result_hold(
-                    encoder,last_rendered_image,fps,evidence)
+                # An actual post-click <pre>/output is a source-backed
+                # cinematic payoff. Otherwise keep the existing evidence
+                # bounded reading hold (never manufacture a result).
+                payoff_plan=None
+                if result_payoff_push and payoff_raw_source is not None:
+                    anchor=page.evaluate(FOCUS_ANCHOR_JS)
+                    payoff_plan=create_payoff_plan(
+                        evidence,anchor,payoff_pose)
+                if payoff_plan is None:
+                    added_hold=append_result_hold(
+                        encoder,last_rendered_image,fps,evidence)
+                else:
+                    def render_payoff_pose(zoom,focus_x,focus_y,shot_frame):
+                        # Use the exact same H0/H60 compositor from the last
+                        # frame, but re-warp the original 2x browser pixels.
+                        # Resampling the *finished* MP4 would soften code text.
+                        scale=ww/source_px_w*zoom
+                        shift_x=max(ww-source_px_w*scale,
+                                    min(0.,ww/2-focus_x*info['dpr']*scale))
+                        shift_y=max(wh-source_px_h*scale,
+                                    min(0.,wh/2-focus_y*info['dpr']*scale))
+                        affine=np.float32([[scale,0,shift_x],
+                                           [0,scale,shift_y]])
+                        foreground_source=cv2.warpAffine(
+                            payoff_raw_source,affine,(ww,wh),
+                            flags=cv2.INTER_LANCZOS4,
+                            borderMode=cv2.BORDER_REPLICATE)
+                        clean_source=cv2.warpAffine(
+                            payoff_background_raw,affine,(ww,wh),
+                            flags=cv2.INTER_LANCZOS4,
+                            borderMode=cv2.BORDER_REPLICATE)
+                        foreground={'source':foreground_source,
+                                    'box':payoff_modal_box,
+                                    'radiusCss':payoff_modal_radius}
+                        spotlight={'active':True,'box':payoff_modal_box,
+                                   'blurPx':6.,'dimOpacity':.25,
+                                   'factor':info['dpr']*scale,
+                                   'dx':shift_x,'dy':shift_y}
+                        frame=root_stage.render(
+                            clean_source,tilt=payoff_tilt,glow=0.,
+                            perspective_px=payoff_perspective,
+                            spotlight=spotlight,foreground=foreground,
+                            frame_index=total+shot_frame)
+                        # The final shot is editorial camera motion; fade
+                        # out the pointer rather than inventing a new click
+                        # or letting the cursor cover the generated command.
+                        if payoff_cursor is not None and shot_frame<12:
+                            overlay=frame.copy()
+                            root_cursor.draw(
+                                overlay,payoff_cursor,
+                                frame_map[-1]['sourceMs']/1000.,
+                                info['dpr']*scale,shift_x,shift_y,
+                                tilt=payoff_tilt,focal=payoff_perspective,
+                                foreground_box=payoff_modal_box)
+                            from result_payoff import ease
+                            opacity=1-ease(shot_frame/12)
+                            frame=np.uint8(np.rint(
+                                frame.astype(np.float32)*(1-opacity)+
+                                overlay.astype(np.float32)*opacity))
+                        return frame
+                    added_hold=append_payoff(
+                        encoder,last_rendered_image,payoff_plan,
+                        render_payoff_pose,fps)
                 rendered+=added_hold['totalFrames']
         context.close();browser.close()
         if composition is not None:
@@ -896,6 +984,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'preset':preset_engine['preset']['id'] if preset_engine else None,
             'preset_camera_frames':len(preset_frames) if preset_frames else 0,
             'result_aware_editorial':bool(result_aware_editorial),
+            'result_payoff_push':bool(result_payoff_push),
             'result_evidence':(result_candidates[-1] if result_candidates else None),
             'result_hold':added_hold,
             'spotlight_frames':preset_spotlight_frames,

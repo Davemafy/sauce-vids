@@ -89,3 +89,61 @@ Brimble's native modal transition around 0.72–0.82s is present in the
 previous master as well. This pass does not claim that transitional
 source-animation artifact is fixed. Resolving it requires a separate
 source-true modal-transition cleanup, not a fabricated UI frame.
+
+## 2026-11-17: Source-backed result-camera payoff (opt-in)
+
+The first evidence-driven implementation retained **96 frozen final frames**
+(1.6 seconds), then faded for 21 frames. It was readable, but the extra
+runtime did not *direct attention*; the entire modal simply sat still.
+This was a deliberate editorial mistake, not a rendering or test failure.
+
+Use `--result-aware-editorial --result-payoff-push` to replace that flat
+tail when the last verified dialog actually contains a visible, non-private
+`pre`, `output`, or semantic code/result element. The browser supplies only
+its bounding rectangle and the live dialog rectangle; the renderer never
+copies command text into a synthetic card or creates an unrecorded click.
+When the final outcome has no reliable result element, the prior conservative
+hold remains available instead of guessing a target.
+
+The implemented payoff reuses the **same original DPR=2 Chromium screenshot**
+and verified dialog-free H0 background plate captured in the last frame.
+For each camera frame it re-warps the original browser pixels with Lanczos4
+and re-renders the actual elevated H60 dialog through
+`CinematicStage.render`. It does *not* rescale an encoded MP4, draw new text,
+flatten the modal into a 2D screenshot, alter the 180/24/1 camera physics of
+the recorded interaction, or synthesize command/copied success.
+
+For the verified Brimble Codex result, the recorded element is a real
+`<pre>` at CSS x=487, y=471, w=334, h=52 in the modal at x=440, y=122,
+w=400, h=476. Its source-derived focal point uses 65% of the command
+center and 35% of dialog context. The new camera moves from the settled
+1.31x full-dialog pose to 1.7554x, centered at (649.1,449.05). The
+cursor fades out during the non-interactive editorial dolly, after the
+real click is completed, so it cannot cover the command.
+
+The frame-locked grammar at 60fps is deliberately short:
+
+- **8 frames** (0.133s) of original final composition, preserving continuity
+  at the edit.
+- **36 frames** (0.600s) of quintic-eased, native H0/H60 camera re-render,
+  with stationary acceleration at both ends.
+- **42 frames** (0.700s) of the *new* sharp, enlarged command close-up.
+- **12 frames** (0.200s) of eased fade to dark.
+
+Output therefore has 197 original action frames + 98 payoff frames =
+**295 frames (4.916667s)**. The Foley track is padded to exactly
+**236,000 samples at 48kHz** (800 per frame); the four original Foley
+cues, source events, and action cut at frame 125 are unchanged.
+The preview player may report 4.933s because it uses a separate downscaled
+encode; the 1080p master and frame count remain authoritative.
+
+Proof: https://devmcp.davemafy.xyz/sauce-motion-phase2/result-payoff-camera/
+and its exact
+https://devmcp.davemafy.xyz/sauce-motion-phase2/result-payoff-camera/master-1080p60.mp4 .
+Contact:
+https://devmcp.davemafy.xyz/sauce-motion-phase2/result-payoff-camera/payoff-contact.jpg .
+Native command close-up:
+https://devmcp.davemafy.xyz/sauce-motion-phase2/result-payoff-camera/native-command-250.jpg .
+Previous 5.23s master remains available separately. This opt-in result
+shot has not been declared the universal default or artistically
+approved for every target site.
