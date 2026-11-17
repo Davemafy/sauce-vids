@@ -92,3 +92,38 @@ test("Shared job does not impersonate progress before pilot authorization",async
  await expect(page.getByLabel("Private pilot access code")).toBeVisible();
  await expect(page.getByRole("region",{name:"Live URL film production status"})).toHaveCount(0);
 });
+
+
+test("Finished film is available after the customer closes the tab",async({page,context})=>{
+ await context.route("**/api/studio/url/auth",route=>route.fulfill({
+  status:200,contentType:"application/json",
+  body:JSON.stringify({authorized:true,configured:true}),
+ }));
+ await context.route("**/api/studio/url/jobs",route=>route.fulfill({
+  status:202,contentType:"application/json",body:JSON.stringify({jobId:id}),
+ }));
+ await context.route("**/api/studio/url/jobs/"+id,route=>route.fulfill({
+  status:200,contentType:"application/json",
+  body:JSON.stringify({job:{...job,status:"needs_review",stage:"needs_review",
+   title:"Paldey public showcase",capture_mode:"showcase",
+   render_mode:"continuous-browser-capture"}}),
+ }));
+ await context.route("**/api/studio/url/jobs/"+id+"/media",route=>route.fulfill({
+  status:404,contentType:"application/json",body:"{}",
+ }));
+ await page.goto(prefix+"/studio");
+ await page.getByLabel("Product website").fill("https://paldey.com/");
+ await page.getByRole("button",{name:/make film/i}).click();
+ await expect(page.getByRole("heading",{name:"Your first cut is ready."})).toBeVisible();
+ await page.close();
+ const returnTab=await context.newPage();
+ await returnTab.goto(prefix+"/studio");
+ await expect(returnTab.getByRole("heading",{name:"Your first cut is ready."})).toBeVisible();
+ await expect(returnTab.getByRole("region",{name:"Recent films on this device"})).toBeVisible();
+ await returnTab.getByRole("button",{name:/Make another film/}).click();
+ const library=returnTab.getByRole("region",{name:"Recent films on this device"});
+ await expect(library.getByText("Paldey public showcase")).toBeVisible();
+ await library.getByRole("button").first().click();
+ await expect(returnTab.getByRole("heading",{name:"Your first cut is ready."})).toBeVisible();
+ await expect(returnTab.getByRole("link",{name:/Download MP4/})).toBeVisible();
+});
