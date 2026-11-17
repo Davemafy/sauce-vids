@@ -13,11 +13,11 @@ import cv2
 import numpy as np
 
 # This is a bounded, opt-in film shot, not a fixed 1.6-second freeze:
-# 8 frames anticipation (132ms), 36 dolly frames (600ms), 42 result-reading
-# frames (700ms), and a 12-frame ease-out (200ms) at 60fps.
+# 8 frames anticipation (132ms), 36 dolly frames (600ms), 66 result-reading
+# frames (1100ms), and a 12-frame ease-out (200ms) at 60fps.
 ANTICIPATION_FRAMES=8
 DOLLY_FRAMES=36
-READ_FRAMES=42
+READ_FRAMES=66
 FADE_FRAMES=12
 CUT_SAFE_FRAME_COUNT=ANTICIPATION_FRAMES+DOLLY_FRAMES+READ_FRAMES+FADE_FRAMES
 
@@ -78,11 +78,23 @@ def create_payoff_plan(evidence,anchor,initial_pose):
         return None
     tx=x+w/2
     ty=y+h/2
-    # Result is the center of attention, but 35% dialog context remains
-    # so the Codex label and origin are still legible in the final shot.
+    # Frame the *verified* result with the genuine dialog header. A target
+    # centered at the bottom of a tall modal loses its source context at
+    # high zoom. Establish the full dialog in the preceding action shot,
+    # then fill the available safe height with header-to-result pixels.
+    # We may crop an unrelated footer, but never crop the observed result.
     focus_x=.65*tx+.35*(mx+mw/2)
-    focus_y=.65*ty+.35*(my+mh/2)
-    zoom=min(1.82,max(start_scale*1.34,start_scale+.23))
+    anchor_top=my
+    anchor_bottom=y+h
+    safe_height_px=832.-2*32.
+    elevated_factor=(1480./1280.)*(1200./(1200.-60.))
+    safe_zoom=safe_height_px/((anchor_bottom-anchor_top)*elevated_factor)
+    zoom=min(1.82,max(start_scale*1.34,start_scale+.23),safe_zoom)
+    # A low-resolution or extremely tall source may already exceed the safe
+    # crop at the starting pose. Don't zoom out *past* the real source pose
+    # or invent a wider dialog; settle at the existing scale instead.
+    zoom=max(start_scale,zoom)
+    focus_y=(anchor_top+anchor_bottom)/2
     return {'startScale':start_scale,'endScale':round(zoom,6),
             'startFocusX':sx,'startFocusY':sy,
             'endFocusX':round(focus_x,5),'endFocusY':round(focus_y,5),
