@@ -229,7 +229,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            studio_motion_plan:dict|None=None,
            raster_cache_dir:Path|None=None,
            experimental_orbit_optics:bool=False,
-           optics_seed:int=20261116) -> dict:
+           optics_seed:int=20261116,
+           result_aware_editorial:bool=False) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -450,6 +451,14 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     visuals=[]
     checkpoints=[]
     rendered=0
+    pending_result=None
+    result_candidates=[]
+    last_rendered_image=None
+    added_hold={"holdFrames":0,"fadeFrames":0,"totalFrames":0}
+    if result_aware_editorial:
+        if fps!=60 or not preset_engine or preset_engine['preset']['id']!='3d-launch':
+            raise ValueError('Result-aware editorial requires 3d-launch at 60fps')
+        from result_reveal import RESULT_PROBE_JS,classify_result,append_result_hold
     start_wall=time.monotonic()
     try:
       with sync_playwright() as pw:
@@ -530,8 +539,24 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 mx,my=cursor[source_index]
                 page.mouse.move(mx,my)
             while next_action<len(actions) and stored[next_action]['at_ms']-start_ms<=wanted_ms:
-                execute_action(page,actions[next_action])
+                a=actions[next_action]
+                if result_aware_editorial and a['action']=='click':
+                    # Comparison is local to Chromium and exports no text,
+                    # keys, command content or hashes of product copy.
+                    page.evaluate(RESULT_PROBE_JS,'before')
+                    pending_result={'clickIndex':next_action,'sourceMs':wanted_ms,
+                                    'deadlineMs':wanted_ms+600}
+                execute_action(page,a)
                 next_action+=1
+            if result_aware_editorial and pending_result is not None:
+                observed=page.evaluate(RESULT_PROBE_JS,'after')
+                found=classify_result(observed,pending_result['sourceMs'])
+                if found is not None:
+                    found['clickIndex']=pending_result['clickIndex']
+                    result_candidates.append(found)
+                    pending_result=None
+                elif wanted_ms>=pending_result['deadlineMs']:
+                    pending_result=None
             animated_frames+=int(page.evaluate('(ms)=>window.__sauceAnimationControls.step(ms)',wanted_ms))
             if film_mode:
                 # Independent CSS scale multiplies the site's native
@@ -794,6 +819,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 # Export only the versioned verified composited-frame proof.
                 output_image=composition.use(index,output_image)
             encoder.stdin.write(output_image.tobytes())
+            if result_aware_editorial:
+                last_rendered_image=output_image.copy()
             rendered+=1
             if index%screenshot_step==0 or index==total-1:
                 save=session_dir/f'replay-frame-{index:04d}.jpg'
@@ -803,6 +830,17 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             if index%60==0:print('REPLAY',index,'of',total,'elapsed',round(time.monotonic()-start_wall,1),flush=True)
         if expected_text:
             page.get_by_text(expected_text,exact=True).first.wait_for(state='visible',timeout=3000)
+        if result_aware_editorial and result_candidates:
+            last_click=max((i for i,a in enumerate(actions) if a['action']=='click'),
+                           default=-1)
+            evidence=next((r for r in reversed(result_candidates)
+                           if r['clickIndex']==last_click
+                           and (frame_map[-1]['sourceMs'] if frame_map else length*1000)
+                               -r['sourceMs']<=2600),None)
+            if evidence:
+                added_hold=append_result_hold(
+                    encoder,last_rendered_image,fps,evidence)
+                rendered+=added_hold['totalFrames']
         context.close();browser.close()
         if composition is not None:
             composition.finish()
@@ -857,6 +895,9 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'spatial_parallax':bool(spatial_parallax and root_stage),
             'preset':preset_engine['preset']['id'] if preset_engine else None,
             'preset_camera_frames':len(preset_frames) if preset_frames else 0,
+            'result_aware_editorial':bool(result_aware_editorial),
+            'result_evidence':(result_candidates[-1] if result_candidates else None),
+            'result_hold':added_hold,
             'spotlight_frames':preset_spotlight_frames,
             'beat_cut_frames':sorted(beat_cut_frames),
             'multi_plane_frames':multi_plane_frames,

@@ -412,3 +412,32 @@ test("flagged exact mass-spring overshoots then settles and orbit remains alive"
   // Fixed frame clock yields deterministic poses, including velocity states.
   assert.deepEqual(poses,planCameraRig(frameMap,[modal],[],preset,0));
 });
+
+test("modal opening <=300ms after a click cancels trigger-button camera drift",()=>{
+  const p=resolvePreset("3d-launch");
+  const events:TraceEvent[]=[
+    {t:786,type:"pointerdown",tag:"button",selector:"#trigger",
+      box:{x:200,y:344,width:208,height:32}},
+    {t:786.5,type:"click",tag:"button",selector:"#trigger",
+      box:{x:200,y:344,width:208,height:32}},
+    {t:916,type:"dialog-visible",role:"dialog",
+      box:{x:440,y:182,width:400,height:360}}
+  ];
+  const frames=Array.from({length:170},(_,i)=>({sourceMs:i*1000/60,speed:1}));
+  const heroes=detectHeroMoments(events,0,2800,p,x=>x);
+  const poses=planCameraRig(frames,heroes,events,p,0);
+  const waiting=frames.map((f,i)=>({f,p:poses[i]!}))
+    .filter(x=>x.f.sourceMs>=786&&x.f.sourceMs<916);
+  assert.ok(waiting.length>=5);
+  assert.ok(waiting.every(x=>x.p.scale===1&&x.p.focusX===640&&x.p.focusY===360),
+    "Trigger click must not pull the camera to its left-side tooltip");
+  const centered=poses[110]!;
+  assert.ok(centered.scale>1.17);
+  assert.ok(Math.abs(centered.focusX-640)<1);
+  assert.ok(Math.abs(centered.focusY-362)<5);
+  // A late unrelated modal should not retroactively suppress button intent.
+  const late=[...events.slice(0,2),{...events[2]!,t:1200}];
+  const lateHeroes=detectHeroMoments(late,0,2800,p,x=>x);
+  const latePoses=planCameraRig(frames,lateHeroes,late,p,0);
+  assert.ok(latePoses[63]!.scale>1.01);
+});

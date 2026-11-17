@@ -110,7 +110,17 @@ export function planCameraRig(
     // Only a genuine modal or an action inside it inherits modal framing.
     // A feature commit without a spatial target keeps its own camera beat.
     const modalCameraLocked=!!(modalOwner&&(hero?.kind==="modal"||nestedInModal));
-    const cameraHero=modalCameraLocked?modalOwner:active;
+    // A click that mounts an observed modal within 300ms is a trigger, not a
+    // camera destination. Hold the previous composition through the brief
+    // latency, then spring directly to the *actual* modal rectangle when it
+    // is mounted. Prevents the Connect Agent tooltip -> dialog double pan.
+    const upcomingModal=(active?.kind==="click"&&preset.id==="3d-launch")
+      ? heroes.find(h=>h.kind==="modal"&&safeBox(h.box)
+          &&h.sourceMs>sourceMs && h.sourceMs-active.sourceMs<=300
+          &&h.sourceMs>=active.sourceMs)
+      : undefined;
+    const cameraHero=upcomingModal?null:
+      (modalCameraLocked?modalOwner:active);
     const box=cameraHero?.box||null;
     let desiredScale=1,desiredX=centerX,desiredY=centerY,desiredRX=0,desiredRY=0;
     if(box){
@@ -122,7 +132,7 @@ export function planCameraRig(
       desiredX=clamp(box.x+box.width/2,0,viewport.width);
       desiredY=clamp(box.y+box.height/2,0,viewport.height);
     }
-    if(p.mode==="perspective" && !box && attention){
+    if(p.mode==="perspective" && !box && attention && !upcomingModal){
       // Small contextual emphasis only; a verified action always wins.
       desiredScale=clamp(1+attention.score*.065,1,p.scaleRange[1]);
       desiredX=clamp(attention.x,viewport.width*.22,viewport.width*.78);

@@ -70,6 +70,7 @@ CAPTURE_JS=r"""
  const timeline=[],start=performance.now();
  let currentPointer={x:0,y:0};
  const dialogs=new WeakSet();
+ let recentClickAt=-Infinity;
  const sensitive=/password|token|secret|api.?key|credit|card|otp/i;
  const safeSelector=(e)=>{
    if(!(e instanceof Element)) return '';
@@ -130,13 +131,30 @@ CAPTURE_JS=r"""
  },true);
  function watchDialog(){
    try {
-     for(const d of document.querySelectorAll('[role="dialog"]')){
-       if(dialogs.has(d))continue;
+     const candidates=document.querySelectorAll(
+       '[role="dialog"],[aria-modal="true"],[data-state="open"],'+
+       '[class*="modal"],.modal');
+     for(const d of candidates){
+       if(dialogs.has(d)||d.closest(
+         '.woot-widget-bubble,.crisp-client,#intercom-container'))continue;
        const rect=d.getBoundingClientRect(),style=getComputedStyle(d);
-       if(rect.width>0&&rect.height>0&&style.visibility==='visible'&&
+       const declared=d.getAttribute('role')==='dialog'||
+         d.getAttribute('aria-modal')==='true';
+       const layer=parseInt(style.zIndex||'0',10);
+       const layerModal=Number.isFinite(layer)&&layer>=40&&
+         ['fixed','absolute'].includes(style.position)&&
+         rect.width>=180&&rect.height>=140&&
+         rect.width<=innerWidth*.96&&rect.height<=innerHeight*.96;
+       if((declared||layerModal)&&rect.width>0&&rect.height>0&&
+         style.visibility==='visible'&&style.display!=='none'&&
          Number(style.opacity)>.07){
          dialogs.add(d);
-         push('dialog-visible',{target:d});
+         const latency=performance.now()-recentClickAt;
+         push('dialog-visible',{target:d},{
+           role:'dialog',triggeredByClick:latency>=0&&latency<=300,
+           triggerLatencyMs:latency>=0&&latency<=300
+             ?Math.round(latency*10)/10:null,
+           overlaySource:declared?'semantic-role':'observed-high-z'});
        }
      }
    }catch{}
@@ -150,6 +168,7 @@ CAPTURE_JS=r"""
         if(prev && e.target===prev)return;
       }
       push(type,e);
+      if(type==='click')recentClickAt=performance.now();
       if(type==='pointerdown' && e.target instanceof Element){
         // Opt-in, evidence-backed AST context from editor integration.
         // A plain web button must never be mislabeled as a code action.
@@ -194,7 +213,13 @@ CAPTURE_JS=r"""
  },true);
  document.addEventListener('scroll',e=>push('scroll',e),true);
  window.__sauceCapture={version:1,entries:timeline,flush:()=>timeline.splice(0),elapsed:()=>performance.now()-start,
-   pointer:()=>currentPointer};
+   pointer:()=>currentPointer,
+   emitResult:(proof)=>timeline.push({
+     t:Math.max(0,+(performance.now()-start).toFixed(3)),
+     type:'result-revealed',eventType:'result-revealed',
+     redacted:true,resultEvidence:proof.evidence,
+     holdMs:proof.holdMs,sourceMs:proof.sourceMs
+   })};
 })();
 """
 
@@ -238,6 +263,7 @@ def approach_element(page,selector:str,duration_ms:int=640) -> None:
 
 
 def run_workflow(page,actions:list[dict],images:Path,trace:list[dict]) -> list[dict]:
+    from result_reveal import RESULT_PROBE_JS,classify_result
     phases=[]
     def snapshot(tag,action_index,action=None):
         image=images/(f'{action_index:03d}-{tag}.png')
@@ -265,6 +291,8 @@ def run_workflow(page,actions:list[dict],images:Path,trace:list[dict]) -> list[d
         kind=action['action']
         phase={'index':i,'action':kind,
                'at_ms':round(page.evaluate('window.__sauceCapture.elapsed()'),3)}
+        if kind=='click':
+            page.evaluate(RESULT_PROBE_JS,'before')
         if kind=='approach':
             approach_element(page,action['selector'],int(action.get('duration_ms',640)))
         elif kind in ('click','hover'):
@@ -281,6 +309,12 @@ def run_workflow(page,actions:list[dict],images:Path,trace:list[dict]) -> list[d
         elif kind=='wait':
             page.wait_for_timeout(min(3000,int(action.get('ms',200))))
         page.wait_for_timeout(int(action.get('settle_ms',180)))
+        if kind=='click':
+            proof=classify_result(page.evaluate(RESULT_PROBE_JS,'after'),
+                                  phase['at_ms'])
+            if proof:
+                phase['result_evidence']=proof
+                page.evaluate('proof=>window.__sauceCapture.emitResult(proof)',proof)
         if action.get('expect_selector') and not page.locator(action['expect_selector']).first.is_visible():
             raise RuntimeError(f'Action {i} did not produce expected element: {action["expect_selector"]}')
         if action.get('expect_text') and not page.get_by_text(action['expect_text'],exact=False).first.is_visible():

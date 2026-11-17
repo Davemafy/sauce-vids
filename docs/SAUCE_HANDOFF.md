@@ -384,3 +384,77 @@ remain private.
 Remaining: these are authentic recordings, not yet world-class editorial
 product films. Better focal framing, app-specific motion and deeper
 multistep safe exploration are needed before creative quality signoff.
+
+## 2026-11-17 — Modal-first camera and result-aware final readability
+
+**Source of truth:** Continued on current GitHub `main` after a safe
+fast-forward from `4310b19` to the newer upstream `a536e93`; preserved
+all intervening URL-to-video backend and Studio changes. Pre-edit copies
+of the touched files are in
+`../sauce-phase2-backups/2026-11-17-result-aware-editorial/`.
+Feature implementation and acceptance contract: `docs/result-aware-editorial.md`.
+
+**Defect 1, double zoom:** The real Brimble trigger click occurred at
+2232.9ms, with the newly mounted dialog observed at 2362.7ms (129.8ms).
+The previous rig briefly aimed at the left-side trigger, then sprang
+to the dialog. `scripts/studio-motion/src/cameraRig.ts` now suppresses
+trigger-button zoom only for a **verified** modal HeroMoment within 300ms
+and begins its existing 180/24/1 spring on the modal once visible.
+`scripts/session_capture.py` now correlates actual click events to
+role-based and genuinely floating high-z overlays (not Radix backdrops
+or chat widgets) and includes the real latency and box. Numerical
+Brimble camera QA: frames 45–53 stay at (640,360), scale exactly 1.0;
+frame 55 scale 1.00679, frame 65 1.23320, frame 90 1.31041 and settled
+modal focus at (640,362.59), no sideways trigger zoom.
+
+**Defect 2, abrupt final result:** New `scripts/result_reveal.py` runs
+a transient Chromium-local visible-text/geometry comparison before and
+after actual replayed/captured clicks; only boolean changed text, node
+count and container growth become metadata, not product/command strings,
+credentials or content digests. A Radix full-page `data-state=open`
+backdrop was initially misidentified as the dialog; this was found in
+a real Brimble A/B probe and corrected to prioritize semantic dialogs.
+The genuine Codex click revealed 5 new text nodes and enlarged the
+dialog by 116px. With explicit `--result-aware-editorial`, the renderer
+now appends **96 sharp 60fps copies of the real final state (1.6s)** and
+**21 cosine-eased fade frames (0.35s)** directly to its raw-frame encoder.
+Without observed qualifying final-click evidence, no tail is added.
+The original published master remains unchanged; new default re-renders
+receive the modal-first camera fix, but the extra result tail is opt-in.
+There is no second-lossy-encode text softening.
+
+**Actual output:** https://devmcp.davemafy.xyz/sauce-motion-phase2/modal-first-result-dwell/
+with unchanged original baseline still accessible at
+https://devmcp.davemafy.xyz/sauce-motion-phase2/brand-aware-ingestion/ .
+Master SHA256
+`c1b6be87cc7ef4d43643027f8148623ccc9bb553a7b0db80b13401b54262a806`,
+verified identical between published and worker file. The full MP4
+decodes with FFmpeg. `ffprobe` confirmed H.264 1920×1080@60fps,
+314 frames/5.233333s, 48kHz stereo AAC; 197 source planned frames plus
+117 result-tail frames. Foley report confirms **251,200 samples** =
+314*800 exactly. Previously verified six source states, frame-125
+action cut, 152 H0/H60 multi-plane frames and zero fallbacks preserved.
+Native frame 215 exposes the Codex command clearly. Contact review at
+0/30/45/50/55/65/75/90/114/125/155/170/196/215/255/292/293/303/
+305/313; original source-and-cursor presentation remains legible.
+Decoded frames 210 vs 290 during the hold differ by only 0.17968 average
+8-bit channel levels due to H.264 quantization (raw hold input identical);
+the final fades to the dark stage. The published page/master/contact sheet
+returned HTTP 200; desktop 1280×720 and mobile 390×844 Playwright
+successfully seeked to 4.68s with no media/page errors or scroll overflow.
+
+**Tests:** Studio Motion TypeScript 31/31, Python unittest 174/174,
+Phase 2/3 plus URL-backend pytest 57/57 (13 nested subtests);
+new role-based and high-z capture cases, fast-vs-late dialog camera
+triggering, sensitive-data exclusion, actual result classification,
+zero-padding negative case and raw-frame/fade timing passed.
+The latest standalone high-z capture test also passed 4/4 in the
+targeted result-editorial file. Confirm full suite after this file
+addition before publishing the commit.
+
+**Outstanding:** The brief Brimble source terminal/window overlap near
+0.72–0.82s is visible in the earlier baseline and in this new render;
+the two requested edits did not introduce or resolve it. Do not report
+it as fixed. Independent live browser replay determinism remains a
+separate known limitation; film technical gates alone are not premium
+creative signoff.

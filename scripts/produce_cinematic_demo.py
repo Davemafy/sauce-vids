@@ -84,10 +84,15 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             music_track:Path|None=None,mute_audio:bool=False,
             foley_volume:float|None=None,
             experimental_orbit_optics:bool=False,
-            optics_seed:int=20261116)->dict:
+            optics_seed:int=20261116,
+            result_aware_editorial:bool=False)->dict:
     enforce_hidpi(dpr)
     if experimental_orbit_optics and preset!='3d-launch':
         raise ValueError('Experimental orbit optics requires --preset 3d-launch')
+    if result_aware_editorial and preset!='3d-launch':
+        raise ValueError('Result-aware editorial requires --preset 3d-launch')
+    if result_aware_editorial and experimental_orbit_optics:
+        raise ValueError('Canonical optics cache does not support editorial tail frames')
     if experimental_orbit_optics and deterministic_frame_cache is None:
         raise ValueError('Experimental deterministic proof requires --deterministic-frame-cache')
     if not isinstance(optics_seed,int) or not 0<=optics_seed<2**31:
@@ -171,7 +176,8 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         editorial_closeup=editorial_closeup,editorial_geometry=editorial_geometry,
         studio_motion_plan=studio_plan,raster_cache_dir=deterministic_frame_cache,
         experimental_orbit_optics=experimental_orbit_optics,
-        optics_seed=optics_seed)
+        optics_seed=optics_seed,
+        result_aware_editorial=result_aware_editorial)
     if not report['verified_semantics'] or not report['visual_region_checks']:
         raise RuntimeError('Replay must pass semantic and visual-region checks')
     if (not report.get('cinematic_stage_root') or
@@ -307,6 +313,9 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         'video_bitrate_floor_mbps':8 if experimental_orbit_optics else None,
         'measured_video_bitrate_bps':measured_video_bitrate,
         'preset_camera_frames':report.get('preset_camera_frames',0),
+        'result_aware_editorial':report.get('result_aware_editorial',False),
+        'result_evidence':report.get('result_evidence'),
+        'result_hold':report.get('result_hold'),
         'spotlight_frames':report.get('spotlight_frames',0),
         'beat_cut_frames':report.get('beat_cut_frames',[]),
         'multi_plane_frames':report.get('multi_plane_frames',0),
@@ -361,6 +370,8 @@ def main():
                    help='Private lossless source frames for bitwise-reproducible exports')
     p.add_argument('--preset',choices=('clean-studio','3d-launch','hyper-cut'),
                    help='Enable the versioned Sauce FramePlan + FoleyPlan compositor')
+    p.add_argument('--result-aware-editorial',action='store_true',
+                   help='Target observed fast-opening modal; hold revealed result, then fade')
     p.add_argument('--experimental-orbit-optics',action='store_true',
                    help='Opt-in underdamped modal orbit + isolated stage optics + 12Mbps CBR')
     p.add_argument('--optics-seed',type=int,default=20261116,
@@ -401,7 +412,8 @@ def main():
         music_track=args.music_track,mute_audio=args.mute_audio,
         foley_volume=args.foley_volume,
         experimental_orbit_optics=args.experimental_orbit_optics,
-        optics_seed=args.optics_seed),indent=2))
+        optics_seed=args.optics_seed,
+        result_aware_editorial=args.result_aware_editorial),indent=2))
 
 
 if __name__=='__main__':main()
