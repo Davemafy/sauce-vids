@@ -25,9 +25,10 @@ def calculate(jobs_root: Path, *, clock: float | None = None) -> dict:
     reviewed = 0
     positive = 0
     ratings = []
+    seen = 0
     if jobs_root.is_dir():
         for folder in jobs_root.iterdir():
-            if sum(counts.values()) >= MAX_JOBS:
+            if seen >= MAX_JOBS:
                 break
             if not folder.is_dir() or folder.is_symlink() or not JOB_ID.fullmatch(folder.name):
                 continue
@@ -43,6 +44,7 @@ def calculate(jobs_root: Path, *, clock: float | None = None) -> dict:
             status = record.get("status")
             if status not in ("needs_review", "needs_access", "failed", "needs_key", "queued"):
                 continue
+            seen += 1
             counts["accepted"] += 1
             recent_window = isinstance(record.get("created_at"), (int, float)) and (
                 0 <= clock - float(record["created_at"]) < 86400
