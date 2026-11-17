@@ -25,7 +25,8 @@ from cinematic_composite import background_focus
 from cinematic_presentation_v13 import (make_dark_stage,paint_svg_pointer,paint_click_ripple)
 from online_cursor_assets import render_cursor as render_tabler_cursor
 from cinematic_stage import CinematicStage,CinematicCursor
-from modal_depth_capture import verified_modal_background,expected_modal_box
+from modal_depth_capture import (verified_modal_background,expected_modal_box,
+                                 stabilized_verified_dialog_opening)
 from studio_motion_blur import directional_blur
 from studio_motion_callouts import KineticCalloutRenderer
 from spatial_parallax import inertial_tilt_track
@@ -208,6 +209,7 @@ def _raster_cache_identity(session:dict,workflow:list[dict],
             'events':session['events'],
             'workflow':workflow,
             'source_frame_times_ms':times,
+            'presentation_opacity_stabilization_version':1,
             'hidden_decorative_selector':hide_selector,
             'capture_dpr':session['page'].get('dpr',2)}
     return hashlib.sha256(json.dumps(stable,sort_keys=True,
@@ -276,6 +278,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     multi_plane_frames=0
     single_plane_fallback_frames=0
     concealed_terminal_frames=0
+    stabilized_opening_frames=0
     live_modal_hold_frames=0
     # Presentation-only exception: verified Brimble dark terminal shell.
     hide_brimble_terminal=(session['source_url'].rstrip('/')==
@@ -607,7 +610,17 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                     raise RuntimeError('Canonical source frame hash mismatch: '+str(raw))
                 decoded=cv2.imread(str(raw),cv2.IMREAD_COLOR)
             else:
-                png=page.screenshot(scale='device',animations='allow',caret='hide')
+                # The original page briefly fades a real dialog across its
+                # decorative terminal. For this opt-in Brimble presentation,
+                # capture the genuinely mounted dialog at its final native
+                # opacity only during those verified overlap frames. Restore
+                # Chromium's original CSS before any further page action.
+                opening_box=(modal_hints[-1]['box'] if
+                             film_mode and hide_brimble_terminal and modal_hints
+                             else None)
+                with stabilized_verified_dialog_opening(page,opening_box) as stabilized:
+                    png=page.screenshot(scale='device',animations='allow',caret='hide')
+                stabilized_opening_frames+=int(stabilized)
                 decoded=cv2.imdecode(np.frombuffer(png,dtype=np.uint8),cv2.IMREAD_COLOR)
             if decoded is None or decoded.shape[:2]!=(source_px_h,source_px_w):
                 raise RuntimeError(f'Invalid Chromium frame {index}')
@@ -991,6 +1004,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'beat_cut_frames':sorted(beat_cut_frames),
             'multi_plane_frames':multi_plane_frames,
             'concealed_terminal_frames':concealed_terminal_frames,
+            'stabilized_opening_frames':stabilized_opening_frames,
             'live_modal_hold_frames':live_modal_hold_frames,
             'single_plane_fallback_frames':single_plane_fallback_frames,
             'preset_perspective_px':preset_engine['preset']['camera']['perspectivePx']
