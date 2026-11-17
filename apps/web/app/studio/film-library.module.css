@@ -1,0 +1,16 @@
+.root{margin-top:24px;padding:22px 24px;border:1px solid #ffffff20;border-radius:10px;background:#201e20}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:12px}
+.head h2{font-size:19px;line-height:1.2;letter-spacing:-.035em;font-weight:600;margin:0 0 6px;color:#f0e7e0}
+.head p{font-size:12px;color:#b8ada8;line-height:1.5;margin:0}
+.head>span{font-size:11px;white-space:nowrap;color:#aaa09a}
+.list{margin:0;padding:0;list-style:none}
+.list li{border-top:1px solid #ffffff18}
+.list button{width:100%;min-height:68px;display:flex;align-items:center;justify-content:space-between;gap:14px;text-align:left;padding:10px 2px;background:none;border:0;color:inherit;font:inherit;cursor:pointer}
+.list button:hover,.list button.current{background:#ffffff08}
+.list button:focus-visible{outline:2px solid #f0c39e;outline-offset:3px}
+.name{flex:1;min-width:0;font-size:13px;color:#f0e6e0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.name small{display:block;margin-top:5px;font-size:11px;font-weight:400;color:#afa6a0}
+.state{font-size:11px;color:#ddc1ac;min-width:108px;text-align:right}
+.open{font-size:11px;color:#a79b94;min-width:36px;text-align:right}
+.note{font-size:11px;line-height:1.55;color:#938985;margin:10px 0 0}
+@media(max-width:600px){.root{padding:19px 16px}.head{display:block}.head>span{display:block;margin-top:7px}.list button{gap:9px}.state{min-width:92px}.open{display:none}}
