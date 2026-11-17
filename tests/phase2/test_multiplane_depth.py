@@ -11,7 +11,8 @@ sys.path.insert(0,str(ROOT/'scripts'))
 from spatial_parallax import window_homography,projected_target_quad,map_pointer
 from cinematic_stage import CinematicStage
 from multi_plane_depth import focus_background_plane,composite_elevated_modal
-from modal_depth_capture import verified_modal_background,expected_modal_box
+from modal_depth_capture import (verified_modal_background,expected_modal_box,
+                                 stabilized_verified_dialog_opening)
 
 WINDOW=(220,124,1480,832)
 BOX={'x':440.,'y':183.,'width':400.,'height':360.}
@@ -165,3 +166,50 @@ def test_rounded_mask_output_is_reproducible_and_rejects_wrong_buffer():
         composite_elevated_modal(np.full_like(a,65),source,BOX,WINDOW,
                     F,0.,0.,(.3,-.4),1200.,radius_css=14.,
                     coverage_out=np.empty((10,10),np.uint8))
+
+
+
+def test_brimble_verified_opening_temporarily_opaque_and_restores():
+    # The source text remains the native browser screenshot; no pixel paint.
+    class Page:
+        def __init__(self):
+            self.calls=[]
+        def evaluate(self,script,argument=None):
+            if argument is not None:
+                self.calls.append(("temporarily-opaque",argument))
+                return True
+            self.calls.append(("restore-original-opacity",None))
+    page=Page()
+    with stabilized_verified_dialog_opening(page,BOX) as changed:
+        assert changed is True
+        assert page.calls == [("temporarily-opaque",BOX)]
+    assert page.calls == [
+        ("temporarily-opaque",BOX),("restore-original-opacity",None)]
+
+
+def test_verified_opening_restores_even_when_chromium_capture_fails():
+    class Page:
+        def __init__(self):self.ops=[]
+        def evaluate(self,script,argument=None):
+            self.ops.append("set" if argument else "restore")
+            return True
+    page=Page()
+    with pytest.raises(OSError,match="screenshot failed"):
+        with stabilized_verified_dialog_opening(page,BOX):
+            raise OSError("screenshot failed")
+    assert page.ops==["set","restore"]
+
+
+def test_nonverified_modal_never_changes_source_opacity():
+    class Page:
+        def __init__(self):self.calls=0
+        def evaluate(self,script,argument=None):
+            self.calls+=1
+            return False
+    page=Page()
+    with stabilized_verified_dialog_opening(page,None) as changed:
+        assert changed is False
+    assert page.calls==0
+    with stabilized_verified_dialog_opening(page,BOX) as changed:
+        assert changed is False
+    assert page.calls==1   # no restore on negative match
