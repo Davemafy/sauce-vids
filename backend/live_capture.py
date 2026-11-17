@@ -89,7 +89,22 @@ def ensure_video_helper(browser_dir:Path=Path('/opt/devmcp-browsers')):
   os.environ['PLAYWRIGHT_BROWSERS_PATH']=str(browser_dir)
  return os.environ.get('PLAYWRIGHT_BROWSERS_PATH','')
 
+def capture_quality():
+ """Keep existing pilot intact; opt in to high-density source experiments.
+
+ DPR 2 is rendered by Chromium; recording at 1920x1080 preserves much
+ more of its actual source pixels than the old 1280x720 browser video.
+ The final 60fps export still does not imply 60 unique source frames.
+ """
+ quality=os.environ.get('SAUCE_CAPTURE_QUALITY','standard')
+ if quality not in ('standard','high'):
+  raise ValueError('Invalid SAUCE_CAPTURE_QUALITY (standard or high)')
+ return {'quality':quality,'dpr':2 if quality=='high' else 1,
+         'video_size':{'width':1920 if quality=='high' else 1280,
+                       'height':1080 if quality=='high' else 720}}
+
 def capture(url:str,private:Path,report:dict,plan:dict):
+ quality=capture_quality()
  ensure_video_helper()
  validate_public_url(url)
  private=Path(private);private.mkdir(parents=True,exist_ok=True)
@@ -101,9 +116,9 @@ def capture(url:str,private:Path,report:dict,plan:dict):
    args=['--no-sandbox','--disable-dev-shm-usage'])
   try:
    folder=private/'live-video';folder.mkdir(exist_ok=True)
-   context=b.new_context(viewport={'width':1280,'height':720},device_scale_factor=1,
-    record_video_dir=str(folder),record_video_size={'width':1280,'height':720},
-    service_workers='block')
+   context=b.new_context(viewport={'width':1280,'height':720},
+    device_scale_factor=quality['dpr'],record_video_dir=str(folder),
+    record_video_size=quality['video_size'],service_workers='block')
    context.route('**/*',guard_route)
    context.add_init_script(CURSOR_JS)
    video_begin=time.monotonic()
@@ -200,7 +215,9 @@ def capture(url:str,private:Path,report:dict,plan:dict):
       'sha256':hash_file(output),'duration_wall_s':round(length,3),
       'lead_in_seconds':round(lead_in,3),
       'actions':events,'evidence':evidence,
-      'source_url':url.split('?')[0],'mode':plan.get('mode','showcase')}
+      'source_url':url.split('?')[0],'mode':plan.get('mode','showcase'),
+      'capture_quality':quality['quality'],'source_dpr':quality['dpr'],
+      'requested_video_size':quality['video_size']}
    (private/'continuous-capture.json').write_text(json.dumps(receipt,indent=2))
    return receipt
   finally:b.close()
