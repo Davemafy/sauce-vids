@@ -532,3 +532,23 @@ repeatability claim: this known separate limitation remains.
 The pre-existing cropped terminal/wedge during early modal entrance
 (~0.72–0.82s) is unrelated and remains unresolved. Do not call this
 entire product film premium-approved on green tests alone.
+
+## 2026-11-17 — Rejected 140ms cursor tween; preferred motion restored with one-frame repair
+
+**User quality feedback:** The long CursorPlaneGlide from commit 2a0d4a8 was technically continuous but made cursor motion feel robotic. The owner preferred the older native spring cursor flight, except for a very thin glitch where it crossed into the modal. Passing mathematical continuity tests was not creative approval.
+
+**Scoped correction on main:** The source mouse trajectory, spring, actual click timing, source DOM/H0/H60 planes, camera, cursor glyph, spotlight and Foley remain unchanged. Replaced the 140ms/8-frame depth glide with CursorPlaneSeamRepair in scripts/cursor_plane_motion.py. It uses the original projected H0 or H60 position on every frame except a single recorded-modal-boundary crossing frame. On that one frame only, the visual pointer hotspot is the midpoint of the exact H0/H60 projections; the following frame returns to the original target plane. Actual pointerdown frames always use their precise target-plane hotspot. Explicit editorial source-clock jumps >200ms reset directly. Private backup prior to edit: ../sauce-phase2-backups/2026-11-17-cursor-seam-narrow/.
+
+**Real Brimble proof:** Frame 97 (1.617s) is the only cursor hotspot changed among the first 111 planned frames. Measured projected screen-frame displacement across frames 96/97/98 changed from 17.73/30.24 px per frame to 21.73/23.91 px per frame; movement before and after that single-frame correction matches the owner's preferred version. Inspected native decoded frames 94,96,97,98,99,100 from the original preferred, rejected long-tween, and new repaired full videos. Side-by-side:
+https://devmcp.davemafy.xyz/sauce-motion-phase2/cursor-seam-minimal/cursor-preferred-rejected-revised.jpg .
+Public review:
+https://devmcp.davemafy.xyz/sauce-motion-phase2/cursor-seam-minimal/ .
+Master:
+https://devmcp.davemafy.xyz/sauce-motion-phase2/cursor-seam-minimal/master-1080p60.mp4 .
+Worker/deployed SHA-256 equal:
+3ac748be68a0bc52c562b05ae07e783ceaa798976b16f83153eb646e8dc6481e .
+Previously approved and rejected proof URLs remain accessible, unchanged.
+
+**Gates:** FFmpeg full decode passed; ffprobe H.264 1920x1080 at 60fps, 314 frames / 5.233333 seconds, AAC stereo 48kHz. Same 96 sharp result-hold frames, 21 fade frames, 251200 Foley samples, 152 actual H0/H60 frames, zero fallback and cut at frame 125. Public desktop 1280x720 and mobile 390x844 players each sought to 1.62s with no page/media errors or overflow. Regression tests: 31/31 TypeScript, 174/174 Python unittest, 62/62 pytest plus 13 nested subtests. Four targeted tests cover one-frame-only change, immediate restoration, pointerdown exactness, edit-cut reset and reproducibility.
+
+**Limits:** The revised motion is available for the owner's subjective review, not yet premium approved. A separate pre-existing black terminal overlap at the start of modal entrance remains unresolved. Independent live-browser frame determinism is still a separate known limitation.

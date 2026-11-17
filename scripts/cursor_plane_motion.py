@@ -1,50 +1,45 @@
-"""Continuously move one real cursor hotspot between Sauce H0/H60 planes.
+"""One-frame repair for a real cursor crossing Sauce's H0/H60 boundary.
 
-An instantaneous Boolean choice at a rounded-dialog boundary creates a
-perceptible 10–25px pointer teleport even when recorded CSS mouse positions
-are continuous. This class affects only visual depth projection. It never
-changes captured events, mouse clicks, camera movement, or Chromium hover.
+The approved recording's cursor track is already smooth; the only defect
+was the discrete change in visual projection at the modal edge. Preserve
+EVERY other source-mapped frame. There is no simulated glide or velocity
+damping, and mouse events/hotspots remain source-true.
 """
 from __future__ import annotations
 
 import math
 
 
-class CursorPlaneGlide:
-    # Eight-ish output frames at 60fps let a cursor visibly settle onto a
-    # 60px-elevated modal without a sudden 3D parallax hop.
-    TRANSITION_SECONDS = 0.14
-    # A beat-locked source jump is a cut, not a physical 3D flight. Reset
-    # depth on such jumps rather than animating across omitted source time.
+class CursorPlaneSeamRepair:
+    # Only one 60fps frame may receive a half-plane projected hotspot.
+    # An 8-frame animation made the pointer feel robotic and was rejected.
+    BLEND_AT_SEAM = 0.5
+    # A large source time jump represents an editorial cut, not movement.
     CUT_GAP_SECONDS = 0.20
 
     def __init__(self) -> None:
-        self._last_time: float | None = None
-        self._target: float = 0.
-        self._start: float = 0.
-        self._start_time: float = 0.
+        self._previous_hit: bool | None = None
+        self._previous_time: float | None = None
 
-    def _value(self, t: float) -> float:
-        fraction = max(0., min(1., (t-self._start_time)
-                               / self.TRANSITION_SECONDS))
-        # Quintic smoothstep: both velocity and acceleration are zero at
-        # the H0 and H60 endpoints, avoiding a new jerk in the projection.
-        ease = fraction*fraction*fraction*(fraction*(fraction*6-15)+10)
-        return self._start+(self._target-self._start)*ease
+    def sample(self, source_seconds: float, modal_hit: bool,
+               force_exact: bool = False) -> float:
+        """Return H60 weight, modifying at most the crossing frame.
 
-    def sample(self, source_seconds: float, modal_hit: bool) -> float:
+        At the first post-crossing frame only, use the midpoint between
+        the exact H0 and H60 projected hotspots. The very next frame is
+        the original target plane, with no delayed interpolation.
+        """
         if not math.isfinite(source_seconds) or source_seconds < 0:
-            raise ValueError("Cursor projection requires valid source time")
-        destination = 1. if modal_hit else 0.
-        if (self._last_time is None or
-            source_seconds < self._last_time-1e-6 or
-            source_seconds-self._last_time > self.CUT_GAP_SECONDS):
-            self._target = self._start = destination
-            self._start_time = source_seconds
-        elif destination != self._target:
-            current = self._value(source_seconds)
-            self._start=current
-            self._target=destination
-            self._start_time=source_seconds
-        self._last_time=source_seconds
-        return self._value(source_seconds)
+            raise ValueError("Cursor depth projection needs valid source time")
+        target = 1. if modal_hit else 0.
+        in_cut = (self._previous_time is None or
+                  source_seconds < self._previous_time-1e-6 or
+                  source_seconds-self._previous_time > self.CUT_GAP_SECONDS)
+        crossed = (not in_cut and self._previous_hit is not None and
+                   self._previous_hit != modal_hit)
+        self._previous_hit = modal_hit
+        self._previous_time = source_seconds
+        # Exact recorded click / overlay cut alignment always wins.
+        if force_exact or in_cut or not crossed:
+            return target
+        return self.BLEND_AT_SEAM
