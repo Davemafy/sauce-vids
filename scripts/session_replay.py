@@ -28,7 +28,8 @@ from cinematic_stage import CinematicStage,CinematicCursor
 from modal_depth_capture import (verified_modal_background,expected_modal_box,
                                  stabilized_verified_dialog_opening)
 from multi_plane_depth import DEPTH_PX,MAX_BACKGROUND_BLUR
-from semantic_spatial_handoff import eased
+from semantic_effect_timeline import (
+    SemanticEffectTimeline, VerifiedEffectEvidence)
 from studio_motion_blur import directional_blur
 from studio_motion_callouts import KineticCalloutRenderer
 from spatial_parallax import inertial_tilt_track
@@ -278,7 +279,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         if d.get('kind')=='cut' and isinstance(d.get('outputFrame'),int)}
     preset_spotlight_frames=0
     multi_plane_frames=0
-    modal_lift_start=None
+    modal_lift_timeline=SemanticEffectTimeline(fps) if modal_lift else None
     modal_lift_frames=0
     single_plane_fallback_frames=0
     concealed_terminal_frames=0
@@ -775,20 +776,25 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                             spotlight=None
                         else:
                             single_plane_fallback_frames+=1
-                if modal_lift:
+                if modal_lift_timeline is not None:
+                    # Evidence is satisfied only after replay verifies genuine
+                    # modal pixels, live geometry and a clean H0 browser plate.
                     if foreground is None:
-                        modal_lift_start=None
+                        modal_lift_timeline.release('verified-dialog')
                     else:
-                        if modal_lift_start is None:
-                            modal_lift_start=index
-                        progress=eased((index-modal_lift_start)/(fps*.30))
-                        foreground['depthPx']=DEPTH_PX*progress
-                        spotlight['blurPx']=MAX_BACKGROUND_BLUR*progress
-                        spotlight['dimOpacity']=.18*progress
+                        effect=modal_lift_timeline.sample(
+                            family='semantic-layer-separation',
+                            target_id='verified-dialog',frame=index,
+                            evidence=VerifiedEffectEvidence(
+                                real_pixels=True,stable_geometry=True,
+                                clean_background=True,single_projected_cursor=True))
+                        foreground['depthPx']=DEPTH_PX*effect.depth_fraction
+                        spotlight['blurPx']=MAX_BACKGROUND_BLUR*effect.background_focus_fraction
+                        spotlight['dimOpacity']=.18*effect.background_focus_fraction
                         if result_payoff_push and index==total-1:
                             payoff_lift_factors=(foreground['depthPx'],
                                 spotlight['blurPx'],spotlight['dimOpacity'])
-                        modal_lift_frames+=int(progress<1.)
+                        modal_lift_frames+=int(effect.progress<1.)
                 protected_text=None
                 if foreground is not None and hide_brimble_terminal:
                     # Real DOM text range is narrower than the clickable span.
