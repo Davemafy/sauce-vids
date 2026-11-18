@@ -30,6 +30,8 @@ parser.add_argument("--seconds",type=float)
 parser.add_argument("--static",action="store_true")
 parser.add_argument("--anchored-result-cut",action="store_true",
                     help="Opt into a fullscreen match cut on a verified product result")
+parser.add_argument("--guided-result",action="store_true",
+                    help="Frame the recorded click and smoothly push into its verified result")
 parser.add_argument("--result-focus",action="store_true",
                     help="Gently dim the context outside the result after an anchored cut")
 parser.add_argument("--glass-loupe",action="store_true",help="Magnify a verified slider and its observed result")
@@ -45,6 +47,9 @@ if args.anchored_result_cut and (args.presentation!="fullscreen" or args.glass_l
     parser.error("--anchored-result-cut requires fullscreen presentation and its own camera")
 if args.result_focus and not args.anchored_result_cut:
     parser.error("--result-focus requires --anchored-result-cut")
+if args.guided_result and (args.presentation!="fullscreen" or args.glass_loupe
+                           or args.anchored_result_cut or args.static):
+    parser.error("--guided-result requires a fullscreen moving camera")
 ROOT=(args.manifest.parent if args.manifest else DEFAULT_ROOT).resolve()
 SRC=(args.video or ROOT/"linear-official-preview-real-60.mp4").resolve()
 MANIFEST_PATH=(args.manifest or ROOT/"linear-interactions.json").resolve()
@@ -91,7 +96,7 @@ SCREEN_W=WINDOW_W
 SCREEN_H=round(CONTENT_H*FRAME_SCALE)
 SCREEN_X=WINDOW_X
 SCREEN_Y=WINDOW_Y+round(FRAME_HEADER_H*FRAME_SCALE)
-SHOTS=plan(MANIFEST.get("events",[]),{"width":INPUT_W,"height":INPUT_H},DURATION,profile=args.camera_profile)
+SHOTS=plan(MANIFEST.get("events",[]),{"width":INPUT_W,"height":INPUT_H},DURATION,profile="action-first" if args.guided_result else args.camera_profile)
 if args.presentation=="fullscreen":
     SCREEN_W,SCREEN_H=MASTER_W,MASTER_H
     SCREEN_X,SCREEN_Y=0,0
@@ -99,12 +104,24 @@ LOUPE_SHOTS=plan_loupe(MANIFEST,INPUT_W,INPUT_H,DURATION) if args.glass_loupe el
 RESULT_CUT=plan_result_cut(MANIFEST.get("events",[]),(INPUT_W,INPUT_H),
                            (MASTER_W,MASTER_H),FPS,min(args.seconds or DURATION,DURATION)
                            ) if args.anchored_result_cut and not args.static else None
+GUIDED_SHOT=SHOTS[0] if args.guided_result and SHOTS else None
+GUIDED_CLICK=next((event.get("targetRect") for event in MANIFEST.get("events", [])
+                   if event.get("kind")=="click" and GUIDED_SHOT and
+                   event.get("t")==GUIDED_SHOT.click),None)
+if not isinstance(GUIDED_CLICK,dict) or not all(
+        isinstance(GUIDED_CLICK.get(key),(int,float)) and math.isfinite(GUIDED_CLICK[key])
+        for key in ("x","y","width","height")) or not (
+            0<=GUIDED_CLICK["x"]<GUIDED_CLICK["x"]+GUIDED_CLICK["width"]<=INPUT_W and
+            0<=GUIDED_CLICK["y"]<GUIDED_CLICK["y"]+GUIDED_CLICK["height"]<=INPUT_H):
+    GUIDED_SHOT=None
 WORKDIR=(args.output.resolve().parent if args.output else ROOT)
 WORKDIR.mkdir(parents=True,exist_ok=True)
 (WORKDIR/"camera-plan.json").write_text(json.dumps(
  {"source":str(MANIFEST_PATH),"algorithm":"event-driven camera planner, no authored cues",
-  "profile":args.camera_profile,"presentation":args.presentation,
+  "profile":"guided-result" if GUIDED_SHOT else args.camera_profile,"presentation":args.presentation,
   "anchoredResultFrame":RESULT_CUT.frame if RESULT_CUT else None,
+  "guidedResultMotion":({"start":GUIDED_SHOT.start+.18,"settle":GUIDED_SHOT.start+.96}
+                        if GUIDED_SHOT else None),
   "shots":[] if RESULT_CUT else [s.dictionary() for s in SHOTS]},indent=2))
 
 def render_shotcandy_overlay():
@@ -179,6 +196,21 @@ def camera_matrix(t,static=False):
     if RESULT_CUT is not None and not static and round(t*FPS)>=RESULT_CUT.frame:
         return RESULT_CUT.matrix.copy()
     zoom,fx,fy= (1,.5,.5) if static or RESULT_CUT is not None else sample_camera(t,SHOTS)
+    if GUIDED_SHOT is not None and not static:
+        click=GUIDED_CLICK
+        result=GUIDED_SHOT.result_rect
+        left=min(click["x"],result["x"])
+        right=max(click["x"]+click["width"],result["x"]+result["width"])
+        top=min(click["y"],result["y"])
+        bottom=max(click["y"]+click["height"],result["y"]+result["height"])
+        opening=min(1.48,INPUT_W/(right-left+INPUT_W*.08),
+                    INPUT_H/(bottom-top+INPUT_H*.08))
+        end=min(2.2,INPUT_W/(result["width"]+INPUT_W*.16),
+                INPUT_H/(result["height"]+INPUT_H*.16))
+        progress=smooth5((t-GUIDED_SHOT.start-.18)/.78)
+        zoom=opening+(max(opening,end)-opening)*progress
+        fx=((left+right)*.5/INPUT_W)*(1-progress)+GUIDED_SHOT.focus_x*progress
+        fy=((top+bottom)*.5/INPUT_H)*(1-progress)+GUIDED_SHOT.focus_y*progress
     if args.presentation=="fullscreen":
         # Pixel-perfect isotropic scaling. Preserve source aspect ratio.
         # The target content region moves toward the optical center without
@@ -264,7 +296,7 @@ def diagnostics():
              round(float(np.max(np.abs(accel[:,[2,5]]),initial=0)),4),
        "max_zoom_per_frame":round(float(np.max(np.abs(vel[:,0]),initial=0)),8),
        "frame_source":("unmodified browser recording" if args.presentation=="fullscreen" else "Shotcandy MIT browser-dark.svg"),
-       "camera_profile":args.camera_profile,"presentation":args.presentation,
+       "camera_profile":"guided-result" if GUIDED_SHOT else args.camera_profile,"presentation":args.presentation,
        "source_capture":str(MANIFEST.get("source_kind",MANIFEST.get("capture","verified browser recording"))),
        "camera_plan_source":"recorded click and DOM state change",
        "browser_frame_not_handmade":True,
