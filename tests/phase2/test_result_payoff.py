@@ -11,7 +11,9 @@ ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/"scripts"))
 from result_payoff import (
     ANTICIPATION_FRAMES,DOLLY_FRAMES,READ_FRAMES,FADE_FRAMES,
-    CUT_SAFE_FRAME_COUNT,create_payoff_plan,pose_at,append_payoff,FOCUS_ANCHOR_JS
+    CUT_SAFE_FRAME_COUNT,CODE_READ_FRAMES,OUTPUT_READ_FRAMES,
+    DETAIL_DOLLY_FRAMES,DETAIL_CONTEXT_FRAMES,
+    create_payoff_plan,pose_at,append_payoff,FOCUS_ANCHOR_JS
 )
 
 EVIDENCE={"evidence":"visible-result-change","holdMs":1600.,
@@ -32,7 +34,12 @@ def test_real_command_target_builds_bounded_animated_camera_shot():
     projected_span=span*p["endScale"]*(1480/1280)*(1200/1140)
     assert projected_span<=832-64+0.05
     assert abs(p["endFocusX"]-648)<20
-    assert p["totalFrames"]==122
+    assert p["readFrames"]==CODE_READ_FRAMES
+    assert p["detailFrames"]==DETAIL_DOLLY_FRAMES
+    assert p["contextFrames"]==DETAIL_CONTEXT_FRAMES
+    assert p["detailScale"]>p["endScale"]+.24
+    assert p["detailFocusX"]==pytest.approx(ANCHOR["target"]["x"]+ANCHOR["target"]["width"]/2)
+    assert p["totalFrames"]==ANTICIPATION_FRAMES+DOLLY_FRAMES+DETAIL_CONTEXT_FRAMES+DETAIL_DOLLY_FRAMES+CODE_READ_FRAMES+FADE_FRAMES
     at_start=pose_at(p,0)
     assert at_start==(1.31,640.,362.59)
     at_end=pose_at(p,ANTICIPATION_FRAMES+DOLLY_FRAMES-1)
@@ -64,7 +71,7 @@ def test_native_source_footage_outro_has_camera_move_and_sharp_locked_end():
         def __init__(self):self.packets=0;self.key={}
         def write(self,data):
             self.packets+=1
-            if self.packets in (1,8,9,44,45,110,122):
+            if self.packets in (1,8,9,44,45,110,plan["totalFrames"]):
                 self.key[self.packets]=hashlib.sha256(data).hexdigest()
     class Encoder:pass
     encoder=Encoder()
@@ -75,15 +82,16 @@ def test_native_source_footage_outro_has_camera_move_and_sharp_locked_end():
         return face
     plan=create_payoff_plan(EVIDENCE,ANCHOR,POSE)
     result=append_payoff(encoder,first,plan,render)
-    assert encoder.stdin.packets==CUT_SAFE_FRAME_COUNT
-    assert len(calls)==DOLLY_FRAMES
-    assert result['cameraMoveFrames']==36
-    assert result['holdFrames']==ANTICIPATION_FRAMES+READ_FRAMES
+    assert encoder.stdin.packets==plan["totalFrames"]
+    assert len(calls)==DOLLY_FRAMES+DETAIL_DOLLY_FRAMES
+    assert result['cameraMoveFrames']==36+DETAIL_DOLLY_FRAMES
+    assert result['detailFrames']==DETAIL_DOLLY_FRAMES
+    assert result['holdFrames']==ANTICIPATION_FRAMES+DETAIL_CONTEXT_FRAMES+CODE_READ_FRAMES
     assert result['fadeFrames']==12
     assert result['mode']=='source-result-dolly'
     assert encoder.stdin.key[1]==encoder.stdin.key[8]
-    assert encoder.stdin.key[44]==encoder.stdin.key[45]==encoder.stdin.key[110]
-    assert encoder.stdin.key[122]!=encoder.stdin.key[110]
+    assert encoder.stdin.key[44]==encoder.stdin.key[45]
+    assert encoder.stdin.key[plan["totalFrames"]]!=encoder.stdin.key[110]
     assert np.all(first==111)
 
 
@@ -117,3 +125,41 @@ def test_actual_brimble_command_geometry_from_verified_har_only():
             ctx.close()
         finally:
             browser.close()
+
+
+
+def test_read_duration_is_source_verified_and_bounded():
+    code_plan=create_payoff_plan(EVIDENCE,ANCHOR,POSE)
+    output_plan=create_payoff_plan(EVIDENCE,{**ANCHOR,"kind":"output"},POSE)
+    simple_plan=create_payoff_plan(EVIDENCE,{**ANCHOR,"kind":"p"},POSE)
+    assert code_plan['readFrames']==CODE_READ_FRAMES
+    assert output_plan['readFrames']==OUTPUT_READ_FRAMES
+    assert simple_plan['readFrames']==READ_FRAMES
+    assert [p['totalFrames'] for p in (simple_plan,output_plan,code_plan)]==[
+        CUT_SAFE_FRAME_COUNT,
+        CUT_SAFE_FRAME_COUNT+OUTPUT_READ_FRAMES-READ_FRAMES,
+        CUT_SAFE_FRAME_COUNT+CODE_READ_FRAMES-READ_FRAMES+
+          DETAIL_CONTEXT_FRAMES+DETAIL_DOLLY_FRAMES]
+    assert all(p['totalFrames']==ANTICIPATION_FRAMES+DOLLY_FRAMES+
+               p['contextFrames']+p['detailFrames']+
+               p['readFrames']+FADE_FRAMES for p in
+               (code_plan,output_plan,simple_plan))
+
+
+def test_malformed_payoff_duration_fails_closed():
+    class Sink:
+        def write(self,data): raise AssertionError("Must validate before encoding")
+    class Encoder: pass
+    encoder=Encoder()
+    encoder.stdin=Sink()
+    original=np.zeros((1080,1920,3),dtype=np.uint8)
+    plan=create_payoff_plan(EVIDENCE,ANCHOR,POSE)
+    assert plan is not None
+    for frames in (-1,121,100000,72.5,"108"):
+        with pytest.raises(ValueError):
+            append_payoff(encoder,original,{**plan,"readFrames":frames},
+                          lambda *args: original)
+    for bad in (-1,1,50,1000):
+        with pytest.raises(ValueError):
+            append_payoff(encoder,original,{**plan,"detailFrames":bad},
+                          lambda *args: original)

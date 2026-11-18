@@ -13,13 +13,19 @@ import cv2
 import numpy as np
 
 # This is a bounded, opt-in film shot, not a fixed 1.6-second freeze:
-# 8 frames anticipation (132ms), 36 dolly frames (600ms), 66 result-reading
-# frames (1100ms), and a 12-frame ease-out (200ms) at 60fps.
+# 8 frames anticipation (132ms), 36 dolly frames (600ms), at least
+# 66 result-reading frames (1100ms), and a 12-frame ease-out (200ms).
+# A verified multi-line code result gets more reading time than a one-line
+# confirmation. This changes the edit, not the underlying source pixels.
 ANTICIPATION_FRAMES=8
 DOLLY_FRAMES=36
 READ_FRAMES=66
 FADE_FRAMES=12
 CUT_SAFE_FRAME_COUNT=ANTICIPATION_FRAMES+DOLLY_FRAMES+READ_FRAMES+FADE_FRAMES
+CODE_READ_FRAMES=108     # 1.8 s for source-true commands or code, not a one-second glance
+OUTPUT_READ_FRAMES=84    # 1.4 s for verified compact output
+DETAIL_CONTEXT_FRAMES=12 # let the complete verified dialog register first
+DETAIL_DOLLY_FRAMES=24   # then move to the actual verified result, not a new card
 
 # Inspect only geometry; raw commands, visible text, secrets and DOM source
 # are not exported to editorial metadata.
@@ -95,14 +101,45 @@ def create_payoff_plan(evidence,anchor,initial_pose):
     # or invent a wider dialog; settle at the existing scale instead.
     zoom=max(start_scale,zoom)
     focus_y=(anchor_top+anchor_bottom)/2
+    # Refs.video's published product-demo timing illustrates picture-led
+    # action -> outcome -> reading, not 60 fps constant motion. Select a
+    # bounded hold from the verified result element KIND, never from private
+    # text or a guessed marketing script; compact non-code results keep the
+    # historical 66-frame default.
+    read_frames=(CODE_READ_FRAMES if anchor['kind'] in ('pre','code') else
+                 OUTPUT_READ_FRAMES if anchor['kind']=='output' else READ_FRAMES)
+    # Large source-true result details (code/commands) need a second shot:
+    # establish the whole dialog, then reframe the existing pixels around
+    # the output text. Never create a duplicate pane or retype the command.
+    # The measured Loom reference similarly lets a real UI control become
+    # the close composition. This is a technique transfer, not a shot copy.
+    detail_scale=zoom
+    detail_x,detail_y=focus_x,focus_y
+    detail_frames=0
+    context_frames=0
+    if anchor['kind'] in ('pre','code'):
+        factor=(1480./1280.)*(1200./(1200.-60.))
+        detail_safe=min(2.90,1536./(w*factor),774./(h*factor))
+        if detail_safe>=zoom+.24:
+            detail_scale=detail_safe
+            detail_x,detail_y=tx,ty
+            detail_frames=DETAIL_DOLLY_FRAMES
+            context_frames=DETAIL_CONTEXT_FRAMES
+    total_frames=(ANTICIPATION_FRAMES+DOLLY_FRAMES+context_frames+
+                  detail_frames+read_frames+FADE_FRAMES)
     return {'startScale':start_scale,'endScale':round(zoom,6),
             'startFocusX':sx,'startFocusY':sy,
             'endFocusX':round(focus_x,5),'endFocusY':round(focus_y,5),
             'sourceKind':anchor['kind'],
+            'detailScale':round(detail_scale,6),
+            'detailFocusX':round(detail_x,5),
+            'detailFocusY':round(detail_y,5),
+            'detailFrames':detail_frames,
+            'contextFrames':context_frames,
             'anticipationFrames':ANTICIPATION_FRAMES,
             'dollyFrames':DOLLY_FRAMES,
-            'readFrames':READ_FRAMES,'fadeFrames':FADE_FRAMES,
-            'totalFrames':CUT_SAFE_FRAME_COUNT}
+            'readFrames':read_frames,'fadeFrames':FADE_FRAMES,
+            'totalFrames':total_frames}
 
 
 def ease(u:float)->float:
@@ -129,6 +166,26 @@ def append_payoff(encoder,last_frame:np.ndarray,plan:dict,
         raise ValueError("Payoff needs a real 60fps uint8 final render")
     if last_frame.shape!=(1080,1920,3):
         raise ValueError("Payoff requires native 1080p60 BGR frames")
+    read_frames=plan.get('readFrames',READ_FRAMES)
+    if type(read_frames) is not int or read_frames not in (
+        READ_FRAMES,OUTPUT_READ_FRAMES,CODE_READ_FRAMES):
+        raise ValueError("Result read hold must be a validated editorial duration")
+    detail_frames=plan.get('detailFrames',0)
+    context_frames=plan.get('contextFrames',0)
+    if (detail_frames,context_frames) not in (
+        (0,0),(DETAIL_DOLLY_FRAMES,DETAIL_CONTEXT_FRAMES)):
+        raise ValueError("Invalid detail-shot structure")
+    total_frames=(ANTICIPATION_FRAMES+DOLLY_FRAMES+context_frames+
+                  detail_frames+read_frames+FADE_FRAMES)
+    if plan.get('totalFrames')!=total_frames:
+        raise ValueError("Result shot frame budget is inconsistent")
+    if detail_frames:
+        values=(plan.get('detailScale'),plan.get('detailFocusX'),plan.get('detailFocusY'),
+                plan.get('endScale'),plan.get('endFocusX'),plan.get('endFocusY'))
+        if any(type(x) not in (float,int) or not math.isfinite(x) for x in values):
+            raise ValueError("Invalid detail camera geometry")
+        if not plan['endScale']+.24<=plan['detailScale']<=2.9:
+            raise ValueError("Detail closeup must have a bounded, distinct scale")
     last=last_frame
     # No fake cursor travel on the first frame of the outro; the original
     # final frame remains untouched, then the actual 3D reframe begins.
@@ -143,7 +200,19 @@ def append_payoff(encoder,last_frame:np.ndarray,plan:dict,
         encoder.stdin.write(frame.tobytes())
         final=frame
     if final is None:raise RuntimeError("No source-backed payoff shot")
-    for _ in range(READ_FRAMES):
+    for _ in range(context_frames):
+        encoder.stdin.write(final.tobytes())
+    for i in range(detail_frames):
+        u=ease((i+1)/detail_frames)
+        z=plan['endScale']+(plan['detailScale']-plan['endScale'])*u
+        x=plan['endFocusX']+(plan['detailFocusX']-plan['endFocusX'])*u
+        y=plan['endFocusY']+(plan['detailFocusY']-plan['endFocusY'])*u
+        frame=render_pose(z,x,y,ANTICIPATION_FRAMES+DOLLY_FRAMES+context_frames+i)
+        if frame.shape!=last.shape or frame.dtype!=np.uint8:
+            raise ValueError("Detail camera renderer returned wrong frame shape")
+        encoder.stdin.write(frame.tobytes())
+        final=frame
+    for _ in range(read_frames):
         encoder.stdin.write(final.tobytes())
     source=final.astype(np.float32)
     # Fade only after a sharp, settled shot. A 200ms ease prevents a dead
@@ -153,11 +222,12 @@ def append_payoff(encoder,last_frame:np.ndarray,plan:dict,
         u=ease((k+1)/FADE_FRAMES)
         encoder.stdin.write(np.uint8(np.rint(np.clip(
             source*(1-u)+dark*u,0,255))).tobytes())
-    return {'holdFrames':ANTICIPATION_FRAMES+READ_FRAMES,
-            'cameraMoveFrames':DOLLY_FRAMES,'fadeFrames':FADE_FRAMES,
-            'totalFrames':CUT_SAFE_FRAME_COUNT,
+    return {'holdFrames':ANTICIPATION_FRAMES+context_frames+read_frames,
+            'cameraMoveFrames':DOLLY_FRAMES+detail_frames,
+            'detailFrames':detail_frames,'fadeFrames':FADE_FRAMES,
+            'totalFrames':total_frames,
             'mode':'source-result-dolly',
             'targetKind':plan['sourceKind'],
-            'endScale':plan['endScale'],
-            'endFocusX':plan['endFocusX'],
-            'endFocusY':plan['endFocusY']}
+            'endScale':plan['detailScale'] if detail_frames else plan['endScale'],
+            'endFocusX':plan['detailFocusX'] if detail_frames else plan['endFocusX'],
+            'endFocusY':plan['detailFocusY'] if detail_frames else plan['endFocusY']}

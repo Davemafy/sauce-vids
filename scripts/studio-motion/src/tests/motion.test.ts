@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {buildTimeWarp} from "../timeWarp";
+import {planCameraRig} from "../cameraRig";
+import {resolvePreset} from "../presets";
 import {buildCallouts} from "../KineticCallouts";
 import {buildStudioPlan} from "../bridge";
 import {projectAnchor,createStudioStage} from "../StudioStage";
@@ -105,4 +107,40 @@ test("bridge deterministic across repeated builds and no callouts unless enabled
  assert.equal(a.stage.window.width,1480);
  assert.equal(a.frameMap.length,Math.ceil(a.outputDurationMs/1000*60));
  assert.ok(a.callouts.length>0);
+});
+
+
+test("3D Launch keeps the establishing shot still until a verified product action",()=>{
+ const gaze:TraceEvent[]=[
+  {t:100,type:"pointermove",x:180,y:200,attention:{score:.99,flow:.9}},
+  {t:650,type:"pointermove",x:240,y:220,attention:{score:.92,flow:.8}},
+ ];
+ const frameMap=Array.from({length:96},(_,i)=>({sourceMs:i*1000/60,speed:1}));
+ const launch=planCameraRig(frameMap,[],gaze,resolvePreset("3d-launch"),0);
+ assert.ok(launch.every(f=>f.scale===1 && f.focusX===640 && f.focusY===360),
+   "gaze alone must not pan or push the cinematic camera");
+ const hyper=planCameraRig(frameMap,[],gaze,resolvePreset("hyper-cut"),0);
+ assert.ok(hyper.some(f=>f.scale>1.001),
+   "retain the existing attention treatment for Hyper-Cut");
+ const proof=[{id:"modal-0",kind:"modal" as const,score:95,sourceMs:650,outputMs:650,
+   box:{x:475,y:120,width:330,height:310},label:null}];
+ const withProof=planCameraRig(frameMap,proof,gaze,resolvePreset("3d-launch"),0);
+ assert.ok(withProof.slice(50).some(f=>f.scale>1.03 && f.spotlightActive),
+   "an actual observed modal must still trigger a purposeful camera shot");
+ assert.ok(withProof.slice(0,39).every(f=>f.scale===1),
+   "the camera must not move toward an unobserved future state");
+});
+
+test("recorded feature result holds the 3D Launch camera longer than an ordinary click",()=>{
+ const source=Array.from({length:210},(_,i)=>({sourceMs:i*1000/60,speed:1}));
+ const box={x:530,y:265,width:160,height:90};
+ const make=(kind:"feature"|"click")=>planCameraRig(
+   source,[{id:"real-event",kind,sourceMs:300,outputMs:300,box,score:99,label:null}],
+   [],resolvePreset("3d-launch"),0);
+ const feature=make("feature"),click=make("click");
+ const frame=145; // 2.416s, after ordinary click ownership expires
+ assert.ok(feature[frame]!.scale>click[frame]!.scale+.02,
+   "verified feature payoff should retain focus instead of hunting for another target");
+ assert.ok(feature.some(f=>f.spotlightActive));
+ assert.ok(feature.every(f=>Number.isFinite(f.scale)&&f.scale<=1.36));
 });

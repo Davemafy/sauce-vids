@@ -202,19 +202,24 @@ test("unverified or private Git snippets are rejected rather than fabricated",()
   }
 });
 
-test("screenshot saliency flow protects meaningful changes and eases gaze separately from cursor",()=>{
+test("saliency protects time but cannot direct a cinematic shot before a verified action",()=>{
   const gaze:TraceEvent={type:"visual-attention",t:1400,x:980,y:190,
     attention:{score:.9,flow:.7}};
   const warp=buildTimeWarp([gaze],0,3500,60,3,true);
   assert.equal(warp.gazeTargets.length,1);
   assert.ok(warp.actionWindows.some(w=>w.start<=1400&&w.end>=1400));
+  const evidence=[gaze,{t:2000,type:"pointermove",x:50,y:50}];
   const plan=buildMotionEnginePlan({...input("3d-launch"),durationMs:3500,
-     events:[gaze,{t:2000,type:"pointermove",x:50,y:50}]});
+     events:evidence});
   const f=plan.framePlan.frames.find(f=>f.sourceMs>1800&&f.sourceMs<1950);
   assert.ok(f);
-  assert.ok(f!.camera.focusX>640);
-  assert.ok(f!.camera.focusY<360);
-  assert.ok(f!.camera.scale>1);
+  assert.equal(f!.camera.focusX,640);
+  assert.equal(f!.camera.focusY,360);
+  assert.equal(f!.camera.scale,1);
+  const hyper=buildMotionEnginePlan({...input("hyper-cut"),durationMs:3500,
+    events:evidence});
+  assert.ok(hyper.framePlan.frames.some(f=>f.camera.scale>1.002),
+    "hyper-cut retains the intentional saliency camera response");
   assert.ok(plan.framePlan.frames.every((f,i)=>i===0 ||
     f.outputTimeMs>plan.framePlan.frames[i-1]!.outputTimeMs));
 });

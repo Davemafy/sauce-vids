@@ -100,8 +100,14 @@ export function planCameraRig(
         return ["dialog-hidden","dialog-closed","modal-close","modal-closed"].includes(k)
           && e.t-startMs>h.sourceMs && e.t-startMs<=sourceMs;
       })) : undefined;
+    // Verified product outcomes deserve a reading shot. An ordinary click is
+    // merely a trigger; a real feature commit can sustain the composition.
+    // These are limits on how long an observed event owns the camera, not
+    // invented freezes or fabricated source states.
+    const ownershipMs=hero?.kind==="modal"?2400:
+      hero?.kind==="feature"?2600:1800;
     const active=hero&&!modalClosed&&sourceMs-hero.sourceMs<
-      (hero.kind==="modal"?2400:1800)&&safeBox(hero.box)?hero:null;
+      ownershipMs&&safeBox(hero.box)?hero:null;
     const nestedInModal=!!(modalOwner&&hero&&safeBox(hero.box)&&
       hero.box.x+hero.box.width/2>=modalOwner.box!.x&&
       hero.box.x+hero.box.width/2<=modalOwner.box!.x+modalOwner.box!.width&&
@@ -132,8 +138,11 @@ export function planCameraRig(
       desiredX=clamp(box.x+box.width/2,0,viewport.width);
       desiredY=clamp(box.y+box.height/2,0,viewport.height);
     }
-    if(p.mode==="perspective" && !box && attention && !upcomingModal){
-      // Small contextual emphasis only; a verified action always wins.
+    if(p.mode==="perspective" && preset.id!=="3d-launch" &&
+       !box && attention && !upcomingModal){
+      // Hyper-Cut may use ambient attention. 3D Launch is a deliberate film:
+      // its camera stays wide and still until a recorded action or verified
+      // visual result owns a shot. Gaze alone is not a product state change.
       desiredScale=clamp(1+attention.score*.065,1,p.scaleRange[1]);
       desiredX=clamp(attention.x,viewport.width*.22,viewport.width*.78);
       desiredY=clamp(attention.y,viewport.height*.22,viewport.height*.78);
