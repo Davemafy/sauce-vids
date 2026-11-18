@@ -7,7 +7,7 @@ import numpy as np
 from spatial_parallax import window_homography,projected_target_quad
 
 DEPTH_PX=60.
-MAX_BACKGROUND_BLUR=6.
+MAX_BACKGROUND_BLUR=12.
 RIM_COLOR=(249,236,216)
 
 def _mask_bounds(shape,quad):

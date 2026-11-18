@@ -27,7 +27,7 @@ from online_cursor_assets import render_cursor as render_tabler_cursor
 from cinematic_stage import CinematicStage,CinematicCursor
 from modal_depth_capture import (verified_modal_background,expected_modal_box,
                                  stabilized_verified_dialog_opening)
-from multi_plane_depth import DEPTH_PX
+from multi_plane_depth import DEPTH_PX,MAX_BACKGROUND_BLUR
 from semantic_spatial_handoff import eased
 from studio_motion_blur import directional_blur
 from studio_motion_callouts import KineticCalloutRenderer
@@ -469,6 +469,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     payoff_modal_radius=None
     payoff_pose=None
     payoff_tilt=None
+    payoff_lift_factors=None
     payoff_perspective=None
     payoff_cursor=None
     if result_payoff_push and not result_aware_editorial:
@@ -782,8 +783,11 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                             modal_lift_start=index
                         progress=eased((index-modal_lift_start)/(fps*.30))
                         foreground['depthPx']=DEPTH_PX*progress
-                        spotlight['blurPx']*=progress
-                        spotlight['dimOpacity']*=progress
+                        spotlight['blurPx']=MAX_BACKGROUND_BLUR*progress
+                        spotlight['dimOpacity']=.18*progress
+                        if result_payoff_push and index==total-1:
+                            payoff_lift_factors=(foreground['depthPx'],
+                                spotlight['blurPx'],spotlight['dimOpacity'])
                         modal_lift_frames+=int(progress<1.)
                 protected_text=None
                 if foreground is not None and hide_brimble_terminal:
@@ -933,6 +937,10 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                                    'blurPx':6.,'dimOpacity':.25,
                                    'factor':info['dpr']*scale,
                                    'dx':shift_x,'dy':shift_y}
+                        if payoff_lift_factors is not None:
+                            depth,blur,dim=payoff_lift_factors
+                            foreground['depthPx']=depth
+                            spotlight.update(blurPx=blur,dimOpacity=dim)
                         frame=root_stage.render(
                             clean_source,tilt=payoff_tilt,glow=0.,
                             perspective_px=payoff_perspective,
@@ -948,7 +956,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                                 frame_map[-1]['sourceMs']/1000.,
                                 info['dpr']*scale,shift_x,shift_y,
                                 tilt=payoff_tilt,focal=payoff_perspective,
-                                foreground_box=payoff_modal_box)
+                                foreground_box=payoff_modal_box,
+                                foreground_depth=foreground.get('depthPx',DEPTH_PX))
                             from result_payoff import ease
                             opacity=1-ease(shot_frame/12)
                             frame=np.uint8(np.rint(

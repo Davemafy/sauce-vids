@@ -12,7 +12,7 @@ import numpy as np
 import cv2
 from spatial_parallax import window_homography,map_pointer,projected_target_quad
 from multi_plane_depth import (
-    focus_background_plane,composite_elevated_modal,RIM_COLOR,DEPTH_PX)
+    focus_background_plane,composite_elevated_modal,RIM_COLOR,DEPTH_PX,MAX_BACKGROUND_BLUR)
 from PIL import Image, ImageDraw, ImageFilter
 from procedural_backdrops import procedural_backdrop, STYLES, brand_bloom
 from stage_optics import apply_stage_optics
@@ -381,7 +381,7 @@ class CinematicStage:
         if spotlight and spotlight.get('active') and spotlight.get('box'):
             if foreground is not None and foreground.get('source') is not None:
                 output=focus_background_plane(output,self.window,tilt,perspective_px,
-                    min(6.,float(spotlight.get('blurPx',6.))),
+                    min(MAX_BACKGROUND_BLUR,float(spotlight.get('blurPx',6.))),
                     float(spotlight.get('dimOpacity',.25)))
                 output=composite_elevated_modal(output,foreground['source'],
                     foreground['box'],self.window,

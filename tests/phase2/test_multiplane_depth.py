@@ -229,3 +229,22 @@ def test_modal_lift_coverage_follows_intermediate_projected_depth():
         assert np.all(result[coverage==255]==200)
         areas.append(int(np.count_nonzero(coverage==255)))
     assert areas[0]<areas[1]<areas[2]
+
+
+def test_extended_defocus_softens_background_without_softening_dialog():
+    window=(20,30,320,240)
+    box={'x':145.,'y':65.,'width':120.,'height':110.}
+    source=np.full((240,320,3),220,dtype=np.uint8)
+    background=np.full((300,380,3),150,dtype=np.uint8)
+    background[60:210,65:85]=25
+    coverage=np.zeros(background.shape[:2],dtype=np.uint8)
+
+    def render(blur):
+        plate=focus_background_plane(background,window,(0.,0.),1200.,blur,.18)
+        return composite_elevated_modal(plate,source,box,window,1.,0.,0.,
+                                       (0.,0.),1200.,coverage_out=coverage)
+
+    standard,extended=render(6.),render(12.)
+    assert extended[100,74,0]>standard[100,74,0]
+    assert np.array_equal(extended[coverage==255],standard[coverage==255])
+    assert np.array_equal(extended[10,10],background[10,10])
