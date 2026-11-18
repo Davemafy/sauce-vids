@@ -236,7 +236,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            experimental_orbit_optics:bool=False,
            optics_seed:int=20261116,
            result_aware_editorial:bool=False,
-           result_payoff_push:bool=False,modal_lift:bool=False) -> dict:
+           result_payoff_push:bool=False,modal_lift:bool=False,
+           click_water_ripple:bool=False) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -292,6 +293,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         preset_engine.get('framePlan',{}).get('diffReveals',[]) if preset_engine else [])}
     film_mode=presentation_v12 or presentation_v13 or presentation_v14 or presentation_v15
     vector_mode=presentation_v13 or presentation_v14 or presentation_v15
+    if click_water_ripple and not presentation_v15:
+        raise ValueError('Water ripple requires the source-true CinematicStage renderer')
     if (presentation_v14 or presentation_v15) and cursor_style not in ('ink','outline'):
         raise ValueError('Select ink or outline cursor style')
     if vector_mode:
@@ -360,7 +363,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
     callout_renderer=(KineticCalloutRenderer(
         studio_motion_plan.get('callouts',[]),fps=fps) if studio_motion_plan else None)
     root_cursor=(CinematicCursor(root_stage,session['events'],start_ms,
-                  cursor_style,cursor_scale) if root_stage else None)
+                  cursor_style,cursor_scale,water_ripple=click_water_ripple)
+                 if root_stage else None)
     if root_stage:
         wx,wy,ww,wh=root_stage.window
         base,clip=None,None
@@ -1096,6 +1100,8 @@ def main():
     cli.add_argument('--har',action='store_true')
     cli.add_argument('--expect-text')
     cli.add_argument('--click-effect',action='store_true')
+    cli.add_argument('--click-water-ripple',action='store_true',
+        help='Refract genuine click positions in the composed video, opt-in')
     cli.add_argument('--presentation-hide-selector',
        help='Optional decorative selector to suppress only in presentation replay')
     cli.add_argument('--raw-replay',action='store_true',
@@ -1128,6 +1134,7 @@ def main():
     result=replay(args.session,args.workflow,args.output,args.fps,args.seconds,
                   args.har,expected_text=args.expect_text,
                   click_effect=args.click_effect,backdrop_focus=args.backdrop_focus,
+                  click_water_ripple=args.click_water_ripple,
                   presentation_v12=args.presentation_v12,
                   presentation_hide_selector=args.presentation_hide_selector,
                   presentation_v13=args.presentation_v13,

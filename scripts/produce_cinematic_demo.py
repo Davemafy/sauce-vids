@@ -86,7 +86,8 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
             experimental_orbit_optics:bool=False,
             optics_seed:int=20261116,
             result_aware_editorial:bool=False,
-            result_payoff_push:bool=False,modal_lift:bool=False)->dict:
+            result_payoff_push:bool=False,modal_lift:bool=False,
+            click_water_ripple:bool=False)->dict:
     enforce_hidpi(dpr)
     if modal_lift and preset!='3d-launch':
         raise ValueError('Modal lift requires --preset 3d-launch')
@@ -183,7 +184,8 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         experimental_orbit_optics=experimental_orbit_optics,
         optics_seed=optics_seed,
         result_aware_editorial=result_aware_editorial,
-        result_payoff_push=result_payoff_push,modal_lift=modal_lift)
+        result_payoff_push=result_payoff_push,modal_lift=modal_lift,
+        click_water_ripple=click_water_ripple)
     if not report['verified_semantics'] or not report['visual_region_checks']:
         raise RuntimeError('Replay must pass semantic and visual-region checks')
     if (not report.get('cinematic_stage_root') or
@@ -288,6 +290,7 @@ def produce(*,workflow:Path,session_dir:Path,out_dir:Path,
         'player':page.name,'fps':FPS,'dimensions':list(MASTER_SIZE),
         'source_dpr':verified['dpr'],'pointer':cursor_style,
         'cursor_scale':cursor_scale,'clicks':sum(e['type']=='pointerdown' for e in session['events']),
+        'click_water_ripple':bool(click_water_ripple),
         'source_verified_states':len(session['states']),
         'semantic_checks':len(report['semantic_checks']),
         'pixel_region_checks':len(report['visual_region_checks']),
@@ -353,6 +356,8 @@ def main():
     p.add_argument('--description',default='A recorded, verified product interaction.')
     p.add_argument('--cursor-style',choices=('ink','outline'),default='ink')
     p.add_argument('--cursor-scale',type=float,default=CURSOR_FILM_SCALE)
+    p.add_argument('--click-water-ripple',action='store_true',
+                   help='Opt-in physically styled refraction driven only by captured clicks')
     p.add_argument('--presentation-hide-selector')
     p.add_argument('--no-webgl-optics',action='store_true',
                    help='Opt out of the actual WebGL2 shader pass for debugging')
@@ -406,7 +411,7 @@ def main():
         workflow=args.workflow,session_dir=session,out_dir=args.out,url=args.url,
         dpr=args.dpr,seconds=args.seconds,title=args.title,
         description=args.description,cursor_style=args.cursor_style,
-        cursor_scale=args.cursor_scale,
+        cursor_scale=args.cursor_scale,click_water_ripple=args.click_water_ripple,
         presentation_hide_selector=args.presentation_hide_selector,
         webgl_optics=not args.no_webgl_optics,
         spatial_parallax=not args.no_parallax,

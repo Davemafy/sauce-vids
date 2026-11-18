@@ -430,11 +430,13 @@ class CinematicStage:
 class CinematicCursor:
     """Sole visible film pointer, linked to the verified Spring2D trace."""
     def __init__(self,stage:CinematicStage,events:list[dict],
-                 start_ms:float,style:str='ink',scale:float=.56):
+                 start_ms:float,style:str='ink',scale:float=.56,
+                 water_ripple:bool=False):
         if not .35<=scale<=1:raise ValueError('Cursor scale out of bounds')
         if style not in ('ink','outline'):raise ValueError('Unsupported cursor style')
         self.stage,self.events,self.start_ms,self.style,self.scale=(
             stage,events,start_ms,style,scale)
+        self.water_ripple=bool(water_ripple)
         from cursor_plane_motion import CursorPlaneSeamRepair
         self._plane_seam=CursorPlaneSeamRepair()
 
@@ -459,17 +461,36 @@ class CinematicCursor:
             H=lifted_homography if lifted and lifted_homography is not None else homography
             if H is not None: px,py=map_pointer(H,px,py)
             return round(px),round(py)
-        # Click ripple under pointer, tied to actual pointerdown timestamp.
-        rings=click_ring_frames()
+        # Choose source-refracting water optics OR the existing graphic ring.
+        # Both effects are driven only by verified pointerdown timestamps.
+        rings=click_ring_frames() if not self.water_ripple else None
         for ev in self.events:
             if ev['type']!='pointerdown' or ev.get('x') is None:continue
             age=t-(ev['t']-self.start_ms)/1000.
-            if not 0<=age<.33:continue
+            if not 0<=age<(.56 if self.water_ripple else .33):continue
             px,py=point(ox+shift_x+ev['x']*source_factor,
                         oy+shift_y+ev['y']*source_factor,
                         on_foreground(ev['x'],ev['y']))
-            k=min(len(rings)-1,int(age/.33*len(rings)))
-            _blend(output,rings[k],px-36,py-36)
+            if self.water_ripple:
+                from click_water_ripple import apply_click_water_ripple,LIFETIME_S
+                if age < LIFETIME_S:
+                    inside_modal = on_foreground(ev['x'],ev['y'])
+                    # Genuine H60 modal occludes the background-plane ripple.
+                    # For an actual click inside H60, shorten and soften the
+                    # wave so the resulting copy/action text remains legible.
+                    modal_quad = (projected_target_quad(
+                        foreground_box,self.stage.window,source_factor,
+                        shift_x,shift_y,*tilt,perspective_px=focal,
+                        z=foreground_depth)
+                        if foreground_box and not inside_modal else None)
+                    apply_click_water_ripple(
+                        output,(px,py),age,
+                        intensity=.38 if inside_modal else 1.,
+                        lifetime_s=.27 if inside_modal else LIFETIME_S,
+                        protected_quad=modal_quad)
+            else:
+                k=min(len(rings)-1,int(age/.33*len(rings)))
+                _blend(output,rings[k],px-36,py-36)
 
         # Supersampled original vector remains sized 32x39px (the user's
         # approved proportion), not the previous oversized 58x70px.

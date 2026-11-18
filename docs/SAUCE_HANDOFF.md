@@ -2,6 +2,20 @@
 
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
+## 2026-11-18 — click-water refraction on genuine Brimble events (opt-in technique, NOT approved film)
+
+**Source:** current GitHub main was `9bfd5ff6bda1de737edd503a8be8214b8a9a55b7` at the start. Implemented in a fresh isolated **main** checkout on the existing persistent Vultr DevMCP worker, not in the dirty `sauce-v05-release` or `sauce-effects-20261118` directories. Those prior working trees were preserved. The commit adding this section contains the feature; inspect that commit's SHA from `main` rather than assuming the bootstrap SHA remains current.
+
+**Opt-in flag:** `scripts/produce_cinematic_demo.py --click-water-ripple`. `scripts/session_replay.py` also exposes the flag. No additional listener is needed: existing, verified `session.json` `pointerdown` entries supply source-clock timestamp and CSS click position. The existing `CinematicCursor` projects it through the actual moving H0/H60 camera and invokes `scripts/click_water_ripple.py` *before* rendering the sole cursor. The old graphic click ring remains the default; users never see both simultaneously. Water refraction uses a bounded NumPy radial wave + `cv2.remap` on a local region of the **encoded film compositor**, not a CSS/web-player filter. Non-wave pixels are restored byte-exactly; the BGR source capture is not modified.
+
+**Modal quality correction:** the initial encoded run showed the waterwave distorting the real Brimble dialog/result text. Its follow-up uses the genuine projected H60 quadrilateral as an occlusion matte for underlying H0 clicks; clicks actually on H60 use a softer, 0.27-second wave instead of the larger 0.56-second ambient wave. Corrected full-resolution frame review at **0.95, 2.19, and 2.36 seconds** showed the dialog copy remained readable and the pointer remained visible, while the earlier run visibly bent its text.
+
+**Verified offline render:** existing private verified Brimble fixture `../sauce-v05-release/studio/.tmp/brimble-reference-v16-ink`, source `https://www.brimble.io/`, source real clicks at approx **0.786s** and **2.069s**. Output is private in this worker's scratch checkout: `sauce-click-ripple-1118/studio/.tmp/water-ripple-occluded-1118/master-1080p60.mp4`; **1920×1080, H.264, 60 fps, AAC, 3.283333 seconds, 197 frames**. QA sheet `.../water-ripple-occluded-1118/ripple-qa.jpg` compares initial/occluded refraction at the three timestamps. Existing 3D Launch frame/Foley engine was used; no paid inference. `release.json` records `click_water_ripple=true`.
+
+**Tests:** `../.sauce-render-env/bin/python -m pytest tests/phase2 tests/test_cinematic_stage_root.py -q` → **109 passed, 10 skipped**; unit tests cover onset/expiry, local displacement, deterministic reproduction, byte-exact unaffected pixels, modal occlusion, UI-safe short foreground wave, and opt-in engine wiring.
+
+**Still unapproved:** this is a source-true *technique proof*, not a premium film or a deployed paid feature. It does not implement the previously explored **full-screen convex CRT base distortion**; that prior shot was a separate still experiment. The second-click wave is intentionally understated to preserve text, and visual impact needs further owner/reference review. Do not publicly publish this private scratch render, claim quality approval, or expand access based only on green tests.
+
 ## Read in this order
 
 1. `AGENTS.md` — enforced project behavior.
