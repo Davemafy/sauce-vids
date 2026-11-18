@@ -1,0 +1,143 @@
+{
+  "reference": "Measured real Screen Studio camera grammar; action-first source-true linear context and result holds",
+  "purpose": "Opt-in premium review candidate, no invented screen states or unverified motion",
+  "sourceInspection": "White-page transition intervals measured on the actual DPR2 recording; never included in a shot",
+  "unstableRanges": [
+    [
+      0,
+      0
+    ],
+    [
+      185,
+      257
+    ],
+    [
+      484,
+      533
+    ],
+    [
+      733,
+      778
+    ]
+  ],
+  "shots": [
+    {
+      "label": "Real Linear issue \u2192 Reviews click",
+      "startFrame": 88,
+      "endFrame": 184,
+      "camera": [
+        {
+          "f": 0,
+          "zoom": 1.06,
+          "anchor": "wide"
+        },
+        {
+          "f": 95,
+          "zoom": 1.06,
+          "anchor": "wide"
+        }
+      ]
+    },
+    {
+      "label": "Observed code review \u2192 Agent tasks click",
+      "startFrame": 259,
+      "endFrame": 484,
+      "camera": [
+        {
+          "f": 0,
+          "zoom": 1.06,
+          "anchor": "wide"
+        },
+        {
+          "f": 39,
+          "zoom": 1.6,
+          "anchor": "result-upper:0"
+        },
+        {
+          "f": 108,
+          "zoom": 1.6,
+          "anchor": "result-upper:0"
+        },
+        {
+          "f": 153,
+          "zoom": 1.12,
+          "anchor": "wide"
+        },
+        {
+          "f": 224,
+          "zoom": 1.12,
+          "anchor": "wide"
+        }
+      ]
+    },
+    {
+      "label": "Observed agent task board \u2192 Insights click",
+      "startFrame": 534,
+      "endFrame": 733,
+      "camera": [
+        {
+          "f": 0,
+          "zoom": 1.07,
+          "anchor": "wide"
+        },
+        {
+          "f": 46,
+          "zoom": 1.49,
+          "anchor": "result:1"
+        },
+        {
+          "f": 113,
+          "zoom": 1.49,
+          "anchor": "result:1"
+        },
+        {
+          "f": 159,
+          "zoom": 1.1,
+          "anchor": "wide"
+        },
+        {
+          "f": 198,
+          "zoom": 1.1,
+          "anchor": "wide"
+        }
+      ]
+    },
+    {
+      "label": "Observed throughput metrics and genuine final payoff",
+      "startFrame": 780,
+      "endFrame": 1050,
+      "camera": [
+        {
+          "f": 0,
+          "zoom": 1.08,
+          "anchor": "wide"
+        },
+        {
+          "f": 18,
+          "zoom": 1.08,
+          "anchor": "wide"
+        },
+        {
+          "f": 64,
+          "zoom": 1.5,
+          "anchor": "result:2"
+        },
+        {
+          "f": 131,
+          "zoom": 1.5,
+          "anchor": "result:2"
+        },
+        {
+          "f": 182,
+          "zoom": 1.12,
+          "anchor": "overview:2"
+        },
+        {
+          "f": 269,
+          "zoom": 1.12,
+          "anchor": "overview:2"
+        }
+      ]
+    }
+  ]
+}

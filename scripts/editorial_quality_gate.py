@@ -24,7 +24,7 @@ def _pose_anchor_verified(manifest, anchor, source_frame):
     if anchor == "wide":
         return True
     pieces = anchor.split(":")
-    if len(pieces) != 2 or pieces[0] not in ("result", "detail", "summary", "overview"):
+    if len(pieces) != 2 or pieces[0] not in ("result", "detail", "summary", "overview", "result-upper"):
         return False
     try:
         index = int(pieces[1])

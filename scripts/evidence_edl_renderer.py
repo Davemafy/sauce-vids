@@ -23,9 +23,11 @@ def pose(manifest,selector,source_size):
         return .432*w,.5*h
     kind,index=selector.split(':')
     events=[e for e in manifest['events'] if e.get('kind')=='state_change']
-    if not 0<=int(index)<len(events) or kind not in ('result','detail','summary','overview'):
+    if not 0<=int(index)<len(events) or kind not in ('result','detail','summary','overview','result-upper'):
         raise ValueError('Unsupported or unobserved camera anchor')
     state=events[int(index)]
+    if not isinstance(state.get('evidence'),str) or not state['evidence'].strip():
+        raise ValueError('Missing state-change proof')
     if kind=='overview':
         # A real multi-card outcome can only be presented as a complete
         # information group when *each* card was DOM-measured in the capture.
@@ -48,9 +50,8 @@ def pose(manifest,selector,source_size):
             visible.append((x0,y0,x1,y1))
         return (min(q[0] for q in visible)+max(q[2] for q in visible))/2,(
             min(q[1] for q in visible)+max(q[3] for q in visible))/2
-    if not isinstance(state.get('evidence'),str) or not state['evidence']:
-        raise ValueError('Missing state-change proof')
-    key={'result':'resultRect','detail':'detailRect','summary':'summaryRects'}[kind]
+    key={'result':'resultRect','detail':'detailRect','summary':'summaryRects',
+         'result-upper':'resultRect'}[kind]
     b=state.get(key)
     if isinstance(b,list):b=b[0] if b else None
     if not isinstance(b,dict):raise ValueError('No verified anchor rectangle')
@@ -64,7 +65,8 @@ def pose(manifest,selector,source_size):
     visible=max(0.,right-left)*max(0.,bottom-top)/(bw*bh)
     if visible<.80 or right<=left or bottom<=top:
         raise ValueError('Verified result is mostly outside recorded source')
-    return (left+right)/2,(top+bottom)/2
+    return (left+right)/2,(top+(bottom-top)*.34 if kind=='result-upper'
+                            else (top+bottom)/2)
 
 @dataclass
 class Shot:
@@ -140,7 +142,8 @@ def compile_timeline(shots):
              'camera':s.keys} for s in shots]
 def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
            size=(1920,1080),limit=None,quality_gate=False,bounded_repair=False,
-           motion_shutter=False):
+           motion_shutter=False,floating_stage=False,premium_cursor=False,
+           click_water_ripple=False,stage_scale=.79):
     manifest=json.loads(manifest_path.read_text())
     edit=json.loads(edit_path.read_text())
     probe=json.loads(subprocess.check_output([
@@ -174,6 +177,22 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
     if limit is not None:
         if type(limit)!=int or not 30<=limit<=total:raise ValueError('Invalid review length')
     max_frames=min(limit or total,total)
+    cursor_visibility=None
+    if premium_cursor:
+        from cinematic_recorded_pointer import (
+            CinematicRecordedPointer,pointer_visibility_report)
+        verified_clicks=[float(e['t']) for e in manifest['events']
+                         if e.get('kind')=='click']
+        candidate=CinematicRecordedPointer(track,verified_clicks,
+                                            style='ink',film_scale=.56)
+        cursor_visibility=pointer_visibility_report(
+            candidate,shots,manifest,(sw,sh),size,camera,
+            stage_scale if floating_stage else 1.)
+        if quality_gate and (
+            cursor_visibility['offscreenFrames'] or
+            cursor_visibility['unrecordedOpeningFrames']):
+            raise ValueError('EDL cursor visibility rejection: '+
+                             json.dumps(cursor_visibility,sort_keys=True))
     output.parent.mkdir(parents=True,exist_ok=True)
     ow,oh=size
     if ow*9!=oh*16 or ow<480 or oh<270:raise ValueError('Only landscape study output')
@@ -188,7 +207,21 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
     if not cap.isOpened():raise RuntimeError('Source movie could not be decoded')
     rendered=0
     lead=float(manifest['lead_s'])
-    clicked=[float(e['t']) for e in manifest['events'] if e.get('kind')=='click']
+    clicks=[e for e in manifest['events'] if e.get('kind')=='click']
+    clicked=[float(e['t']) for e in clicks]
+    pointer=None
+    if premium_cursor or click_water_ripple:
+        from cinematic_recorded_pointer import CinematicRecordedPointer
+        pointer=CinematicRecordedPointer(track,clicked,style='ink',film_scale=.56)
+    if floating_stage:
+        from floating_ui_stage import floating_matrix,composite_stage
+        if not .62 <= stage_scale <= .96:
+            raise ValueError('Stage scale must preserve positive UI coverage')
+    if click_water_ripple:
+        from click_water_ripple import apply_click_water_ripple,LIFETIME_S
+    def compose_camera(m,shot,f,source_size,out_size):
+        matrix=camera(m,shot,f,source_size,out_size)
+        return floating_matrix(matrix,out_size,stage_scale) if floating_stage else matrix
     start=time.monotonic()
     try:
         for shot in shots:
@@ -197,17 +230,36 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
                 if rendered>=max_frames:break
                 ok,frame=cap.read()
                 if not ok or frame.shape[:2]!=(sh,sw):raise RuntimeError('Real source video ended early')
-                mat=camera(manifest,shot,j,(sw,sh),size)
+                mat=compose_camera(manifest,shot,j,(sw,sh),size)
                 if motion_shutter:
                     from camera_shutter import shutter_camera_warp
                     image=shutter_camera_warp(
-                        frame,shot,j,manifest,(sw,sh),size,camera)
+                        frame,shot,j,manifest,(sw,sh),size,compose_camera)
                 else:
                     image=cv2.warpAffine(frame,mat,(ow,oh),flags=cv2.INTER_CUBIC,
                         borderMode=cv2.BORDER_REPLICATE)
                 source_time=(shot.start+j)/fps
                 trace_time=source_time-lead
-                if trace_time>=float(track[0,0]):
+                if click_water_ripple:
+                    # Real click hotspots are projected through the SAME
+                    # camera as their source pixels, before screen clipping.
+                    for action in clicks:
+                        age=trace_time-float(action['t'])
+                        if not 0<=age<LIFETIME_S:continue
+                        x,y=pointer.click_center(float(action['t']))
+                        center=mat @ (x,y,1.)
+                        apply_click_water_ripple(
+                            image,(float(center[0]),float(center[1])),age,
+                            intensity=.75,lifetime_s=.49)
+                if floating_stage:
+                    image=composite_stage(image,mat,(sw,sh))
+                if premium_cursor:
+                    position=pointer.at(trace_time)
+                    if position is not None:
+                        point=mat @ (position[0],position[1],1.)
+                        pointer.paint(image,(float(point[0]),float(point[1])),
+                                      trace_time)
+                elif trace_time>=float(track[0,0]):
                     press=max((1-quintic((trace_time-t)/.17)
                               for t in clicked if 0<=trace_time-t<.17),default=0)
                     project_pointer(image,track,mat,trace_time,scale=1.0-.09*press)
@@ -232,6 +284,11 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
       'size':[ow,oh],'durationSeconds':rendered/60,
       'cameraSources':'measured DOM result/detail rectangles only',
       'motionShutter':bool(motion_shutter),
+      'floatingStage':bool(floating_stage),
+      'stageScale':float(stage_scale) if floating_stage else None,
+      'premiumCursor':bool(premium_cursor),
+      'cursorVisibility':cursor_visibility,
+      'clickWaterRipple':bool(click_water_ripple),
       'renderSeconds':round(time.monotonic()-start,2),
       'introIsActualRecordedOutcome':bool(
           shots[0].start > max((math.floor((float(e['t'])+float(manifest.get('lead_s',0)))*60)
@@ -261,6 +318,13 @@ def main():
     parser.add_argument('--width',type=int,default=1920)
     parser.add_argument('--height',type=int,default=1080)
     parser.add_argument('--max-frames',type=int)
+    parser.add_argument('--floating-stage',action='store_true',
+                        help='Compose real UI as rounded floating screen on neutral matte')
+    parser.add_argument('--premium-cursor',action='store_true',
+                        help='Use the existing small rounded Brimble SVG pointer')
+    parser.add_argument('--click-water-ripple',action='store_true',
+                        help='Refract genuine click pixels with the tested water shader')
+    parser.add_argument('--stage-scale',type=float,default=.79)
     parser.add_argument('--camera-shutter',action='store_true',
                         help='Opt-in 3-sample camera-motion exposure; holds stay sharp')
     parser.add_argument('--quality-gate',action='store_true',
@@ -270,6 +334,8 @@ def main():
     a=parser.parse_args()
     render(a.video,a.manifest,a.edl,a.out,(a.width,a.height),a.max_frames,
            quality_gate=a.quality_gate,bounded_repair=a.bounded_repair,
-           motion_shutter=a.camera_shutter)
+           motion_shutter=a.camera_shutter,
+           floating_stage=a.floating_stage,premium_cursor=a.premium_cursor,
+           click_water_ripple=a.click_water_ripple,stage_scale=a.stage_scale)
 
 if __name__=='__main__':main()
