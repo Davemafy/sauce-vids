@@ -98,12 +98,17 @@ def _edge_bend(radius_fraction):
 def apply_loupe(stage, source, transform, shot, time):
     """Sample original capture pixels directly. Color separation stays at the rim."""
     height,width = stage.shape[:2]
-    entry = smooth5((time-shot.start-.07)/.28)
+    entry_phase = (time-shot.start-.10)/.31
+    entry = smooth5(entry_phase)
     exit_strength = smooth5((shot.end-time-.24)/.47) if shot.dissolve else 1.
     strength = min(entry,exit_strength)
     pointer_x,pointer_y = shot.pointer(time)
     x,y,w,h = shot.result
-    reveal = smooth5((time-(shot.reframe if shot.reframe is not None else shot.changed))/.29)
+    reframe = shot.reframe if shot.reframe is not None else shot.changed
+    reframe_phase = (time-reframe)/.34
+    if reframe < shot.changed:
+        reframe_phase -= .12/.34
+    reveal = smooth5(reframe_phase)
     # Keep the live control as the anchor, then include the entire changed value group.
     left,right = min(pointer_x,x),max(pointer_x,x+w)
     top,bottom = min(pointer_y,y),max(pointer_y,y+h)
@@ -147,6 +152,20 @@ def apply_loupe(stage, source, transform, shot, time):
             sample[:,:,channel]=cv2.remap(source[:,:,channel],mx+sign*dx/radius*fringe,
                                           my+sign*dy/radius*fringe,cv2.INTER_LINEAR,
                                           borderMode=cv2.BORDER_REPLICATE)
+        # Short radial shutter streaks appear during the optical movement.
+        # Stable frames use only the original sharp sample.
+        phase = max(0.,1.-abs(2.*entry_phase-1.),1.-abs(2.*reframe_phase-1.))
+        if shot.dissolve:
+            exit_phase = (shot.end-time-.24)/.47
+            phase = max(phase,1.-abs(2.*exit_phase-1.))
+        if phase > .03:
+            spread = .034*phase**2
+            mx0,my0 = mx-focus_x,my-focus_y
+            early = cv2.remap(source,mx-mx0*spread,my-my0*spread,cv2.INTER_LINEAR,
+                              borderMode=cv2.BORDER_REPLICATE)
+            late = cv2.remap(source,mx+mx0*spread,my+my0*spread,cv2.INTER_LINEAR,
+                             borderMode=cv2.BORDER_REPLICATE)
+            sample = cv2.addWeighted(sample,.56,cv2.addWeighted(early,.5,late,.5,0),.44,0)
         roi=stage[y0:y1,x0:x1]
         shadow=np.clip(1.-np.abs(radial-1.)*radius/15.,0,1)*.32*strength
         out=roi*(1.-shadow[:,:,None])*(1.-alpha[:,:,None])+sample*alpha[:,:,None]
