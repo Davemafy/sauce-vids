@@ -28,6 +28,25 @@ const input=(preset:"clean-studio"|"3d-launch"|"hyper-cut")=>({
   events:richTrace,startMs:0,durationMs:8000,fps:60,preset
 });
 
+test("explicit 3D Launch hold keeps every recorded source frame",()=>{
+  const continuous=buildMotionEnginePlan({
+    ...input("3d-launch"),
+    presetOverrides:{director:{idleStrategy:"hold",maxWarpSpeed:1}}
+  });
+  const frames=continuous.framePlan.frames;
+  assert.equal(frames.length,480);
+  assert.equal(continuous.framePlan.outputDurationMs,8000);
+  assert.equal(continuous.foleyPlan.durationMs,8000);
+  assert.ok(frames.every((f,i)=>f.outputFrame===i));
+  assert.ok(frames.every((f,i)=>i===0||f.sourceMs>frames[i-1]!.sourceMs));
+  assert.equal(continuous.framePlan.editDecisions.filter(x=>x.kind==="cut").length,0);
+  assert.ok(frames.some(f=>f.camera.scale>1.01));
+  // No behavioral change to the established default 3D Launch edit path.
+  const editorial=buildMotionEnginePlan(input("3d-launch"));
+  assert.ok(editorial.framePlan.frames.length<frames.length);
+  assert.ok(editorial.framePlan.editDecisions.some(x=>x.kind==="cut"));
+});
+
 test("all three Sauce flavors are versioned, serializable and distinct",()=>{
   assert.deepEqual(SAUCE_FLAVORS,["clean-studio","3d-launch","hyper-cut"]);
   const flavors=SAUCE_FLAVORS.map(id=>resolvePreset(id));

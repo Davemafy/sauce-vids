@@ -129,7 +129,11 @@ function buildAutoDirector(events, startMs, durationMs, preset, viewport = { wid
         actionPreRollMs: d.actionPreRollMs,
         actionPostRollMs: d.actionPostRollMs
     });
-    const warp = preset.id === "3d-launch" && d.enabled
+    // A continuous browser recording explicitly requests `idleStrategy=hold`.
+    // Do not silently truncate that source into a 3-second beat-locked teaser:
+    // the browser StoryArc compositor needs a full frame for every output tick.
+    // Default 3D Launch still uses its existing cinematic beat edits.
+    const warp = preset.id === "3d-launch" && d.enabled && d.idleStrategy !== "hold"
         ? (0, timeWarp_1.beatLockTimeWarp)(basicWarp, events, startMs, preset.export.fps) : basicWarp;
     const hero = detectHeroMoments(events, startMs, durationMs, preset, warp.sourceToOutput);
     const diffs = [];
