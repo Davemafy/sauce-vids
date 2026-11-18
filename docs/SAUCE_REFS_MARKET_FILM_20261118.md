@@ -43,3 +43,8 @@ The source is Linear's marketing preview, not a customer product; it is a featur
 Owner-rejected 8.28s OpenSheets film remains FAIL. Current Linear cut is a NEW REVIEW CANDIDATE, not a retroactive approval.
 
 Next gate: owner's full-film viewing and specific creative criticism; prioritize directional, verified UI-layer choreography only where it materially improves actual footage. Preserve existing work and main-only policy.
+
+
+## 2026-11-18 — visual-rejection revision, source-true action-first result
+
+The owner-unapproved first film remains preserved, but its future-chart teaser and chart-only final crop failed visual review. Main `465e1882f60dff9200e835637c4565a7d198924c` adds reusable source-verified editorial preflight/limited repair, an optional optical camera shutter, and multi-card group framing. Four rerenders were reviewed, including native and 390px frames; the last candidate explicitly shows all three source-measured metric cards in its final payoff. New proof: [13.97s Linear quality candidate](https://devmcp.davemafy.xyz/sauce-motion-phase2/quality-action-first-20261118/), exact [A/B evidence and score](SAUCE_QUALITY_AUDIT_20261118.md). **Not commercially approved, not autonomous URL-to-film direction.**

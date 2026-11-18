@@ -2,6 +2,21 @@
 
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
+## 2026-11-18 — Phase 2 action-first film QA, source-verified group framing, bounded rejection
+
+**Verified source implementation:** main commit [`465e1882f60dff9200e835637c4565a7d198924c`](https://github.com/Davemafy/sauce-vids/commit/465e1882f60dff9200e835637c4565a7d198924c); kept prior main and all dirty production worktrees untouched. Full frame-by-frame A/B, exact film evidence, preflight rejections and creative defects: [SAUCE_QUALITY_AUDIT_20261118.md](SAUCE_QUALITY_AUDIT_20261118.md).
+
+**Public film:** [13.97s action-first Linear study](https://devmcp.davemafy.xyz/sauce-motion-phase2/quality-action-first-20261118/) · [H.264/AAC 1080p60 master](https://devmcp.davemafy.xyz/sauce-motion-phase2/quality-action-first-20261118/master-1080p60.mp4) SHA256 `834c13683c2a2171f0a1017fc05c1d4b29f5a89b227817830af844ff74236770` · [Actual before/after frames](https://devmcp.davemafy.xyz/sauce-motion-phase2/quality-action-first-20261118/comparison-source-true.jpg). Source is Linear's genuine public interactive marketing preview, not authenticated customer data. Four recorded action/outcome scenes, 838 output frames, 1920×1080/60fps, 48kHz AAC, full FFmpeg decode. Original 15.27s film is preserved at `linear-refs-market-20261118/`.
+
+**Defects and engineering correction:** first frame originally jumped to a 2.55× future metric teaser and the final crop displayed **none** of three genuine summary-card source rectangles. v2-v4 candidate rerenders were rejected for inadequate final hold, clipped 3,389 or incomplete metric group. v5 opens with recognizable workspace context, focuses the verified first metric at 1.72×, then uses the new `overview:2` DOM-measured group anchor to keep **100% / 100% / 100%** of the three verified cards in the final frame. Source-timed recorded cursor and procedural Foley remain truthful. Three output click cues f121/341/545; measured live pointer coordinates are within all three recorded targets. No white source flashes found in 280 sampled encoded frames.
+
+**Reusable opt-in improvements:** `evidence_edl_renderer.py --quality-gate` rejects future-result editorial openers, absent product context, missing source-verified outcomes and unsafe group crops. `--bounded-repair` can *only* discard a verified unnecessary teaser when the remaining film is long enough, never inventing UI or retiming clicks. `--camera-shutter` uses a 3-sample motion exposure with existing real source pixels only while the camera moves; static holds are unmodified. The normal renderer and existing signature effects remain unchanged.
+
+**Verification:** 124 passed / 11 skipped Phase 2+3, 205 passed / 1 skipped unittest, 33 TS planner passing after `npm ci` restored local build tools. Public HTTPS page, master, preview, poster and comparison returned 200; Playwright desktop 1280×720 and phone 390×844 streamed, sought and played the actual preview without errors or overflow.
+
+**Quality judgment:** **6.5/10 provisional in-house**, **not owner/human-approved**, no independent outside creative signoff. Still a tour of the public marketing preview, not an end-to-end customer task. Dark/dense UI harms phone-readability, three cuts mask real preview remount flashes, sound remains sparse and the EDL is still operator-authored. This is an evidence-backed improvement to the existing engine, **not proof that paste-any-URL auto-direction is solved**. Existing rejected CMOkit/Studio URL path and self-repair integration remain highest-priority next work. Preserve private source capture and event manifests outside public assets.
+
+
 ## 2026-11-18 — click-water refraction on genuine Brimble events (opt-in technique, NOT approved film)
 
 **Source:** current GitHub main was `9bfd5ff6bda1de737edd503a8be8214b8a9a55b7` at the start. Implemented in a fresh isolated **main** checkout on the existing persistent Vultr DevMCP worker, not in the dirty `sauce-v05-release` or `sauce-effects-20261118` directories. Those prior working trees were preserved. The commit adding this section contains the feature; inspect that commit's SHA from `main` rather than assuming the bootstrap SHA remains current.

@@ -127,3 +127,10 @@ The rim bends and splits color near the edge of the lens. The center samples
 the original frame directly. The lens starts at the recorded interaction, tracks
 the pointer and widens its framing when a result is verified. The frame renderer
 preserves the regular composition when evidence is absent or invalid.
+
+
+## 2026-11-18 — opt-in quality hardening of the source-verified EDL renderer
+
+This is **not** a restart of Phase 2 or a default Studio effect. Commit `465e1882f60dff9200e835637c4565a7d198924c` adds `scripts/editorial_quality_gate.py` and `scripts/camera_shutter.py`, with source-verified `overview:<state_index>` group framing. The existing `scripts/evidence_edl_renderer.py` accepts optional `--quality-gate`, `--bounded-repair`, and `--camera-shutter`. It rejects obviously misleading openings, camera anchors aimed at not-yet-observed results and clipped verified summary groups; source-true bounded repair can only remove an editorial teaser, not invent scenes or future events. Still requires an existing verified EDL and real X11/DOM source capture. No automatic arbitrary-URL scene direction is claimed.
+
+[Verified 13.97s Linear output](https://devmcp.davemafy.xyz/sauce-motion-phase2/quality-action-first-20261118/) and [quality audit with comparison and remaining defects](SAUCE_QUALITY_AUDIT_20261118.md). Original Brimble Phase 2 proofs, water ripple, 3D H0/H60 compositor, TypeScript motion planner and Studio were left intact.
