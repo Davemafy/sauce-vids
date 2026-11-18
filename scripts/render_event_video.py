@@ -14,6 +14,7 @@ from pathlib import Path
 import cairosvg, cv2, numpy as np
 from PIL import Image,ImageDraw,ImageFilter
 from autozoom_event_planner import plan,sample_camera
+from glass_loupe import apply_loupe,plan_loupe
 
 PROJECT=Path(__file__).resolve().parents[1]
 DEFAULT_ROOT=PROJECT/"studio"/".tmp"/"sauce-autozoom-v1"
@@ -25,6 +26,7 @@ parser.add_argument("--music",type=Path,help="Optional licensed audio recording"
 parser.add_argument("--preview",type=float)
 parser.add_argument("--seconds",type=float)
 parser.add_argument("--static",action="store_true")
+parser.add_argument("--glass-loupe",action="store_true",help="Magnify a verified slider and its observed result")
 parser.add_argument("--camera-profile",choices=["standard","screenstudio","action-first"],default="standard",
                     help="Reference or post-result timing; all focus targets still require observed DOM change")
 parser.add_argument("--presentation",choices=["window","fullscreen"],default="window",
@@ -80,6 +82,7 @@ SHOTS=plan(MANIFEST.get("events",[]),{"width":INPUT_W,"height":INPUT_H},DURATION
 if args.presentation=="fullscreen":
     SCREEN_W,SCREEN_H=MASTER_W,MASTER_H
     SCREEN_X,SCREEN_Y=0,0
+LOUPE_SHOTS=plan_loupe(MANIFEST,INPUT_W,INPUT_H,DURATION) if args.glass_loupe else []
 WORKDIR=(args.output.resolve().parent if args.output else ROOT)
 WORKDIR.mkdir(parents=True,exist_ok=True)
 (WORKDIR/"camera-plan.json").write_text(json.dumps(
@@ -173,7 +176,7 @@ def camera_matrix(t,static=False):
     dy=(SCREEN_H-INPUT_H*sy)*pan_y
     return np.array([[sx,0.,dx],[0.,sy,dy]],dtype=np.float64)
 
-def apply(source,t,static=False):
+def compose_window(source,t,static=False):
     mat=camera_matrix(t,static=static)
     content=cv2.warpAffine(source,mat,(SCREEN_W,SCREEN_H),
            flags=cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
@@ -204,6 +207,15 @@ def apply(source,t,static=False):
              window.astype(np.float32)*(1-OVERLAY_ALPHA),0,255).astype(np.uint8)
     return stage
 
+def apply(source,t,static=False):
+    stage=compose_window(source,t,static)
+    shot=next((shot for shot in LOUPE_SHOTS if shot.start<=t<shot.end),None)
+    if shot is None:
+        return stage
+    matrix=camera_matrix(t,static)
+    matrix[:,2]+=(SCREEN_X,SCREEN_Y)
+    return apply_loupe(stage,source,matrix,shot,t)
+
 def diagnostics():
     rows=np.array([camera_matrix(i/FPS).reshape(-1) for i in range(round(DURATION*FPS))])
     vel=np.diff(rows,axis=0)
@@ -211,6 +223,7 @@ def diagnostics():
     metrics={
        "frames":len(rows),
        "zoom_shots":(0 if args.static else len(SHOTS)),
+       "glass_loupe_shots":len(LOUPE_SHOTS),
        "max_translation_per_frame_px":round(float(np.max(np.abs(vel[:,[2,5]]))),4),
        "max_translation_acceleration_px_per_frame_sq":
              round(float(np.max(np.abs(accel[:,[2,5]]))),4),

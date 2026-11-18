@@ -110,3 +110,20 @@ The original 197-frame Phase 2 proof remains an independent regression baseline.
 The 3D Launch source-true beat scheduler generates actual hard cuts at observed hero actions, avoiding motion-blurring a cut frame. Camera transitions preserve the 180 / 24 / 1 physical spring constants between editorial cuts. Every Foley event maps to an integer output-video frame (800 audio samples per frame at 60fps and 48kHz), with sample alignment reverified against decoded AAC.
 
 Verified real Brimble output: https://devmcp.davemafy.xyz/sauce-motion-phase2/z60-beats/ ; master SHA-256 35ef68e22c842eb28cb90ccda92a3961af770ed6352c716c609693648fa2a48c. 1920x1080 H.264/60fps, 197 frames, 3.283333s and AAC stereo 48kHz. The 125th output frame is an executed action-aligned cut, producing 125- and 72-frame shots. There were 120 elevated-modal frames, zero failed modal-free background attempts, 6 verified source hashes, 3 semantic checks and 3 pixel-region checks. Decoded AAC clicks had 0 sample offset before and after the cut. TypeScript 25/25; Python unittest 160/160; Phase 2 pytest with browser 17/17. Opened the new QA montage and full-res cut frame; validated public desktop and mobile playback. The limited 3.3s proof is technically passed, not a premium editorial film or arbitrary-source signoff. See docs/SAUCE_HANDOFF.md for retained gaps.
+
+### Event-video glass loupe
+
+\`scripts/render_event_video.py --glass-loupe --video CAPTURE --manifest MANIFEST --output OUTPUT\`
+adds an event-driven loupe to the browser recording path. It is opt-in.
+The sidecar must declare \`cursorless: true\` and contain one or more
+\`slider_change\` events with press time \`start\`, verified result time \`t\`,
+release time \`end\`, a nonempty \`evidence\` string, \`targetRect\` and
+\`resultRect\`, and ordered \`pointer_samples\` with \`t\`, \`x\` and \`y\`.
+All times use seconds on the capture clock. Rectangles and pointer positions
+use decoded source-pixel coordinates. Capture adapters should record actual
+before/after UI change and provide bounds of the changed visible result.
+
+The rim bends and splits color near the edge of the lens. The center samples
+the original frame directly. The lens starts at the recorded interaction, tracks
+the pointer and widens its framing when a result is verified. The frame renderer
+preserves the regular composition when evidence is absent or invalid.
