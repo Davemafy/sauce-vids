@@ -15,6 +15,7 @@ import cairosvg, cv2, numpy as np
 from PIL import Image,ImageDraw,ImageFilter,ImageOps
 from autozoom_event_planner import plan,sample_camera,smooth5
 from anchored_result_cut import plan_result_cut
+from verified_workflow_editorial import plan_verified_workflow
 from source_region_mask import dim_outside_region
 from recorded_pointer import pointer_track, project_pointer
 from glass_loupe import apply_loupe,plan_loupe
@@ -31,6 +32,10 @@ parser.add_argument("--seconds",type=float)
 parser.add_argument("--static",action="store_true")
 parser.add_argument("--anchored-result-cut",action="store_true",
                     help="Opt into a fullscreen match cut on a verified product result")
+parser.add_argument("--trim-real-idle-intro",action="store_true",
+                    help="Exclude source-proven idle opening before its first actual pointer motion")
+parser.add_argument("--verified-workflow-editorial",action="store_true",
+                    help="Opt-in source-verified UI workflow story: action, result and hold")
 parser.add_argument("--guided-result",action="store_true",
                     help="Frame the recorded click and smoothly push into its verified result")
 parser.add_argument("--recorded-pointer",action="store_true",
@@ -50,6 +55,12 @@ if args.anchored_result_cut and (args.presentation!="fullscreen" or args.glass_l
     parser.error("--anchored-result-cut requires fullscreen presentation and its own camera")
 if args.result_focus and not args.anchored_result_cut:
     parser.error("--result-focus requires --anchored-result-cut")
+if args.trim_real_idle_intro and not args.verified_workflow_editorial:
+    parser.error("--trim-real-idle-intro requires the verified editorial workflow")
+if args.verified_workflow_editorial and (
+        args.presentation!="fullscreen" or args.glass_loupe or
+        args.anchored_result_cut or args.guided_result or args.static):
+    parser.error("Verified workflow editorial requires a moving fullscreen source")
 if args.guided_result and (args.presentation!="fullscreen" or args.glass_loupe
                            or args.anchored_result_cut or args.static):
     parser.error("--guided-result requires a fullscreen moving camera")
@@ -118,6 +129,26 @@ LOUPE_SHOTS=plan_loupe(MANIFEST,INPUT_W,INPUT_H,DURATION) if args.glass_loupe el
 RESULT_CUT=plan_result_cut(MANIFEST.get("events",[]),(INPUT_W,INPUT_H),
                            (MASTER_W,MASTER_H),FPS,min(args.seconds or DURATION,DURATION)
                            ) if args.anchored_result_cut and not args.static else None
+WORKFLOW_SHOT=plan_verified_workflow(
+    MANIFEST.get("events",[]),(INPUT_W,INPUT_H),(MASTER_W,MASTER_H),
+    min(args.seconds or DURATION,DURATION),
+    MANIFEST.get("lead_s",0)) if args.verified_workflow_editorial else None
+if args.verified_workflow_editorial and WORKFLOW_SHOT is None:
+    parser.error("Missing verified selection, button action, result, or reading hold")
+TRIM_FRAMES=0
+if args.trim_real_idle_intro:
+    samples=MANIFEST.get("pointer_samples")
+    lead=MANIFEST.get("lead_s",0)
+    if not isinstance(samples,list) or not samples or not isinstance(lead,(float,int)):
+        parser.error("Need recorded first-pointer timestamps and source encoder lead")
+    first=next((float(p["t"]) for p in samples if isinstance(p,dict)
+                and type(p.get("t")) in (int,float)
+                and math.isfinite(p["t"]) and p["t"]>=0),None)
+    if first is None:
+        parser.error("No real pointer movement to ground intro trim")
+    TRIM_FRAMES=max(0,math.floor((first+lead-.7)*FPS))
+    if TRIM_FRAMES>=math.floor(WORKFLOW_SHOT.button_start*FPS)-30:
+        parser.error("Source trim would remove meaningful action")
 GUIDED_SHOT=SHOTS[0] if args.guided_result and SHOTS else None
 GUIDED_CLICK=next((event.get("targetRect") for event in MANIFEST.get("events", [])
                    if event.get("kind")=="click" and GUIDED_SHOT and
@@ -132,7 +163,11 @@ WORKDIR=(args.output.resolve().parent if args.output else ROOT)
 WORKDIR.mkdir(parents=True,exist_ok=True)
 (WORKDIR/"camera-plan.json").write_text(json.dumps(
  {"source":str(MANIFEST_PATH),"algorithm":"event-driven camera planner, no authored cues",
-  "profile":"guided-result" if GUIDED_SHOT else args.camera_profile,"presentation":args.presentation,
+  "profile":("verified-workflow-editorial" if WORKFLOW_SHOT else
+             "guided-result" if GUIDED_SHOT else args.camera_profile),
+  "presentation":args.presentation,
+  "verifiedWorkflow":WORKFLOW_SHOT.receipt() if WORKFLOW_SHOT else None,
+  "trimSourceFrames":TRIM_FRAMES,
   "anchoredResultFrame":RESULT_CUT.frame if RESULT_CUT else None,
   "guidedResultMotion":({"start":GUIDED_SHOT.start+.18,"settle":GUIDED_SHOT.start+.96}
                         if GUIDED_SHOT else None),
@@ -207,6 +242,8 @@ OVERLAY_ALPHA=OVERLAY[:,:,3:4].astype(np.float32)/255.0
 OVERLAY_RGB=OVERLAY[:,:,:3].astype(np.float32)
 
 def camera_matrix(t,static=False):
+    if WORKFLOW_SHOT is not None and not static:
+        return WORKFLOW_SHOT.matrix(t)
     if RESULT_CUT is not None and not static and round(t*FPS)>=RESULT_CUT.frame:
         return RESULT_CUT.matrix.copy()
     zoom,fx,fy= (1,.5,.5) if static or RESULT_CUT is not None else sample_camera(t,SHOTS)
@@ -300,28 +337,48 @@ def apply(source,t,static=False):
     return apply_loupe(stage,source,matrix,shot,t)
 
 def diagnostics():
-    frames=round(min(args.seconds or DURATION,DURATION)*FPS)
-    rows=np.array([camera_matrix(i/FPS,static=args.static).reshape(-1) for i in range(frames)])
+    end_frames=round(min(args.seconds or DURATION,DURATION)*FPS)
+    frames=end_frames-TRIM_FRAMES
+    if frames<24:raise ValueError("Too few genuine source frames after trim")
+    rows=np.array([camera_matrix((TRIM_FRAMES+i)/FPS,static=args.static).reshape(-1)
+                   for i in range(frames)])
     vel=np.diff(rows,axis=0)
     accel=np.diff(vel,axis=0)
+    continuous_vel=vel
+    if WORKFLOW_SHOT is not None:
+        # A documented, intentional action-to-result edit is not a
+        # single-frame camera pan. Measure motion speed separately.
+        cut_at=math.ceil(WORKFLOW_SHOT.result_start*FPS)-TRIM_FRAMES
+        if 0<cut_at<len(rows):
+            continuous_vel=np.delete(vel,cut_at-1,axis=0)
     metrics={
        "frames":len(rows),
        "zoom_shots":0 if args.static or RESULT_CUT else len(SHOTS),
        "anchored_result_frame":RESULT_CUT.frame if RESULT_CUT else None,
        "result_focus":bool(args.result_focus and RESULT_CUT),
+       "verified_workflow_editorial":WORKFLOW_SHOT is not None,
+       "trimmed_real_idle_frames":TRIM_FRAMES,
+       "cut_on_verified_result_source_frame":(
+           math.ceil(WORKFLOW_SHOT.result_start*FPS) if WORKFLOW_SHOT else None),
        "glass_loupe_shots":len(LOUPE_SHOTS),
        "recorded_pointer_samples":len(POINTER) if POINTER is not None else 0,
        "max_translation_per_frame_px":round(float(np.max(np.abs(vel[:,[2,5]]),initial=0)),4),
+       "max_continuous_translation_per_frame_px":round(
+           float(np.max(np.abs(continuous_vel[:,[2,5]]),initial=0)),4),
        "max_translation_acceleration_px_per_frame_sq":
              round(float(np.max(np.abs(accel[:,[2,5]]),initial=0)),4),
        "max_zoom_per_frame":round(float(np.max(np.abs(vel[:,0]),initial=0)),8),
        "frame_source":("unmodified browser recording" if args.presentation=="fullscreen" else "Shotcandy MIT browser-dark.svg"),
-       "camera_profile":"guided-result" if GUIDED_SHOT else args.camera_profile,"presentation":args.presentation,
+       "camera_profile":("verified-workflow-editorial" if WORKFLOW_SHOT else
+                         "guided-result" if GUIDED_SHOT else args.camera_profile),
+       "presentation":args.presentation,
        "source_capture":str(MANIFEST.get("source_kind",MANIFEST.get("capture","verified browser recording"))),
        "camera_plan_source":"recorded click and DOM state change",
        "browser_frame_not_handmade":True,
        "stable_window":True,
-       "interpolation":"hard cut" if RESULT_CUT else "C2 quintic",
+       "interpolation":("verified outcome cut + C2 quintic motion"
+                        if WORKFLOW_SHOT else
+                        "hard cut" if RESULT_CUT else "C2 quintic"),
     }
     if not np.isfinite(rows).all():raise RuntimeError("Nonfinite camera matrix")
     (WORKDIR/"camera-metrics.json").write_text(json.dumps(metrics,indent=2))
@@ -329,12 +386,15 @@ def diagnostics():
     return metrics
 
 def render(output,seconds=None,static=False):
-    frames=round((seconds or DURATION)*FPS)
-    frames=min(frames,round(DURATION*FPS))
-    ffread=subprocess.Popen([
-     "ffmpeg","-hide_banner","-loglevel","error",
-     "-i",str(SRC),"-f","rawvideo","-pix_fmt","bgr24","pipe:1"
-    ],stdout=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=2*1024*1024)
+    end_frames=min(round((seconds or DURATION)*FPS),round(DURATION*FPS))
+    frames=end_frames-TRIM_FRAMES
+    if frames<24:raise ValueError("No meaningful source frames after cut")
+    decoder=["ffmpeg","-hide_banner","-loglevel","error"]
+    if TRIM_FRAMES:
+        decoder+=["-ss",f"{TRIM_FRAMES/FPS:.9f}"]
+    decoder+=["-i",str(SRC),"-f","rawvideo","-pix_fmt","bgr24","pipe:1"]
+    ffread=subprocess.Popen(decoder,stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,bufsize=2*1024*1024)
     cmd=[
        "ffmpeg","-hide_banner","-loglevel","error","-y",
        "-f","rawvideo","-pix_fmt","bgr24",
@@ -360,7 +420,7 @@ def render(output,seconds=None,static=False):
         raw=ffread.stdout.read(frame_size)
         if len(raw)!=frame_size: raise RuntimeError(f"Short source frame: {i}")
         src=np.frombuffer(raw,dtype=np.uint8).reshape(INPUT_H,INPUT_W,3)
-        image=apply(src,i/FPS,static=static)
+        image=apply(src,(i+TRIM_FRAMES)/FPS,static=static)
         encoder.stdin.write(image.tobytes())
         if i%180==0:print("RENDER",i,"/",frames,
                          round(time.monotonic()-start,2),"sec",flush=True)
@@ -378,6 +438,9 @@ def render(output,seconds=None,static=False):
     subprocess.run(["ffmpeg","-v","error","-xerror","-i",str(output),
                    "-f","null","-"],check=True,timeout=240)
     record={"file":str(output),"duration":frames/FPS,"frames":frames,
+            "trimmed_source_frames":TRIM_FRAMES,
+            "source_end_frame":end_frames,
+            "source_timeline_preserved":True,
             "render_seconds":round(time.monotonic()-start,2),
             "full_decode_verified":True,"static":static,
             "video":video}
