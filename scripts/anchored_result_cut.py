@@ -11,6 +11,7 @@ import numpy as np
 class ResultCut:
     frame: int
     matrix: np.ndarray
+    source_bounds: tuple[float, float, float, float]
 
 
 def plan_result_cut(events, source_size, output_size, fps, duration):
@@ -58,5 +59,5 @@ def plan_result_cut(events, source_size, output_size, fps, duration):
         return ResultCut(frame, np.array([
             [scale, 0., (wide - scale) * cx],
             [0., scale, (wide - scale) * cy],
-        ], dtype=np.float64))
+        ], dtype=np.float64), (x, y, x + w, y + h))
     return None

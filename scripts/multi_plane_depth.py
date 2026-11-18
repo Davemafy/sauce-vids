@@ -4,6 +4,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from source_region_mask import composite_covered_pixels, rounded_region_mask
 from spatial_parallax import window_homography,projected_target_quad
 
 DEPTH_PX=60.
@@ -34,24 +35,6 @@ def focus_background_plane(frame,stage_window,tilt,focal,
     softened=cv2.GaussianBlur(frame,(0,0),max(.01,blur_px)) if blur_px>0 else frame
     subdued=softened.astype(np.float32)*(1-dim_opacity)
     return np.uint8(np.clip(frame.astype(np.float32)*(1-mask)+subdued*mask,0,255))
-
-def _rounded_region_mask(shape,bounds,radius):
-    h,w=shape[:2]
-    left,top,right,bottom=[int(round(v)) for v in bounds]
-    left=max(0,left);top=max(0,top)
-    right=min(w-1,right);bottom=min(h-1,bottom)
-    mask=np.zeros((h,w),dtype=np.uint8)
-    if right<=left or bottom<=top:return mask
-    r=max(0,min(int(round(radius)),(right-left)//2,(bottom-top)//2))
-    if not r:
-        cv2.rectangle(mask,(left,top),(right,bottom),255,-1,cv2.LINE_AA)
-    else:
-        cv2.rectangle(mask,(left+r,top),(right-r,bottom),255,-1)
-        cv2.rectangle(mask,(left,top+r),(right,bottom-r),255,-1)
-        for cx,cy in ((left+r,top+r),(right-r,top+r),
-                      (left+r,bottom-r),(right-r,bottom-r)):
-            cv2.circle(mask,(cx,cy),r,255,-1,cv2.LINE_AA)
-    return mask
 
 def _shadow_from_mask(out,rounded_coverage,dx,dy,sigma,opacity):
     """Cast only the real rounded modal silhouette, never its bounding quad."""
@@ -106,7 +89,7 @@ def composite_elevated_modal(output,modal_source,box,stage_window,
     top=dy+float(box['y'])*factor
     right=left+float(box['width'])*factor
     bottom=top+float(box['height'])*factor
-    region=_rounded_region_mask(modal_source.shape,
+    region=rounded_region_mask(modal_source.shape,
                                 (left,top,right,bottom),radius_css*factor)
     if np.count_nonzero(region)<20:
         raise ValueError("Modal outside the real browser viewport")
@@ -128,9 +111,7 @@ def composite_elevated_modal(output,modal_source,box,stage_window,
     if lift>0:
         _shadow_from_mask(output,base_coverage,9*lift,18*lift,18,.22*lift)
         _shadow_from_mask(output,coverage,4*lift,9*lift,12,.27*lift)
-    a=coverage.astype(np.float32)[:,:,None]/255.
-    output[:]=np.uint8(np.clip(
-        output.astype(np.float32)*(1-a)+overlay.astype(np.float32)*a,0,255))
+    composite_covered_pixels(output,overlay,coverage)
     if depth_px==DEPTH_PX:
         _rounded_outer_rim(output,coverage,rim_color=rim_color)
     # Allow experimental RGB dispersion to use this exact rounded mask,
