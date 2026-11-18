@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from pathlib import Path
 
 import cairosvg, cv2, numpy as np
-from PIL import Image,ImageDraw,ImageFilter
+from PIL import Image,ImageDraw,ImageFilter,ImageOps
 from autozoom_event_planner import plan,sample_camera
 from anchored_result_cut import plan_result_cut
 from glass_loupe import apply_loupe,plan_loupe
@@ -34,7 +34,10 @@ parser.add_argument("--camera-profile",choices=["standard","screenstudio","actio
                     help="Reference or post-result timing; all focus targets still require observed DOM change")
 parser.add_argument("--presentation",choices=["window","fullscreen"],default="window",
                     help="Window uses a licensed browser frame; fullscreen preserves raw product pixels without invented chrome")
+parser.add_argument("--stage-image",type=Path,help="Operator-supplied backdrop for the window presentation")
 args=parser.parse_args()
+if args.stage_image and (args.presentation!="window" or not args.stage_image.is_file()):
+    parser.error("--stage-image requires an existing image and window presentation")
 if args.anchored_result_cut and (args.presentation!="fullscreen" or args.glass_loupe):
     parser.error("--anchored-result-cut requires fullscreen presentation and its own camera")
 ROOT=(args.manifest.parent if args.manifest else DEFAULT_ROOT).resolve()
@@ -135,7 +138,12 @@ def prepare_stage():
                 np.ones((1,1,1),dtype=np.float32))
     frame=render_shotcandy_overlay()
     # Matte gray, restrained neutral. No invented macOS bar, gradient or fake desktop wallpaper.
-    background=Image.new("RGB",(MASTER_W,MASTER_H),(231,230,228))
+    if args.stage_image:
+        with Image.open(args.stage_image) as artwork:
+            background=ImageOps.fit(ImageOps.exif_transpose(artwork).convert("RGB"),
+                                    (MASTER_W,MASTER_H),Image.Resampling.LANCZOS)
+    else:
+        background=Image.new("RGB",(MASTER_W,MASTER_H),(231,230,228))
     mask=Image.new("L",(MASTER_W,MASTER_H),0)
     painter=ImageDraw.Draw(mask)
     painter.rounded_rectangle((WINDOW_X,WINDOW_Y,WINDOW_X+WINDOW_W,

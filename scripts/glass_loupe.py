@@ -87,12 +87,12 @@ def plan_loupe(manifest, width, height, duration):
 def apply_loupe(stage, source, transform, shot, time):
     """Sample original capture pixels directly. Color separation stays at the rim."""
     height,width = stage.shape[:2]
-    entry = smooth5((time-shot.start)/.54)
+    entry = smooth5((time-shot.start)/.34)
     exit_strength = smooth5((shot.end-time)/.48) if shot.dissolve else 1.
     strength = min(entry,exit_strength)
     pointer_x,pointer_y = shot.pointer(time)
     x,y,w,h = shot.result
-    reveal = smooth5((time-shot.changed)/.66)
+    reveal = smooth5((time-shot.changed)/.38)
     # Keep the live control as the anchor, then include the entire changed value group.
     left,right = min(pointer_x,x),max(pointer_x,x+w)
     top,bottom = min(pointer_y,y),max(pointer_y,y+h)
@@ -101,13 +101,21 @@ def apply_loupe(stage, source, transform, shot, time):
     sx,sy = float(transform[0,0]),float(transform[1,1])
     center_x = focus_x*sx+transform[0,2]
     center_y = focus_y*sy+transform[1,2]
-    settled_radius = height*(.39+.17*reveal)
-    radius = settled_radius*(.48+.52*strength)
+    center_x += (width*.50-center_x)*reveal*.82
+    center_y += (height*.72-center_y)*reveal*.65
+    settled_radius = height*(.39+.29*reveal)
+    radius = settled_radius*(.30+.70*strength)
     center_x = float(np.clip(center_x,radius*.72,width-radius*.72))
     center_y = float(np.clip(center_y,radius*.66,height-radius*.66))
-    magnification = 1.78+reveal*(min(1.88, .78*settled_radius/max(1.,math.hypot((right-left)*sx,(bottom-top)*sy)/2))-1.78)
+    result_half_span = math.hypot((right-left)*sx,(bottom-top)*sy)/2
+    fitted_zoom = min(1.78, .76*settled_radius/max(1.,result_half_span))
+    magnification = 1.78+reveal*(fitted_zoom-1.78)
     magnification = max(1.05,magnification)
     magnification = 1.+(magnification-1.)*strength
+    # Lead the resulting value slightly left of the optical center so
+    # the neighboring plan remains in context, with space beneath the price.
+    focus_x += reveal*(x+w/2+(center_x-width*.37)/(sx*magnification)-focus_x)
+    focus_y += reveal*(y+h/2+(center_y-height*.65)/(sy*magnification)-focus_y)
     if strength > 0:
         x0,y0=max(0,math.floor(center_x-radius-18)),max(0,math.floor(center_y-radius-18))
         x1,y1=min(width,math.ceil(center_x+radius+18)),min(height,math.ceil(center_y+radius+18))
@@ -154,7 +162,7 @@ def apply_loupe(stage, source, transform, shot, time):
     # High contrast white body and black keyline survive a phone-size downscale.
     # Subpixel coordinates keep the cursor from snapping to integer positions.
     glyph = np.float32([[0,0],[0,36],[10,27],[18,44],[25,40],[17,24],[33,24]])
-    glyph *= height/1080
+    glyph *= .86*height/1080
     glyph += (tip_x,tip_y)
     polygon = np.int32(np.rint(glyph*16))
     cv2.polylines(stage,[polygon],True,(8,9,10),max(2,round(height/270)),cv2.LINE_AA,shift=4)
