@@ -89,7 +89,8 @@ def pointer_visibility_report(pointer,shots,manifest,source_size,output_size,
     lead=float(manifest['lead_s'])
     missing=0
     offscreen=[]
-    for shot in shots:
+    offscreen_by_shot={}
+    for index,shot in enumerate(shots):
         for j in range(shot.length()):
             source_t=(shot.start+j)/60-lead
             original=pointer.at(source_t)
@@ -102,6 +103,7 @@ def pointer_visibility_report(pointer,shots,manifest,source_size,output_size,
                 m=floating_matrix(m,output_size,stage_scale)
             px,py=m @ np.float64([original[0],original[1],1])
             if not (24<=px<=width-24 and 24<=py<=height-24):
+                offscreen_by_shot[index]=offscreen_by_shot.get(index,0)+1
                 offscreen.append({
                     'sourceFrame':shot.start+j,'outputFrame':shot.out_start+j,
                     'position':[round(float(px),2),round(float(py),2)],
@@ -109,4 +111,5 @@ def pointer_visibility_report(pointer,shots,manifest,source_size,output_size,
     return {'unrecordedOpeningFrames':missing,
             'offscreenFrames':len(offscreen),
             'firstOffscreenFrames':offscreen[:4],
+            'offscreenByShotIndex':offscreen_by_shot,
             'recordedInputNeverRepositioned':True}

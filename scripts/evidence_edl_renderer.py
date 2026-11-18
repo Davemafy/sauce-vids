@@ -143,7 +143,8 @@ def compile_timeline(shots):
 def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
            size=(1920,1080),limit=None,quality_gate=False,bounded_repair=False,
            motion_shutter=False,floating_stage=False,premium_cursor=False,
-           click_water_ripple=False,stage_scale=.79):
+           click_water_ripple=False,stage_scale=.79,
+           source_verified_whip=False,continuity_receipt:Path|None=None):
     manifest=json.loads(manifest_path.read_text())
     edit=json.loads(edit_path.read_text())
     probe=json.loads(subprocess.check_output([
@@ -159,6 +160,12 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
     if source_frames<2:raise ValueError('Empty source')
     sha=hashlib.sha256(movie.read_bytes()).hexdigest()
     if manifest.get('source_sha256')!=sha:raise ValueError('Raw source hash mismatch')
+    if continuity_receipt is not None:
+        from source_continuity_scan import validate_continuity_receipt
+        validate_continuity_receipt(
+            json.loads(Path(continuity_receipt).read_text()),
+            source_sha256=sha,source_frames=source_frames,
+            source_size=(sw,sh),edit=edit)
     repair_log=[]
     quality_findings=[]
     if quality_gate or bounded_repair:
@@ -174,6 +181,16 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
     shots,total=build(manifest,edit,(sw,sh),source_frames)
     track=pointer_track(manifest,sw,sh)
     if track is None:raise ValueError('Need authentic source-timed cursor track')
+    if source_verified_whip:
+        from source_verified_whip import whip_phase, camera_whip_dx, film_shutter_whip
+    def visual_camera(m,shot,f,source_size,out_size):
+        mat=camera(m,shot,f,source_size,out_size)
+        if source_verified_whip:
+            phase=whip_phase(
+                f,shot.length(),incoming=shot.out_start>0,
+                outgoing=shot.out_start+shot.length()<total)
+            mat[0,2]+=camera_whip_dx(phase,out_size[0])
+        return mat
     if limit is not None:
         if type(limit)!=int or not 30<=limit<=total:raise ValueError('Invalid review length')
     max_frames=min(limit or total,total)
@@ -186,7 +203,7 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
         candidate=CinematicRecordedPointer(track,verified_clicks,
                                             style='ink',film_scale=.56)
         cursor_visibility=pointer_visibility_report(
-            candidate,shots,manifest,(sw,sh),size,camera,
+            candidate,shots,manifest,(sw,sh),size,visual_camera,
             stage_scale if floating_stage else 1.)
         if quality_gate and (
             cursor_visibility['offscreenFrames'] or
@@ -220,7 +237,7 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
     if click_water_ripple:
         from click_water_ripple import apply_click_water_ripple,LIFETIME_S
     def compose_camera(m,shot,f,source_size,out_size):
-        matrix=camera(m,shot,f,source_size,out_size)
+        matrix=visual_camera(m,shot,f,source_size,out_size)
         return floating_matrix(matrix,out_size,stage_scale) if floating_stage else matrix
     start=time.monotonic()
     try:
@@ -238,6 +255,11 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
                 else:
                     image=cv2.warpAffine(frame,mat,(ow,oh),flags=cv2.INTER_CUBIC,
                         borderMode=cv2.BORDER_REPLICATE)
+                if source_verified_whip:
+                    phase=whip_phase(
+                        j,shot.length(),incoming=shot.out_start>0,
+                        outgoing=shot.out_start+shot.length()<total)
+                    image=film_shutter_whip(image,phase)
                 source_time=(shot.start+j)/fps
                 trace_time=source_time-lead
                 if click_water_ripple:
@@ -252,7 +274,12 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
                             image,(float(center[0]),float(center[1])),age,
                             intensity=.75,lifetime_s=.49)
                 if floating_stage:
-                    image=composite_stage(image,mat,(sw,sh))
+                    # Screen frame stays seated on the matte. The short cut
+                    # movement travels through the UI inside that frame.
+                    stage_mat=(floating_matrix(
+                        camera(manifest,shot,j,(sw,sh),size),size,stage_scale)
+                        if source_verified_whip else mat)
+                    image=composite_stage(image,stage_mat,(sw,sh))
                 if premium_cursor:
                     position=pointer.at(trace_time)
                     if position is not None:
@@ -279,6 +306,7 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
     receipt={
       'schema':'sauce-evidence-edl-proof-v1',
       'sourceSha256':sha,'sourceFrames':source_frames,
+      'continuityReceiptChecked':bool(continuity_receipt is not None),
       'sourceDpr':manifest.get('dpr'),'sourceTruth':manifest['source_kind'],
       'frames':rendered,'fps':60,
       'size':[ow,oh],'durationSeconds':rendered/60,
@@ -289,6 +317,7 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
       'premiumCursor':bool(premium_cursor),
       'cursorVisibility':cursor_visibility,
       'clickWaterRipple':bool(click_water_ripple),
+      'sourceVerifiedWhip':bool(source_verified_whip),
       'renderSeconds':round(time.monotonic()-start,2),
       'introIsActualRecordedOutcome':bool(
           shots[0].start > max((math.floor((float(e['t'])+float(manifest.get('lead_s',0)))*60)
@@ -325,6 +354,10 @@ def main():
     parser.add_argument('--click-water-ripple',action='store_true',
                         help='Refract genuine click pixels with the tested water shader')
     parser.add_argument('--stage-scale',type=float,default=.79)
+    parser.add_argument('--continuity-receipt',type=Path,
+                        help='Require hash-matched real source instability proof')
+    parser.add_argument('--source-verified-whip',action='store_true',
+                        help='Short single-source directional cut, never ghosted UI')
     parser.add_argument('--camera-shutter',action='store_true',
                         help='Opt-in 3-sample camera-motion exposure; holds stay sharp')
     parser.add_argument('--quality-gate',action='store_true',
@@ -336,6 +369,8 @@ def main():
            quality_gate=a.quality_gate,bounded_repair=a.bounded_repair,
            motion_shutter=a.camera_shutter,
            floating_stage=a.floating_stage,premium_cursor=a.premium_cursor,
-           click_water_ripple=a.click_water_ripple,stage_scale=a.stage_scale)
+           click_water_ripple=a.click_water_ripple,stage_scale=a.stage_scale,
+           source_verified_whip=a.source_verified_whip,
+           continuity_receipt=a.continuity_receipt)
 
 if __name__=='__main__':main()
