@@ -86,3 +86,19 @@ def test_quintic_camera_is_bounded_and_quiet_at_endpoints():
     assert quintic(50)==1
     assert 0<quintic(.25)<.25
     assert quintic(.5)==pytest.approx(.5)
+
+def test_source_verified_overview_anchor_keeps_actual_cards_together():
+    m=evidence()
+    states=[v for v in m['events'] if v.get('kind')=='state_change']
+    states[2]['summaryRects']=[
+        {'x':300.,'y':260.,'width':260.,'height':110.},
+        {'x':620.,'y':260.,'width':260.,'height':110.},
+        {'x':940.,'y':260.,'width':260.,'height':110.}
+    ]
+    assert pose(m,'overview:2',(1600,900))==(750.,315.)
+    states[2]['summaryRects'][2]['x']=1590.
+    with pytest.raises(ValueError,match='outside'):
+        pose(m,'overview:2',(1600,900))
+    states[2].pop('summaryRects')
+    with pytest.raises(ValueError,match='No verified multi-element'):
+        pose(m,'overview:2',(1600,900))

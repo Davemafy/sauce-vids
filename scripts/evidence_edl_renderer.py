@@ -23,9 +23,31 @@ def pose(manifest,selector,source_size):
         return .432*w,.5*h
     kind,index=selector.split(':')
     events=[e for e in manifest['events'] if e.get('kind')=='state_change']
-    if not 0<=int(index)<len(events) or kind not in ('result','detail','summary'):
+    if not 0<=int(index)<len(events) or kind not in ('result','detail','summary','overview'):
         raise ValueError('Unsupported or unobserved camera anchor')
     state=events[int(index)]
+    if kind=='overview':
+        # A real multi-card outcome can only be presented as a complete
+        # information group when *each* card was DOM-measured in the capture.
+        boxes=state.get('summaryRects')
+        if not isinstance(boxes,list) or len(boxes)<2:
+            raise ValueError('No verified multi-element result for overview')
+        visible=[]
+        for box in boxes:
+            if not isinstance(box,dict):raise ValueError('Bad summary group rectangle')
+            try:
+                rx,ry,rw,rh=[float(box[k]) for k in ('x','y','width','height')]
+            except (KeyError,ValueError,TypeError) as exc:
+                raise ValueError('Bad summary geometry') from exc
+            if not all(map(math.isfinite,(rx,ry,rw,rh))) or rw<=0 or rh<=0:
+                raise ValueError('Bad summary dimensions')
+            x0,y0=max(0.,rx),max(0.,ry)
+            x1,y1=min(float(w),rx+rw),min(float(h),ry+rh)
+            if x1<=x0 or y1<=y0 or (x1-x0)*(y1-y0)<.80*rw*rh:
+                raise ValueError('Multi-card summary mostly outside captured viewport')
+            visible.append((x0,y0,x1,y1))
+        return (min(q[0] for q in visible)+max(q[2] for q in visible))/2,(
+            min(q[1] for q in visible)+max(q[3] for q in visible))/2
     if not isinstance(state.get('evidence'),str) or not state['evidence']:
         raise ValueError('Missing state-change proof')
     key={'result':'resultRect','detail':'detailRect','summary':'summaryRects'}[kind]
@@ -117,7 +139,8 @@ def compile_timeline(shots):
              'sourceFrames':[s.start,s.end],
              'camera':s.keys} for s in shots]
 def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
-           size=(1920,1080),limit=None):
+           size=(1920,1080),limit=None,quality_gate=False,bounded_repair=False,
+           motion_shutter=False):
     manifest=json.loads(manifest_path.read_text())
     edit=json.loads(edit_path.read_text())
     probe=json.loads(subprocess.check_output([
@@ -133,6 +156,18 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
     if source_frames<2:raise ValueError('Empty source')
     sha=hashlib.sha256(movie.read_bytes()).hexdigest()
     if manifest.get('source_sha256')!=sha:raise ValueError('Raw source hash mismatch')
+    repair_log=[]
+    quality_findings=[]
+    if quality_gate or bounded_repair:
+        from editorial_quality_gate import bounded_repair as repair_edit, inspect_editorial
+        if bounded_repair:
+            edit,repair_log,quality_findings=repair_edit(manifest,edit)
+        else:
+            quality_findings=inspect_editorial(manifest,edit)
+        blockers=[f for f in quality_findings if f['level']=='reject']
+        if blockers:
+            raise ValueError('EDL quality gate rejected unsafe edit: '+
+                             json.dumps(blockers,sort_keys=True))
     shots,total=build(manifest,edit,(sw,sh),source_frames)
     track=pointer_track(manifest,sw,sh)
     if track is None:raise ValueError('Need authentic source-timed cursor track')
@@ -163,8 +198,13 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
                 ok,frame=cap.read()
                 if not ok or frame.shape[:2]!=(sh,sw):raise RuntimeError('Real source video ended early')
                 mat=camera(manifest,shot,j,(sw,sh),size)
-                image=cv2.warpAffine(frame,mat,(ow,oh),flags=cv2.INTER_CUBIC,
-                    borderMode=cv2.BORDER_REPLICATE)
+                if motion_shutter:
+                    from camera_shutter import shutter_camera_warp
+                    image=shutter_camera_warp(
+                        frame,shot,j,manifest,(sw,sh),size,camera)
+                else:
+                    image=cv2.warpAffine(frame,mat,(ow,oh),flags=cv2.INTER_CUBIC,
+                        borderMode=cv2.BORDER_REPLICATE)
                 source_time=(shot.start+j)/fps
                 trace_time=source_time-lead
                 if trace_time>=float(track[0,0]):
@@ -191,6 +231,7 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
       'frames':rendered,'fps':60,
       'size':[ow,oh],'durationSeconds':rendered/60,
       'cameraSources':'measured DOM result/detail rectangles only',
+      'motionShutter':bool(motion_shutter),
       'renderSeconds':round(time.monotonic()-start,2),
       'introIsActualRecordedOutcome':bool(
           shots[0].start > max((math.floor((float(e['t'])+float(manifest.get('lead_s',0)))*60)
@@ -199,6 +240,10 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
       'editHasNonchronologicalProofTeaser':bool(
           shots[0].start>shots[1].start),
       'shotMap':compile_timeline(shots),
+      'qualityGate':{'applied':bool(quality_gate or bounded_repair),
+                     'objectiveFindings':quality_findings,
+                     'boundedRepairs':repair_log,
+                     'creativeApproval':False},
       'sourceUrl':manifest['source']}
     output.with_suffix('.receipt.json').write_text(json.dumps(receipt,indent=2))
     subprocess.run(['ffmpeg','-v','error','-xerror','-i',str(output),
@@ -216,7 +261,15 @@ def main():
     parser.add_argument('--width',type=int,default=1920)
     parser.add_argument('--height',type=int,default=1080)
     parser.add_argument('--max-frames',type=int)
+    parser.add_argument('--camera-shutter',action='store_true',
+                        help='Opt-in 3-sample camera-motion exposure; holds stay sharp')
+    parser.add_argument('--quality-gate',action='store_true',
+                        help='Reject source-true but editorially misleading films')
+    parser.add_argument('--bounded-repair',action='store_true',
+                        help='Only remove a future-result teaser when safely supported')
     a=parser.parse_args()
-    render(a.video,a.manifest,a.edl,a.out,(a.width,a.height),a.max_frames)
+    render(a.video,a.manifest,a.edl,a.out,(a.width,a.height),a.max_frames,
+           quality_gate=a.quality_gate,bounded_repair=a.bounded_repair,
+           motion_shutter=a.camera_shutter)
 
 if __name__=='__main__':main()
