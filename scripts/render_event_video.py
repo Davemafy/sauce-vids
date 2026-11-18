@@ -14,6 +14,7 @@ from pathlib import Path
 import cairosvg, cv2, numpy as np
 from PIL import Image,ImageDraw,ImageFilter
 from autozoom_event_planner import plan,sample_camera
+from anchored_result_cut import plan_result_cut
 from glass_loupe import apply_loupe,plan_loupe
 
 PROJECT=Path(__file__).resolve().parents[1]
@@ -26,12 +27,16 @@ parser.add_argument("--music",type=Path,help="Optional licensed audio recording"
 parser.add_argument("--preview",type=float)
 parser.add_argument("--seconds",type=float)
 parser.add_argument("--static",action="store_true")
+parser.add_argument("--anchored-result-cut",action="store_true",
+                    help="Opt into a fullscreen match cut on a verified product result")
 parser.add_argument("--glass-loupe",action="store_true",help="Magnify a verified slider and its observed result")
 parser.add_argument("--camera-profile",choices=["standard","screenstudio","action-first"],default="standard",
                     help="Reference or post-result timing; all focus targets still require observed DOM change")
 parser.add_argument("--presentation",choices=["window","fullscreen"],default="window",
                     help="Window uses a licensed browser frame; fullscreen preserves raw product pixels without invented chrome")
 args=parser.parse_args()
+if args.anchored_result_cut and (args.presentation!="fullscreen" or args.glass_loupe):
+    parser.error("--anchored-result-cut requires fullscreen presentation and its own camera")
 ROOT=(args.manifest.parent if args.manifest else DEFAULT_ROOT).resolve()
 SRC=(args.video or ROOT/"linear-official-preview-real-60.mp4").resolve()
 MANIFEST_PATH=(args.manifest or ROOT/"linear-interactions.json").resolve()
@@ -83,12 +88,16 @@ if args.presentation=="fullscreen":
     SCREEN_W,SCREEN_H=MASTER_W,MASTER_H
     SCREEN_X,SCREEN_Y=0,0
 LOUPE_SHOTS=plan_loupe(MANIFEST,INPUT_W,INPUT_H,DURATION) if args.glass_loupe else []
+RESULT_CUT=plan_result_cut(MANIFEST.get("events",[]),(INPUT_W,INPUT_H),
+                           (MASTER_W,MASTER_H),FPS,min(args.seconds or DURATION,DURATION)
+                           ) if args.anchored_result_cut and not args.static else None
 WORKDIR=(args.output.resolve().parent if args.output else ROOT)
 WORKDIR.mkdir(parents=True,exist_ok=True)
 (WORKDIR/"camera-plan.json").write_text(json.dumps(
  {"source":str(MANIFEST_PATH),"algorithm":"event-driven camera planner, no authored cues",
   "profile":args.camera_profile,"presentation":args.presentation,
-  "shots":[s.dictionary() for s in SHOTS]},indent=2))
+  "anchoredResultFrame":RESULT_CUT.frame if RESULT_CUT else None,
+  "shots":[] if RESULT_CUT else [s.dictionary() for s in SHOTS]},indent=2))
 
 def render_shotcandy_overlay():
     src=FRAME.read_text()
@@ -154,7 +163,9 @@ OVERLAY_ALPHA=OVERLAY[:,:,3:4].astype(np.float32)/255.0
 OVERLAY_RGB=OVERLAY[:,:,:3].astype(np.float32)
 
 def camera_matrix(t,static=False):
-    zoom,fx,fy= (1,.5,.5) if static else sample_camera(t,SHOTS)
+    if RESULT_CUT is not None and not static and round(t*FPS)>=RESULT_CUT.frame:
+        return RESULT_CUT.matrix.copy()
+    zoom,fx,fy= (1,.5,.5) if static or RESULT_CUT is not None else sample_camera(t,SHOTS)
     if args.presentation=="fullscreen":
         # Pixel-perfect isotropic scaling. Preserve source aspect ratio.
         # The target content region moves toward the optical center without
@@ -217,24 +228,26 @@ def apply(source,t,static=False):
     return apply_loupe(stage,source,matrix,shot,t)
 
 def diagnostics():
-    rows=np.array([camera_matrix(i/FPS).reshape(-1) for i in range(round(DURATION*FPS))])
+    frames=round(min(args.seconds or DURATION,DURATION)*FPS)
+    rows=np.array([camera_matrix(i/FPS,static=args.static).reshape(-1) for i in range(frames)])
     vel=np.diff(rows,axis=0)
     accel=np.diff(vel,axis=0)
     metrics={
        "frames":len(rows),
-       "zoom_shots":(0 if args.static else len(SHOTS)),
+       "zoom_shots":0 if args.static or RESULT_CUT else len(SHOTS),
+       "anchored_result_frame":RESULT_CUT.frame if RESULT_CUT else None,
        "glass_loupe_shots":len(LOUPE_SHOTS),
-       "max_translation_per_frame_px":round(float(np.max(np.abs(vel[:,[2,5]]))),4),
+       "max_translation_per_frame_px":round(float(np.max(np.abs(vel[:,[2,5]]),initial=0)),4),
        "max_translation_acceleration_px_per_frame_sq":
-             round(float(np.max(np.abs(accel[:,[2,5]]))),4),
-       "max_zoom_per_frame":round(float(np.max(np.abs(vel[:,0]))),8),
+             round(float(np.max(np.abs(accel[:,[2,5]]),initial=0)),4),
+       "max_zoom_per_frame":round(float(np.max(np.abs(vel[:,0]),initial=0)),8),
        "frame_source":("unmodified browser recording" if args.presentation=="fullscreen" else "Shotcandy MIT browser-dark.svg"),
        "camera_profile":args.camera_profile,"presentation":args.presentation,
        "source_capture":str(MANIFEST.get("source_kind",MANIFEST.get("capture","verified browser recording"))),
        "camera_plan_source":"recorded click and DOM state change",
        "browser_frame_not_handmade":True,
        "stable_window":True,
-       "interpolation":"C2 quintic",
+       "interpolation":"hard cut" if RESULT_CUT else "C2 quintic",
     }
     if not np.isfinite(rows).all():raise RuntimeError("Nonfinite camera matrix")
     (WORKDIR/"camera-metrics.json").write_text(json.dumps(metrics,indent=2))
