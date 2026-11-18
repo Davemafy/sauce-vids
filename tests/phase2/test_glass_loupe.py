@@ -63,3 +63,22 @@ def test_interpolation_preserves_sample_and_does_not_overshoot_reversal():
     assert shot.pointer(.8) == (110,50)
     assert max(shot.pointer(i/1000)[0] for i in range(500,1201)) == 110
     assert abs(shot.pointer(.801)[0]-shot.pointer(.799)[0]) < .01
+
+
+def test_sustained_drag_can_reframe_before_verified_price_and_exit_to_wide():
+    observed = event()
+    observed.update(t=2.4, end=3.7, fade_at_end=True, pointer_samples=[
+        {"t":.5,"x":55,"y":50},
+        {"t":1.45,"x":70,"y":50},
+        {"t":2.4,"x":110,"y":50},
+        {"t":3.7,"x":70,"y":50},
+    ])
+    shot, = plan_loupe({"cursorless":True,"events":[observed]},320,180,4.65)
+    assert (shot.reframe, shot.changed, shot.end, shot.dissolve) == (1.45,2.4,4.65,True)
+    source = np.full((180,320,3),40,dtype=np.uint8)
+    transform = np.float64([[1,0,0],[0,1,0]])
+    peaked = apply_loupe(source.copy(),source,transform,shot,3.)
+    returned = apply_loupe(source.copy(),source,transform,shot,4.6)
+    assert np.count_nonzero(peaked != source) > 1000
+    assert np.count_nonzero(returned != source) < 250
+    assert returned.max() > 220

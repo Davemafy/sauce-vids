@@ -18,6 +18,7 @@ class LoupeShot:
     points: tuple
     result: tuple
     dissolve: bool = True
+    reframe: float | None = None
 
     def pointer(self, time):
         index = bisect_right(self.points, time, key=lambda point: point[0])
@@ -78,21 +79,31 @@ def plan_loupe(manifest, width, height, duration):
                 continue
         except (KeyError,TypeError,ValueError,OverflowError):
             continue
-        dissolve = duration-end >= .45
+        dissolve = event.get("fade_at_end") is True or duration-end >= .45
+        # A sustained drag can become the reframing cue before the final
+        # result, but only when the DOM later verifies that same interaction.
+        first_x = points[0][1]
+        reframe = next((t for t,px,_ in points
+                        if t-start>=.75 and abs(px-first_x)>=w*.06),changed)
         shots.append(LoupeShot(start,changed,released,end if dissolve else duration,
-                               points,result,dissolve))
+                               points,result,dissolve,min(reframe,changed)))
     return shots
+
+
+def _edge_bend(radius_fraction):
+    skirt = np.clip((radius_fraction-.58)/.42,0.,1.)
+    return 1.+.06*skirt**2+.31*skirt**4
 
 
 def apply_loupe(stage, source, transform, shot, time):
     """Sample original capture pixels directly. Color separation stays at the rim."""
     height,width = stage.shape[:2]
-    entry = smooth5((time-shot.start)/.34)
-    exit_strength = smooth5((shot.end-time)/.48) if shot.dissolve else 1.
+    entry = smooth5((time-shot.start-.07)/.28)
+    exit_strength = smooth5((shot.end-time-.24)/.47) if shot.dissolve else 1.
     strength = min(entry,exit_strength)
     pointer_x,pointer_y = shot.pointer(time)
     x,y,w,h = shot.result
-    reveal = smooth5((time-shot.changed)/.38)
+    reveal = smooth5((time-(shot.reframe if shot.reframe is not None else shot.changed))/.29)
     # Keep the live control as the anchor, then include the entire changed value group.
     left,right = min(pointer_x,x),max(pointer_x,x+w)
     top,bottom = min(pointer_y,y),max(pointer_y,y+h)
@@ -102,13 +113,14 @@ def apply_loupe(stage, source, transform, shot, time):
     center_x = focus_x*sx+transform[0,2]
     center_y = focus_y*sy+transform[1,2]
     center_x += (width*.50-center_x)*reveal*.82
-    center_y += (height*.72-center_y)*reveal*.65
-    settled_radius = height*(.39+.29*reveal)
-    radius = settled_radius*(.30+.70*strength)
+    center_y += (height*.72-center_y)*reveal*.82
+    settled_radius = height*(.40+.31*reveal)
+    radius = settled_radius*(.36+.64*strength)
     center_x = float(np.clip(center_x,radius*.72,width-radius*.72))
     center_y = float(np.clip(center_y,radius*.66,height-radius*.66))
+    center_y += reveal*max(0.,radius-center_y)
     result_half_span = math.hypot((right-left)*sx,(bottom-top)*sy)/2
-    fitted_zoom = min(1.78, .76*settled_radius/max(1.,result_half_span))
+    fitted_zoom = min(1.56, .76*settled_radius/max(1.,result_half_span))
     magnification = 1.78+reveal*(fitted_zoom-1.78)
     magnification = max(1.05,magnification)
     magnification = 1.+(magnification-1.)*strength
@@ -122,15 +134,15 @@ def apply_loupe(stage, source, transform, shot, time):
         yy,xx=np.mgrid[y0:y1,x0:x1].astype(np.float32)
         dx,dy=xx-center_x,yy-center_y
         radial=np.hypot(dx,dy)/radius
-        optical=np.clip((radial-.72)/.28,0,1)
-        bend=1.+.17*optical**3
+        optical=np.clip((radial-.70)/.30,0,1)
+        bend=_edge_bend(radial)
         mx=focus_x+dx*bend/(sx*magnification)
         my=focus_y+dy*bend/(sy*magnification)
         inside=(mx>=0)&(my>=0)&(mx<source.shape[1]-1)&(my<source.shape[0]-1)
         alpha=np.clip((1.-radial)*radius/3.,0,1)*strength*inside
         sample=cv2.remap(source,mx,my,cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
         # The two color channels split in opposite directions at the outer edge.
-        fringe=optical**4 * 4.0
+        fringe = optical**3 * 9.
         for channel,sign in ((0,1),(2,-1)):
             sample[:,:,channel]=cv2.remap(source[:,:,channel],mx+sign*dx/radius*fringe,
                                           my+sign*dy/radius*fringe,cv2.INTER_LINEAR,
@@ -138,9 +150,13 @@ def apply_loupe(stage, source, transform, shot, time):
         roi=stage[y0:y1,x0:x1]
         shadow=np.clip(1.-np.abs(radial-1.)*radius/15.,0,1)*.32*strength
         out=roi*(1.-shadow[:,:,None])*(1.-alpha[:,:,None])+sample*alpha[:,:,None]
-        rim=np.clip(1.-np.abs(radial-.996)*radius/3.,0,1)*strength
-        rim*=.22+.57*np.clip(-dy/radius,0,1)
-        roi[:]=np.rint(out*(1.-rim[:,:,None])+np.float32([216,220,227])*rim[:,:,None])
+        upper_light = np.clip((-dy-.24*dx)/radius,0,1)
+        rim = np.clip(1.-np.abs(radial-.997)*radius/4.,0,1)*strength
+        rim *= .12+.68*upper_light**1.7
+        # The broader, dim inner reflection rolls off into the glass.
+        sheen = np.exp(-((radial-.979)*radius/11.)**2)*upper_light**3*.13*strength
+        out = out+(255.-out)*sheen[:,:,None]
+        roi[:]=np.rint(out*(1.-rim[:,:,None])+np.float32([211,226,229])*rim[:,:,None])
     # Match the tip to the same inverse radial map used for the footage.
     # During the optical blend we favor the visible magnified interaction.
     dx = (pointer_x-focus_x)*sx*magnification
@@ -149,8 +165,7 @@ def apply_loupe(stage, source, transform, shot, time):
     lo,hi = 0.,distance
     for _ in range(14):
         r = (lo+hi)/2
-        edge = max(0.,min(1.,(r/radius-.72)/.28))
-        if r*(1.+.17*edge**3) < distance:
+        if r*_edge_bend(r/radius) < distance:
             lo = r
         else:
             hi = r
@@ -159,12 +174,12 @@ def apply_loupe(stage, source, transform, shot, time):
     base_y = pointer_y*sy+transform[1,2]
     tip_x = base_x+(center_x+dx*radial_scale-base_x)*strength
     tip_y = base_y+(center_y+dy*radial_scale-base_y)*strength
-    # High contrast white body and black keyline survive a phone-size downscale.
+    # A dark arrow with a narrow white outline follows the optical hotspot.
     # Subpixel coordinates keep the cursor from snapping to integer positions.
-    glyph = np.float32([[0,0],[0,36],[10,27],[18,44],[25,40],[17,24],[33,24]])
-    glyph *= .86*height/1080
+    glyph = np.float32([[0,0],[4,32],[11,25],[18,43],[25,39],[17,22],[29,22]])
+    glyph *= height/1080
     glyph += (tip_x,tip_y)
     polygon = np.int32(np.rint(glyph*16))
-    cv2.polylines(stage,[polygon],True,(8,9,10),max(2,round(height/270)),cv2.LINE_AA,shift=4)
-    cv2.fillPoly(stage,[polygon],(248,248,248),cv2.LINE_AA,shift=4)
+    cv2.fillPoly(stage,[polygon],(13,14,15),cv2.LINE_AA,shift=4)
+    cv2.polylines(stage,[polygon],True,(249,249,249),max(1,round(height/385)),cv2.LINE_AA,shift=4)
     return stage
