@@ -16,6 +16,7 @@ from PIL import Image,ImageDraw,ImageFilter,ImageOps
 from autozoom_event_planner import plan,sample_camera,smooth5
 from anchored_result_cut import plan_result_cut
 from source_region_mask import dim_outside_region
+from recorded_pointer import pointer_track, project_pointer
 from glass_loupe import apply_loupe,plan_loupe
 
 PROJECT=Path(__file__).resolve().parents[1]
@@ -32,6 +33,8 @@ parser.add_argument("--anchored-result-cut",action="store_true",
                     help="Opt into a fullscreen match cut on a verified product result")
 parser.add_argument("--guided-result",action="store_true",
                     help="Frame the recorded click and smoothly push into its verified result")
+parser.add_argument("--recorded-pointer",action="store_true",
+                    help="Draw the timed mouse path on cursorless fullscreen footage")
 parser.add_argument("--result-focus",action="store_true",
                     help="Gently dim the context outside the result after an anchored cut")
 parser.add_argument("--glass-loupe",action="store_true",help="Magnify a verified slider and its observed result")
@@ -50,6 +53,8 @@ if args.result_focus and not args.anchored_result_cut:
 if args.guided_result and (args.presentation!="fullscreen" or args.glass_loupe
                            or args.anchored_result_cut or args.static):
     parser.error("--guided-result requires a fullscreen moving camera")
+if args.recorded_pointer and (args.presentation!="fullscreen" or args.glass_loupe):
+    parser.error("--recorded-pointer requires fullscreen without a loupe")
 ROOT=(args.manifest.parent if args.manifest else DEFAULT_ROOT).resolve()
 SRC=(args.video or ROOT/"linear-official-preview-real-60.mp4").resolve()
 MANIFEST_PATH=(args.manifest or ROOT/"linear-interactions.json").resolve()
@@ -62,6 +67,9 @@ probe=json.loads(subprocess.check_output([
     "-of","json",str(SRC)],text=True))
 stream=probe["streams"][0]
 INPUT_W,INPUT_H=int(stream["width"]),int(stream["height"])
+POINTER=pointer_track(MANIFEST,INPUT_W,INPUT_H) if args.recorded_pointer else None
+if args.recorded_pointer and POINTER is None:
+    parser.error("--recorded-pointer requires explicit cursorless footage and ordered pointer samples")
 rect=MANIFEST.get("capture_rect",{})
 if rect and (int(rect["width"]),int(rect["height"]))!=(INPUT_W,INPUT_H):
     parser.error("Manifest capture rectangle must match the source video pixels")
@@ -209,7 +217,7 @@ def camera_matrix(t,static=False):
                 INPUT_H/(result["height"]+INPUT_H*.16))
         progress=smooth5((t-GUIDED_SHOT.start-.18)/.78)
         zoom=opening+(max(opening,end)-opening)*progress
-        fx=((left+right)*.5/INPUT_W)*(1-progress)+GUIDED_SHOT.focus_x*progress
+        fx=((left+right)*.5/INPUT_W)*(1-progress)+(GUIDED_SHOT.focus_x-.12/end)*progress
         fy=((top+bottom)*.5/INPUT_H)*(1-progress)+GUIDED_SHOT.focus_y*progress
     if args.presentation=="fullscreen":
         # Pixel-perfect isotropic scaling. Preserve source aspect ratio.
@@ -265,6 +273,8 @@ def compose_window(source,t,static=False):
 
 def apply(source,t,static=False):
     stage=compose_window(source,t,static)
+    if POINTER is not None:
+        stage=project_pointer(stage,POINTER,camera_matrix(t,static),t)
     if args.result_focus and RESULT_CUT is not None and not static:
         elapsed_frames = round(t * FPS) - RESULT_CUT.frame
         if elapsed_frames > 0:
@@ -291,6 +301,7 @@ def diagnostics():
        "anchored_result_frame":RESULT_CUT.frame if RESULT_CUT else None,
        "result_focus":bool(args.result_focus and RESULT_CUT),
        "glass_loupe_shots":len(LOUPE_SHOTS),
+       "recorded_pointer_samples":len(POINTER) if POINTER is not None else 0,
        "max_translation_per_frame_px":round(float(np.max(np.abs(vel[:,[2,5]]),initial=0)),4),
        "max_translation_acceleration_px_per_frame_sq":
              round(float(np.max(np.abs(accel[:,[2,5]]),initial=0)),4),

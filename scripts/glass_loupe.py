@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import math
 from bisect import bisect_right
 
+from recorded_pointer import draw_pointer
+
 import cv2
 import numpy as np
 
@@ -193,12 +195,5 @@ def apply_loupe(stage, source, transform, shot, time):
     base_y = pointer_y*sy+transform[1,2]
     tip_x = base_x+(center_x+dx*radial_scale-base_x)*strength
     tip_y = base_y+(center_y+dy*radial_scale-base_y)*strength
-    # A dark arrow with a narrow white outline follows the optical hotspot.
-    # Subpixel coordinates keep the cursor from snapping to integer positions.
-    glyph = np.float32([[0,0],[4,32],[11,25],[18,43],[25,39],[17,22],[29,22]])
-    glyph *= height/1080
-    glyph += (tip_x,tip_y)
-    polygon = np.int32(np.rint(glyph*16))
-    cv2.fillPoly(stage,[polygon],(13,14,15),cv2.LINE_AA,shift=4)
-    cv2.polylines(stage,[polygon],True,(249,249,249),max(1,round(height/385)),cv2.LINE_AA,shift=4)
+    draw_pointer(stage,tip_x,tip_y)
     return stage
