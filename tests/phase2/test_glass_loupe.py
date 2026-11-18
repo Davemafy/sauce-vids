@@ -39,3 +39,27 @@ def test_uses_same_frame_source_and_changes_only_lens_area():
     assert np.array_equal(result[:,300:],frame[:,300:])
     assert np.array_equal(result[75,111],original[75,111])
     assert not np.array_equal(result,apply_loupe(frame.copy(),255-original,transform,shot,2))
+
+
+def test_short_tail_keeps_lens_and_cursor_visible_until_clip_end():
+    shot, = plan_loupe({"cursorless":True,"events":[event()]},320,180,4.25)
+    assert shot.end == 4.25 and not shot.dissolve
+    source = np.full((180,320,3),40,dtype=np.uint8)
+    transform = np.float64([[1,0,0],[0,1,0]])
+    held = apply_loupe(source.copy(),source,transform,shot,3.)
+    final = apply_loupe(source.copy(),source,transform,shot,4.24)
+    assert np.array_equal(held,final)
+    assert np.max(final[18:45,101:124]) > 200
+
+
+def test_interpolation_preserves_sample_and_does_not_overshoot_reversal():
+    observed = event()
+    observed["pointer_samples"] = [
+        {"t":.5,"x":55,"y":50},
+        {"t":.8,"x":110,"y":50},
+        {"t":1.2,"x":70,"y":50},
+    ]
+    shot, = plan_loupe({"cursorless":True,"events":[observed]},320,180,5)
+    assert shot.pointer(.8) == (110,50)
+    assert max(shot.pointer(i/1000)[0] for i in range(500,1201)) == 110
+    assert abs(shot.pointer(.801)[0]-shot.pointer(.799)[0]) < .01
