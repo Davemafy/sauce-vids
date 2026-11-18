@@ -89,7 +89,7 @@ def test_true_onpage_action_can_go_to_visual_review_only():
     d = plan_repair(report, scenes, assessment)
     assert d.status == "needs_visual_review"
     assert d.film_kind == "product-demo-candidate"
-    assert d.can_claim_verified_product_demo
+    assert not d.can_claim_verified_product_demo
     assert not d.allow_paid_ai_retry
     assert d.requires_human_review
 

@@ -92,8 +92,9 @@ def plan_repair(
         return RepairDecision(
             "sauce-url-repair-v1", "needs_visual_review", "product-demo-candidate",
             attempt, MAX_REPAIR_ATTEMPTS, url, (), 3,
-            True, False, True,
-            ("Automated evidence checks are not creative approval",))
+            True, False, False,
+            ("A changed control is not proof of the promised product outcome; "
+             "human evidence and film review are still required",))
     if attempt >= MAX_REPAIR_ATTEMPTS:
         return RepairDecision(
             "sauce-url-repair-v1", "rejected", "unapproved",
