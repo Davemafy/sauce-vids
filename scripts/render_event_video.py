@@ -68,6 +68,10 @@ probe=json.loads(subprocess.check_output([
 stream=probe["streams"][0]
 INPUT_W,INPUT_H=int(stream["width"]),int(stream["height"])
 POINTER=pointer_track(MANIFEST,INPUT_W,INPUT_H) if args.recorded_pointer else None
+POINTER_PRESSES = tuple(event["t"] for event in MANIFEST.get("events", [])
+                       if event.get("kind") == "pointer_down"
+                       and isinstance(event.get("t"), (int, float))
+                       and math.isfinite(event["t"])) if POINTER is not None else ()
 if args.recorded_pointer and POINTER is None:
     parser.error("--recorded-pointer requires explicit cursorless footage and ordered pointer samples")
 rect=MANIFEST.get("capture_rect",{})
@@ -274,7 +278,10 @@ def compose_window(source,t,static=False):
 def apply(source,t,static=False):
     stage=compose_window(source,t,static)
     if POINTER is not None:
-        stage=project_pointer(stage,POINTER,camera_matrix(t,static),t)
+        press=max((1.-smooth5((t-down)/.18) for down in POINTER_PRESSES
+                   if 0<=t-down<.18),default=0.)
+        stage=project_pointer(stage,POINTER,camera_matrix(t,static),t,
+                              scale=1.6-.18*press)
     if args.result_focus and RESULT_CUT is not None and not static:
         elapsed_frames = round(t * FPS) - RESULT_CUT.frame
         if elapsed_frames > 0:

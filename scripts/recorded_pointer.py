@@ -19,17 +19,17 @@ def pointer_track(manifest, width, height):
     return track
 
 
-def draw_pointer(stage, tip_x, tip_y):
+def draw_pointer(stage, tip_x, tip_y, scale=1.):
     height = stage.shape[0]
     glyph = np.float32([[0,0],[4,32],[11,25],[18,43],[25,39],[17,22],[29,22]])
-    glyph *= height/1080
+    glyph *= scale * height/1080
     glyph += (tip_x,tip_y)
     polygon = np.int32(np.rint(glyph*16))
     cv2.fillPoly(stage,[polygon],(13,14,15),cv2.LINE_AA,shift=4)
-    cv2.polylines(stage,[polygon],True,(249,249,249),max(1,round(height/385)),cv2.LINE_AA,shift=4)
+    cv2.polylines(stage,[polygon],True,(249,249,249),max(1,round(scale * height/385)),cv2.LINE_AA,shift=4)
 
 
-def project_pointer(stage, track, matrix, time):
+def project_pointer(stage, track, matrix, time, scale=1.):
     x, y = (np.interp(time, track[:, 0], track[:, col]) for col in (1, 2))
-    draw_pointer(stage, *(matrix @ [x, y, 1.]))
+    draw_pointer(stage, *(matrix @ [x, y, 1.]), scale=scale)
     return stage
