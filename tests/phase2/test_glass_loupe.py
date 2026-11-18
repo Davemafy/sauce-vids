@@ -82,3 +82,24 @@ def test_sustained_drag_can_reframe_before_verified_price_and_exit_to_wide():
     assert np.count_nonzero(peaked != source) > 1000
     assert np.count_nonzero(returned != source) < 250
     assert returned.max() > 220
+
+
+def test_cursor_can_leave_control_after_release_without_reframing_glass():
+    event_with_tail = event()
+    event_with_tail["pointer_samples"].extend([
+        {"t":1.4,"x":65,"y":70}, {"t":1.8,"x":55,"y":80},
+    ])
+    shot, = plan_loupe({"cursorless":True,"events":[event_with_tail]},320,180,4)
+    assert shot.pointer(1.8) == (55,80)
+    assert shot.pointer(shot.released) == (110,50)
+    event_with_tail["pointer_samples"][-1]["x"] = 360
+    assert not plan_loupe({"cursorless":True,"events":[event_with_tail]},320,180,4)
+
+
+def test_liquid_edge_changes_slope_without_distorting_center():
+    from glass_loupe import _edge_bend
+    radii = np.linspace(0,1,100)
+    mapped = radii*_edge_bend(radii)
+    assert np.all(np.diff(mapped)>0)
+    assert _edge_bend(.55) == 1.
+    assert _edge_bend(1.) > 1.3

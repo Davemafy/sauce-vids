@@ -75,8 +75,11 @@ def plan_loupe(manifest, width, height, duration):
             result = _rect(event["resultRect"],width,height)
             points = tuple(tuple(float(p[k]) for k in ("t","x","y")) for p in event["pointer_samples"])
             if (len(points)<2 or
-                any(not (start <= t <= released and x-2 <= px <= x+w+2 and y-2 <= py <= y+h+2)
+                any(not (start <= t <= duration and 0 <= px < width and 0 <= py < height)
                     for t,px,py in points) or
+                any(not (x-2 <= px <= x+w+2 and y-2 <= py <= y+h+2)
+                    for t,px,py in points if t <= released) or
+                sum(t <= released for t,_,_ in points)<2 or
                 any(a[0]>=b[0] for a,b in zip(points,points[1:]))):
                 continue
         except (KeyError,TypeError,ValueError,OverflowError):
@@ -86,15 +89,18 @@ def plan_loupe(manifest, width, height, duration):
         # result, but only when the DOM later verifies that same interaction.
         first_x = points[0][1]
         reframe = next((t for t,px,_ in points
-                        if t-start>=.75 and abs(px-first_x)>=w*.06),changed)
+                        if .75<=t-start and t<=released and abs(px-first_x)>=w*.06),changed)
         shots.append(LoupeShot(start,changed,released,end if dissolve else duration,
                                points,result,dissolve,min(reframe,changed)))
     return shots
 
 
 def _edge_bend(radius_fraction):
-    skirt = np.clip((radius_fraction-.58)/.42,0.,1.)
-    return 1.+.06*skirt**2+.31*skirt**4
+    skirt = np.clip((radius_fraction-.57)/.43,0.,1.)
+    # A rolling lip steepens the warp into the glass, then widens
+    # the last few source pixels as they approach the polished edge.
+    lip = np.clip((radius_fraction-.88)/.12,0.,1.)
+    return 1.+.075*skirt**2+.46*skirt**5-.23*lip**2
 
 
 def apply_loupe(stage, source, transform, shot, time):
@@ -105,6 +111,7 @@ def apply_loupe(stage, source, transform, shot, time):
     exit_strength = smooth5((shot.end-time-.24)/.47) if shot.dissolve else 1.
     strength = min(entry,exit_strength)
     pointer_x,pointer_y = shot.pointer(time)
+    anchor_x,anchor_y = shot.pointer(min(time,shot.released))
     x,y,w,h = shot.result
     reframe = shot.reframe if shot.reframe is not None else shot.changed
     reframe_phase = (time-reframe)/.34
@@ -112,13 +119,14 @@ def apply_loupe(stage, source, transform, shot, time):
         reframe_phase -= .12/.34
     reveal = smooth5(reframe_phase)
     # Keep the live control as the anchor, then include the entire changed value group.
-    left,right = min(pointer_x,x),max(pointer_x,x+w)
-    top,bottom = min(pointer_y,y),max(pointer_y,y+h)
-    focus_x = pointer_x+((left+right)/2-pointer_x)*reveal
-    focus_y = pointer_y+((top+bottom)/2-pointer_y)*reveal
+    left,right = min(anchor_x,x),max(anchor_x,x+w)
+    top,bottom = min(anchor_y,y),max(anchor_y,y+h)
+    focus_x = anchor_x+((left+right)/2-anchor_x)*reveal
+    focus_y = anchor_y+((top+bottom)/2-anchor_y)*reveal
     sx,sy = float(transform[0,0]),float(transform[1,1])
     center_x = focus_x*sx+transform[0,2]
     center_y = focus_y*sy+transform[1,2]
+    center_x += width*.03*(1.-reveal)
     center_x += (width*.50-center_x)*reveal*.82
     center_y += (height*.72-center_y)*reveal*.82
     settled_radius = height*(.40+.31*reveal)
@@ -127,12 +135,13 @@ def apply_loupe(stage, source, transform, shot, time):
     center_y = float(np.clip(center_y,radius*.66,height-radius*.66))
     center_y += reveal*max(0.,radius-center_y)
     result_half_span = math.hypot((right-left)*sx,(bottom-top)*sy)/2
-    fitted_zoom = min(1.56, .76*settled_radius/max(1.,result_half_span))
-    magnification = 1.78+reveal*(fitted_zoom-1.78)
+    fitted_zoom = min(1.76, .76*settled_radius/max(1.,result_half_span))
+    magnification = 1.98+reveal*(fitted_zoom-1.98)
     magnification = max(1.05,magnification)
     magnification = 1.+(magnification-1.)*strength
     # Lead the resulting value slightly left of the optical center so
     # the neighboring plan remains in context, with space beneath the price.
+    focus_x += (1.-reveal)*radius*.30/(sx*magnification)
     focus_x += reveal*(x+w/2+(center_x-width*.37)/(sx*magnification)-focus_x)
     focus_y += reveal*(y+h/2+(center_y-height*.65)/(sy*magnification)-focus_y)
     if strength > 0:
@@ -146,10 +155,15 @@ def apply_loupe(stage, source, transform, shot, time):
         mx=focus_x+dx*bend/(sx*magnification)
         my=focus_y+dy*bend/(sy*magnification)
         inside=(mx>=0)&(my>=0)&(mx<source.shape[1]-1)&(my<source.shape[0]-1)
-        alpha=np.clip((1.-radial)*radius/3.,0,1)*strength*inside
+        alpha=np.clip((1.-radial)*radius/3.4,0,1)*strength
+        # Source pixels stay sharp in the center. Outside that page, extend
+        # the refraction into the captured composition so the bezel and
+        # scenery bend through the same glass instead of ending at a clip.
+        screen_x = mx*sx+transform[0,2]
+        screen_y = my*sy+transform[1,2]
         sample=cv2.remap(source,mx,my,cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
         # The two color channels split in opposite directions at the outer edge.
-        fringe = optical**3 * 9.
+        fringe = optical**3 * (radius*.020)/sx
         for channel,sign in ((0,1),(2,-1)):
             sample[:,:,channel]=cv2.remap(source[:,:,channel],mx+sign*dx/radius*fringe,
                                           my+sign*dy/radius*fringe,cv2.INTER_LINEAR,
@@ -168,6 +182,16 @@ def apply_loupe(stage, source, transform, shot, time):
             late = cv2.remap(source,mx+mx0*spread,my+my0*spread,cv2.INTER_LINEAR,
                              borderMode=cv2.BORDER_REPLICATE)
             sample = cv2.addWeighted(sample,.56,cv2.addWeighted(early,.5,late,.5,0),.44,0)
+        if np.any(~inside & (radial < 1.)):
+            surround = cv2.remap(stage,screen_x.astype(np.float32),screen_y.astype(np.float32),
+                                  cv2.INTER_LINEAR,borderMode=cv2.BORDER_REPLICATE)
+            for channel, direction in ((0,1),(2,-1)):
+                offset = fringe * direction
+                surround[:,:,channel] = cv2.remap(
+                    stage[:,:,channel],(screen_x+dx/radius*offset*sx).astype(np.float32),
+                    (screen_y+dy/radius*offset*sy).astype(np.float32),
+                    cv2.INTER_LINEAR,borderMode=cv2.BORDER_REPLICATE)
+            sample = np.where(inside[:,:,None],sample,surround)
         roi=stage[y0:y1,x0:x1]
         shadow=np.clip(1.-np.abs(radial-1.)*radius/15.,0,1)*.32*strength
         out=roi*(1.-shadow[:,:,None])*(1.-alpha[:,:,None])+sample*alpha[:,:,None]
@@ -176,8 +200,11 @@ def apply_loupe(stage, source, transform, shot, time):
         rim *= .12+.68*upper_light**1.7
         # The broader, dim inner reflection rolls off into the glass.
         sheen = np.exp(-((radial-.979)*radius/11.)**2)*upper_light**3*.13*strength
+        lower_reflection = np.clip((dy+.45*dx)/radius,0,1)**2
+        lower_reflection *= np.clip(1.-radial,0,1)**.42 * alpha
+        out = out+np.float32([17,24,32])*lower_reflection[:,:,None]
         out = out+(255.-out)*sheen[:,:,None]
-        roi[:]=np.rint(out*(1.-rim[:,:,None])+np.float32([211,226,229])*rim[:,:,None])
+        roi[:]=np.uint8(np.clip(np.rint(out*(1.-rim[:,:,None])+np.float32([211,226,229])*rim[:,:,None]),0,255))
     # Match the tip to the same inverse radial map used for the footage.
     # During the optical blend we favor the visible magnified interaction.
     dx = (pointer_x-focus_x)*sx*magnification
@@ -195,5 +222,5 @@ def apply_loupe(stage, source, transform, shot, time):
     base_y = pointer_y*sy+transform[1,2]
     tip_x = base_x+(center_x+dx*radial_scale-base_x)*strength
     tip_y = base_y+(center_y+dy*radial_scale-base_y)*strength
-    draw_pointer(stage,tip_x,tip_y)
+    draw_pointer(stage,tip_x,tip_y,scale=1.+strength*(.43-.24*reveal))
     return stage
