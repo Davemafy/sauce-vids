@@ -27,6 +27,8 @@ from online_cursor_assets import render_cursor as render_tabler_cursor
 from cinematic_stage import CinematicStage,CinematicCursor
 from modal_depth_capture import (verified_modal_background,expected_modal_box,
                                  stabilized_verified_dialog_opening)
+from multi_plane_depth import DEPTH_PX
+from semantic_spatial_handoff import eased
 from studio_motion_blur import directional_blur
 from studio_motion_callouts import KineticCalloutRenderer
 from spatial_parallax import inertial_tilt_track
@@ -233,7 +235,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            experimental_orbit_optics:bool=False,
            optics_seed:int=20261116,
            result_aware_editorial:bool=False,
-           result_payoff_push:bool=False) -> dict:
+           result_payoff_push:bool=False,modal_lift:bool=False) -> dict:
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -276,6 +278,8 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
         if d.get('kind')=='cut' and isinstance(d.get('outputFrame'),int)}
     preset_spotlight_frames=0
     multi_plane_frames=0
+    modal_lift_start=None
+    modal_lift_frames=0
     single_plane_fallback_frames=0
     concealed_terminal_frames=0
     stabilized_opening_frames=0
@@ -770,6 +774,17 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                             spotlight=None
                         else:
                             single_plane_fallback_frames+=1
+                if modal_lift:
+                    if foreground is None:
+                        modal_lift_start=None
+                    else:
+                        if modal_lift_start is None:
+                            modal_lift_start=index
+                        progress=eased((index-modal_lift_start)/(fps*.30))
+                        foreground['depthPx']=DEPTH_PX*progress
+                        spotlight['blurPx']*=progress
+                        spotlight['dimOpacity']*=progress
+                        modal_lift_frames+=int(progress<1.)
                 protected_text=None
                 if foreground is not None and hide_brimble_terminal:
                     # Real DOM text range is narrower than the clickable span.
@@ -794,7 +809,9 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                         cursor[source_index] if cursor else None,wanted_ms/1000.,
                         info['dpr']*factor,dx,dy,tilt=frame_tilt,focal=perspective,
                         foreground_box=foreground['box'] if foreground else None,
-                        protected_text_box=protected_text)
+                        protected_text_box=protected_text,
+                        foreground_depth=foreground.get('depthPx',DEPTH_PX)
+                            if foreground else DEPTH_PX)
                 output_image=root_stage.render(
                     background_source,cinematic_cursor=draw_overlays,tilt=frame_tilt,
                     glow=audio_levels[source_index] if audio_levels is not None else 0.,
@@ -1003,6 +1020,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'spotlight_frames':preset_spotlight_frames,
             'beat_cut_frames':sorted(beat_cut_frames),
             'multi_plane_frames':multi_plane_frames,
+            'modal_lift_transition_frames':modal_lift_frames,
             'concealed_terminal_frames':concealed_terminal_frames,
             'stabilized_opening_frames':stabilized_opening_frames,
             'live_modal_hold_frames':live_modal_hold_frames,

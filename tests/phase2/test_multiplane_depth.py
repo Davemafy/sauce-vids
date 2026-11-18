@@ -213,3 +213,19 @@ def test_nonverified_modal_never_changes_source_opacity():
     with stabilized_verified_dialog_opening(page,BOX) as changed:
         assert changed is False
     assert page.calls==1   # no restore on negative match
+
+
+def test_modal_lift_coverage_follows_intermediate_projected_depth():
+    window=(20,30,320,240)
+    box={'x':145.,'y':65.,'width':120.,'height':110.}
+    image=np.full((240,320,3),200,dtype=np.uint8)
+    areas=[]
+    for depth in (0.,30.,60.):
+        canvas=np.full((300,380,3),100,dtype=np.uint8)
+        coverage=np.zeros(canvas.shape[:2],dtype=np.uint8)
+        result=composite_elevated_modal(canvas,image,box,window,1.,0.,0.,
+                                       (0.,0.),1200.,coverage_out=coverage,
+                                       depth_px=depth)
+        assert np.all(result[coverage==255]==200)
+        areas.append(int(np.count_nonzero(coverage==255)))
+    assert areas[0]<areas[1]<areas[2]

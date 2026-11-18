@@ -88,7 +88,7 @@ def _rounded_outer_rim(out,coverage,rim_color=RIM_COLOR):
 
 def composite_elevated_modal(output,modal_source,box,stage_window,
                              factor,dx,dy,tilt,focal,radius_css=0.,
-                             coverage_out=None,rim_color=RIM_COLOR):
+                             coverage_out=None,rim_color=RIM_COLOR,depth_px=DEPTH_PX):
     """Occlude real modal pixels over a separately captured modal-free plate.
 
     The overlay is ONLY enabled if the caller has separately verified that
@@ -97,9 +97,9 @@ def composite_elevated_modal(output,modal_source,box,stage_window,
     ox,oy,ww,wh=stage_window
     if modal_source.shape!=(wh,ww,3) or output.ndim!=3 or output.shape[2]!=3:
         raise ValueError("Mismatched foreground film frame")
-    if not 0<=radius_css<=100 or factor<=0:
+    if not 0<=radius_css<=100 or factor<=0 or not 0<=depth_px<=DEPTH_PX:
         raise ValueError("Invalid evidence-backed modal shape")
-    front_quad=_depth_quad(box,stage_window,factor,dx,dy,tilt,focal,DEPTH_PX)
+    front_quad=_depth_quad(box,stage_window,factor,dx,dy,tilt,focal,depth_px)
     if not np.isfinite(front_quad).all():
         raise ValueError("Invalid elevated projection")
     left=dx+float(box['x'])*factor
@@ -110,10 +110,10 @@ def composite_elevated_modal(output,modal_source,box,stage_window,
                                 (left,top,right,bottom),radius_css*factor)
     if np.count_nonzero(region)<20:
         raise ValueError("Modal outside the real browser viewport")
-    # Stage coordinates -> local browser pixels, then z+60 homography.
+    # Map local browser pixels onto the current foreground plane.
     translate=np.float64([[1,0,ox],[0,1,oy],[0,0,1]])
-    H60=window_homography(ox,oy,ww,wh,*tilt,focal=focal,z=DEPTH_PX)
-    local_H=H60@translate
+    foreground_h=window_homography(ox,oy,ww,wh,*tilt,focal=focal,z=depth_px)
+    local_H=foreground_h@translate
     canvas_size=(output.shape[1],output.shape[0])
     overlay=cv2.warpPerspective(modal_source,local_H,canvas_size,
                                 flags=cv2.INTER_LINEAR)
@@ -124,12 +124,15 @@ def composite_elevated_modal(output,modal_source,box,stage_window,
     H0=window_homography(ox,oy,ww,wh,*tilt,focal=focal,z=0.)
     base_coverage=cv2.warpPerspective(region,H0@translate,canvas_size,
                                       flags=cv2.INTER_LINEAR)
-    _shadow_from_mask(output,base_coverage,9,18,18,.22)
-    _shadow_from_mask(output,coverage,4,9,12,.27)
+    lift=depth_px/DEPTH_PX
+    if lift>0:
+        _shadow_from_mask(output,base_coverage,9*lift,18*lift,18,.22*lift)
+        _shadow_from_mask(output,coverage,4*lift,9*lift,12,.27*lift)
     a=coverage.astype(np.float32)[:,:,None]/255.
     output[:]=np.uint8(np.clip(
         output.astype(np.float32)*(1-a)+overlay.astype(np.float32)*a,0,255))
-    _rounded_outer_rim(output,coverage,rim_color=rim_color)
+    if depth_px==DEPTH_PX:
+        _rounded_outer_rim(output,coverage,rim_color=rim_color)
     # Allow experimental RGB dispersion to use this exact rounded mask,
     # instead of rebuilding a hard H60 bounding rectangle.
     if coverage_out is not None:

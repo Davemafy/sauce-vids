@@ -12,7 +12,7 @@ import numpy as np
 import cv2
 from spatial_parallax import window_homography,map_pointer,projected_target_quad
 from multi_plane_depth import (
-    focus_background_plane,composite_elevated_modal,RIM_COLOR)
+    focus_background_plane,composite_elevated_modal,RIM_COLOR,DEPTH_PX)
 from PIL import Image, ImageDraw, ImageFilter
 from procedural_backdrops import procedural_backdrop, STYLES, brand_bloom
 from stage_optics import apply_stage_optics
@@ -389,7 +389,7 @@ class CinematicStage:
                     float(spotlight['dy']),tilt,perspective_px,
                     radius_css=float(foreground.get('radiusCss',0.)),
                     coverage_out=rounded_modal_coverage,
-                    rim_color=rim_color)
+                    rim_color=rim_color,depth_px=float(foreground.get('depthPx',DEPTH_PX)))
             else:
                 # No verified modal-free plate: exact Phase 2 single-plane fallback.
                 output=apply_spotlight_focus(
@@ -442,7 +442,7 @@ class CinematicCursor:
              t:float,source_factor:float,shift_x:float,shift_y:float,
               tilt:tuple[float,float]=(0.,0.),focal:float=1820.,
               foreground_box:dict|None=None,
-              protected_text_box:dict|None=None)->None:
+              protected_text_box:dict|None=None,foreground_depth:float=DEPTH_PX)->None:
         from cinematic_presentation_v13 import _blend,click_ring_frames
         from reference_cursor_v15 import load_cursor,press_scale
         if position is None:return
@@ -450,7 +450,7 @@ class CinematicCursor:
         homography=(window_homography(*self.stage.window,*tilt,focal=focal)
                     if abs(tilt[0])+abs(tilt[1])>1e-5 else None)
         lifted_homography=(window_homography(*self.stage.window,*tilt,
-                            focal=focal,z=60.) if foreground_box is not None else None)
+                            focal=focal,z=foreground_depth) if foreground_box is not None else None)
         def on_foreground(px:float,py:float)->bool:
             b=foreground_box
             return bool(b and b['x']<=px<=b['x']+b['width']
@@ -505,7 +505,7 @@ class CinematicCursor:
             lifted=on_foreground(b['x']+b['width']/2,b['y']+b['height']/2)
             quad=projected_target_quad(
                 b,self.stage.window,source_factor,shift_x,shift_y,*tilt,
-                perspective_px=focal,z=60. if lifted else 0.)
+                perspective_px=focal,z=foreground_depth if lifted else 0.)
             # Only the cursor art can move; click ripple stays source-true.
             glyph_x,glyph_y=cursor_glyph_clear_of_text(
                 glyph_x,glyph_y,art.shape[1],art.shape[0],quad)
