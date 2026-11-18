@@ -7,6 +7,8 @@ plan for an adapter; browser recapture/render execution is a separate step.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import hashlib
+import struct
 from urllib.parse import urlsplit
 
 from backend.url_film_quality import UrlFilmAssessment, _same_document_anchor
@@ -207,3 +209,88 @@ def verify_visible_destination(page, fragment: str) -> dict:
     if not data.get("headings"):
         raise ValueError("No legible source-authored headline in destination")
     return data
+
+
+def _same_destination_geometry(before: dict, after: dict) -> bool:
+    """Require both the section and its actual heading positions to settle."""
+    if before.get("viewport") != after.get("viewport"):
+        return False
+    try:
+        if any(abs(float(before["section"][key]) -
+                   float(after["section"][key])) > 2
+               for key in ("x", "y", "width", "height")):
+            return False
+        old_heads, new_heads = before["headings"], after["headings"]
+        if len(old_heads) != len(new_heads):
+            return False
+        for old, new in zip(old_heads, new_heads):
+            if old["text"] != new["text"]:
+                return False
+            if any(abs(float(old["rect"][key]) -
+                       float(new["rect"][key])) > 2
+                   for key in ("x", "y", "width", "height")):
+                return False
+    except (KeyError, TypeError, ValueError):
+        return False
+    return True
+
+
+def capture_verified_destination(page, fragment: str) -> tuple[dict, bytes]:
+    """Capture actual source pixels and verify the DOM didn't shift mid-shot.
+
+    This must only be called with the existing safe public Playwright context.
+    A source SHA alone is not proof of pixels; caller gets the exact PNG bytes
+    to keep private alongside the returned receipt. No video is rendered.
+    """
+    # Browser smooth scroll/entrance animations may still be moving at the
+    # nominal click timestamp. Wait for two consecutive stable samples;
+    # a capture during movement cannot authorize the next camera move.
+    waiter = getattr(page, "wait_for_timeout", None)
+    before = None if callable(waiter) else verify_visible_destination(page, fragment)
+    settled = not callable(waiter)
+    checks = 0
+    if callable(waiter):
+        for _ in range(12):  # Bounded 1.8s maximum, no infinite waits.
+            waiter(150)
+            try:
+                after_wait = verify_visible_destination(page, fragment)
+            except ValueError:
+                before = None
+                checks = 0
+                continue
+            if before is not None and _same_destination_geometry(before, after_wait):
+                checks += 1
+            else:
+                checks = 0
+            before = after_wait
+            if checks >= 2:
+                settled = True
+                break
+    if not settled:
+        raise ValueError("Source section never settled before capture")
+    raw = page.screenshot(type="png", animations="disabled", caret="hide")
+    after = verify_visible_destination(page, fragment)
+    if not isinstance(raw, bytes) or not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("Missing authentic Chromium PNG source bytes")
+    if len(raw) < 33 or len(raw) > 16 * 1024 * 1024:
+        raise ValueError("Source PNG size outside bounded capture")
+    image_w, image_h = struct.unpack(">II", raw[16:24])
+    viewport = after["viewport"]
+    css_w, css_h = float(viewport["width"]), float(viewport["height"])
+    if (not 1 <= image_w / css_w <= 3
+            or not 1 <= image_h / css_h <= 3
+            or abs(image_w / css_w - image_h / css_h) > .02):
+        raise ValueError("Captured source PNG does not match DOM viewport")
+    if not _same_destination_geometry(before, after):
+        raise ValueError("Source section or headline moved during capture")
+    receipt = {
+        "schema": "sauce-verified-anchor-capture-v1",
+        "anchor": fragment,
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "source_dimensions": [image_w, image_h],
+        "viewport": after["viewport"],
+        "section": after["section"],
+        "headings": after["headings"],
+        "approved_for_premium_film": False,
+    }
+    return receipt, raw

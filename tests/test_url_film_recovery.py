@@ -179,3 +179,99 @@ def test_missing_or_offscreen_destination_is_rejected():
         verify_visible_destination(Offscreen(), "how")
     with pytest.raises(ValueError):
         verify_visible_destination(Offscreen(), 'a#nav')
+
+
+def test_destination_capture_has_matching_real_bytes_and_stable_geometry():
+    from backend.url_film_recovery import capture_verified_destination
+    import hashlib
+    import struct
+    original = {
+        "anchor": "how",
+        "viewport": {"width": 1280, "height": 720},
+        "section": {"x": 0, "y": 5, "width": 1280, "height": 670},
+        "headings": [{"text": "Two minutes, start to first campaign.",
+                      "visible": True, "rect": {
+                          "x": 224, "y": 150, "width": 832, "height": 58
+                      }}],
+    }
+    raw = (b"\x89PNG\r\n\x1a\n" + b"\0\0\0\rIHDR" +
+           struct.pack(">II", 2560, 1440) + b"\x08\x02\x00\x00\x00" +
+           b"\0" * 12)
+    class Page:
+        def evaluate(self, js, fragment):
+            return original
+        def screenshot(self, **kwargs):
+            assert kwargs["type"] == "png"
+            return raw
+    receipt, pixels = capture_verified_destination(Page(), "how")
+    assert pixels == raw
+    assert receipt["sha256"] == hashlib.sha256(pixels).hexdigest()
+    assert receipt["source_dimensions"] == [2560, 1440]
+    assert receipt["approved_for_premium_film"] is False
+
+
+def test_changing_source_during_capture_fails_closed():
+    from backend.url_film_recovery import capture_verified_destination
+    import struct
+    original = {"anchor": "how", "viewport": {"width": 1280, "height": 720},
+                "section": {"x": 0, "y": 5, "width": 1280, "height": 670},
+                "headings": [{"text": "Real section heading", "visible": True}]}
+    raw = (b"\x89PNG\r\n\x1a\n" + b"\0\0\0\rIHDR" +
+           struct.pack(">II", 1280, 720) + b"\0" * 17)
+    class Page:
+        count=0
+        def evaluate(self, js, fragment):
+            self.count += 1
+            data = dict(original)
+            if self.count > 1:
+                data["section"] = dict(original["section"], y=82)
+            return data
+        def screenshot(self, **kwargs):
+            return raw
+    with pytest.raises(ValueError, match="moved"):
+        capture_verified_destination(Page(), "how")
+
+
+def test_capture_rejects_fake_png_and_mismatched_viewport():
+    from backend.url_film_recovery import capture_verified_destination
+    import struct
+    data = {"anchor": "how", "viewport": {"width": 1280, "height": 720},
+            "section": {"x": 0, "y": 5, "width": 1280, "height": 670},
+            "headings": [{"text": "Real headline", "visible": True}]}
+    class Page:
+        raw = b"not a screenshot"
+        def evaluate(self, js, fragment):return data
+        def screenshot(self, **kwargs):return self.raw
+    p = Page()
+    with pytest.raises(ValueError, match="PNG"):
+        capture_verified_destination(p, "how")
+    p.raw = b"\x89PNG\r\n\x1a\n" + b"\0\0\0\rIHDR" + struct.pack(">II", 500, 300) + b"\0" * 17
+    with pytest.raises(ValueError, match="viewport"):
+        capture_verified_destination(p, "how")
+
+
+def test_capture_waits_for_live_scroll_and_heading_animation_to_settle():
+    from backend.url_film_recovery import capture_verified_destination
+    import struct
+    raw = (b"\x89PNG\r\n\x1a\n" + b"\0\0\0\rIHDR" +
+           struct.pack(">II", 1280, 720) + b"\0" * 17)
+    class Page:
+        tick = 0
+        def wait_for_timeout(self, ms):
+            assert ms == 150
+            self.tick += 1
+        def evaluate(self, script, fragment):
+            y = {1: 320, 2: 180, 3: 7}.get(self.tick, 7)
+            return {
+                "viewport": {"width": 1280, "height": 720},
+                "section": {"x": 0, "y": y, "width": 1280, "height": 660},
+                "headings": [{"text": "Visible product section",
+                              "rect": {"x": 220, "y": y+145, "width": 830,
+                                       "height": 58}, "visible": True}],
+            }
+        def screenshot(self, **kwargs): return raw
+    page = Page()
+    receipt, pixels = capture_verified_destination(page, "how")
+    assert pixels == raw
+    assert page.tick >= 5
+    assert receipt["approved_for_premium_film"] is False
