@@ -7,6 +7,14 @@
 
 
 
+## 2026-11-19 — Private URL narration timing test
+
+A fresh public Resend pricing capture on main `4118b5b` recorded a real slider gesture and a verified visible numeric result. The encoded Pro price changes from $20/mo to $35/mo. The stock URL renderer exports silently. The first test invocation hit a 60-second supervision limit and left an incomplete composition. Rendering was restarted from the existing verified WebM, without recapturing. The bounded renderer recovered a 326-frame 1080p60 silent master from 25 fps source footage.
+
+In the isolated Vultr checkout, a separate review script used two human-written lines and the existing offline Kokoro `af_heart` voice. The result line begins at 2.91s, 150 ms after the result timestamp in the trimmed presentation manifest. The reviewed 5.43-second 1280×720 preview contains 163 H.264 frames and 48 kHz AAC. Full decode passed. Chromium played and sought at 1280×720 and 390×844. Preview SHA-256 `17924134421b1b5f0f94136e3465b8baafe7029f4a15967ed55ff18f54a60c62`.
+
+Creative acceptance is open. The opening makes the calculator small and the magnifier dominates the pricing cards during the gesture. This checks event-aligned speech on one supported public workflow. The two lines were authored manually and muxed outside the default URL job. The production service, Browserbase and authenticated capture were outside this test. Private worker result: `sauce-narrated-pilot/pilot-review/sauce-resend-narration-test.mp4`.
+
 ## 2026-11-19 — Static product story acceptance on four public sites
 
 The diagnostic extends the existing model-free scorer on main at `b5d965c`. It checks access before extracting candidates, ranks product evidence, and produces a three-beat story only when it can ground all three beats in browser evidence. The JSON uses document CSS-pixel rectangles. The PNG overlays those rectangles on the full-page thumbnail and shows source crops at CSS-pixel size. A public control must cause a visible, local DOM change in a disposable, network-blocked Chromium probe before it can supply an interaction beat. Otherwise the selector looks for a distinct product preview.
