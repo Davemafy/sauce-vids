@@ -4,7 +4,7 @@ from numbers import Real
 import math
 from bisect import bisect_right
 
-from recorded_pointer import draw_loupe_pointer
+from recorded_pointer import draw_loupe_pointer, draw_pointer
 
 import cv2
 import numpy as np
@@ -25,12 +25,17 @@ class LoupeStyle:
     expanded_center_x: float = .50
     expanded_center_y: float = .72
     payoff_y: float = .65
+    cursor_style: str = "rounded"
 
     @classmethod
     def from_plan(cls, data):
         if not isinstance(data, dict) or set(data) - {f.name for f in fields(cls)}:
             raise ValueError("Unknown glass loupe control")
+        if data.get("cursor_style", "rounded") not in ("rounded", "outlined"):
+            raise ValueError("Invalid glass loupe cursor_style")
         for name, value in data.items():
+            if name == "cursor_style":
+                continue
             low, high = ((.20, .85) if "radius" in name else
                          (.15, .85) if "center" in name or name == "payoff_y" else
                          (.08, 1.5) if name.endswith("duration") else (0., 1.))
@@ -253,5 +258,8 @@ def apply_loupe(stage, source, transform, shot, time, style=LoupeStyle()):
     base_y = pointer_y*sy+transform[1,2]
     tip_x = base_x+(center_x+dx*radial_scale-base_x)*strength
     tip_y = base_y+(center_y+dy*radial_scale-base_y)*strength
-    draw_loupe_pointer(stage,tip_x,tip_y,scale=1.+strength*(.28-.14*reveal))
+    if style.cursor_style == "outlined":
+        draw_pointer(stage,tip_x,tip_y,scale=1.+strength*(.43-.24*reveal))
+    else:
+        draw_loupe_pointer(stage,tip_x,tip_y,scale=1.+strength*(.28-.14*reveal))
     return stage

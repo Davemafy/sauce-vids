@@ -145,6 +145,9 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "cursor_style": {
+          "enum": ["rounded", "outlined"]
+        },
         "entry_delay": {
           "type": "number",
           "minimum": 0,

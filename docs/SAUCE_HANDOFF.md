@@ -2,6 +2,14 @@
 
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
+## 2026-11-19 — Exact JSON replay of the standalone liquid-glass reference
+
+The standalone file `1000421253.mp4` is the earlier liquid-glass cut with an outlined pointer. This is a different review target from the preceding split-screen comparison. Recovered the original verified 2880×1800 browser recording, timing sidecar and backdrop from the existing Vultr worker. The [liquid-glass plan](../examples/sauce-film-plan-glass-loupe-liquid.json) selects the original timing, normalized lens layout and outlined cursor through the existing film-plan compositor. Rounded remains the default.
+
+The newly encoded MP4 matches the uploaded standalone reference byte for byte. Both SHA-256 values are `3df5b2391ef933a92b8198541ec9981649f115035d9e38dbd45991588653b10f`. The full decoded video SHA-256 is `4a4d6319123150469a29151538e61eda214d8719dbb10c38779393e6786a09f4`. The reference MP4 was used only for comparison. The build read the independent source plate, verified capture sidecar, hashed backdrop and JSON.
+
+Verified all 279 frames at 1920×1080/60fps over 4.65 seconds. Reviewed the opening, lens entry, $35 result, reverse to $20 and final wide at frames 8, 80, 150, 221 and 272. Full decode and Chromium play/seek passed at desktop and phone widths. 38 focused tests passed. Worker output is `sauce-loupe-json-proof/qa/liquid-match/sauce-loupe-1to1.mp4`. Production was not deployed.
+
 ## 2026-11-19 — JSON-driven Resend glass-loupe reference
 
 The owner supplied a 4.65s split-screen MP4. The left panel is the target and the right panel is the previous Sauce rounded-cursor cut. The render uses the original verified 2880×1800 browser capture and its action trace, plus the previously approved-for-review graded backdrop. No frames from the comparison are used in the output.

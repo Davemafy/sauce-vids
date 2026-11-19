@@ -121,3 +121,20 @@ def test_plan_loupe_style_changes_pixels_and_rejects_invalid_controls():
                  {"expanded_radius": .3}, {"payoff_y": float("nan")}, {"script": "path"}):
         with pytest.raises(ValueError):
             LoupeStyle.from_plan(item)
+
+
+def test_plan_selects_cursor_silhouette_without_changing_the_lens():
+    import pytest
+    from glass_loupe import LoupeStyle
+
+    shot, = plan_loupe({"cursorless": True, "events": [event()]}, 320, 180, 4)
+    source = np.full((180, 320, 3), 120, dtype=np.uint8)
+    stage = np.full_like(source, 20)
+    matrix = np.float64([[1, 0, 0], [0, 1, 0]])
+    outlined = LoupeStyle.from_plan({"cursor_style": "outlined"})
+    baseline = apply_loupe(stage.copy(), source, matrix, shot, 2)
+    revised = apply_loupe(stage.copy(), source, matrix, shot, 2, outlined)
+    delta = np.any(baseline != revised, axis=2)
+    assert 0 < np.count_nonzero(delta) < 100
+    with pytest.raises(ValueError, match="cursor_style"):
+        LoupeStyle.from_plan({"cursor_style": "unknown"})

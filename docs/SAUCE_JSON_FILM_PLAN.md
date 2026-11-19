@@ -121,3 +121,8 @@ For a window presentation, optional `window.scale` sets the size of the floating
 The optional `glassLoupe` object enables the existing source-sampled loupe. It requires a verified slider result and its recorded pointer samples. The controls set entry, expansion and exit timing in seconds, lens radii relative to the stage height, and center and payoff placement as fractions of the stage. The lens still derives its interaction cues and sampled pixels from the capture. It draws one cursor projected through the same optical mapping. Omit these objects for the existing film-plan behavior.
 
 `examples/sauce-film-plan-glass-loupe.json` uses the retained Resend capture and local backdrop. Put the JSON and the matching `backdrop.jpg` together, then pass that JSON to `--film-plan` with the verified source and manifest. The reference comparison video is a review input only. No reference pixels are needed for the export.
+
+The optional `glassLoupe.cursor_style` selects `rounded` (the default) or
+`outlined`. Both use the same recorded hotspot and lens projection. The
+[liquid-glass example](../examples/sauce-film-plan-glass-loupe-liquid.json)
+uses the outlined style and the timing of the standalone 4.65-second reference.
