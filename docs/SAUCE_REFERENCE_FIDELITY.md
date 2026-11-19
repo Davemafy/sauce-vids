@@ -1,5 +1,7 @@
 # Sauce reference fidelity — do not feed approximations to Gemini
 
+**Transfer experiment update (2026-11-19):** [The controlled two-product six-film ablation](SAUCE_REFERENCE_TRANSFER_EXPERIMENT_20261119.md) matched the reference's 46-frame panel bounding-box growth to ≤1px maximum geometry error when applied to an authentic HeroUI chart group. It nevertheless failed editorial transfer (different outcome semantics, no matching pointer action, mobile text density). A Resend tall-card attempt also failed geometric source compatibility. **Both remain ineligible as certified reference data**; no Gemini model was called. Accurate geometry is necessary but insufficient for a 1:1 film.
+
 Status, 2026-11-19: Arcade Stack by Ramp has a full decoded-frame ledger and 10 visually reviewed hard discontinuities. **It has NOT been reconstructed with 1:1 visual/motion fidelity. It is not production-ready Gemini reference data.**
 
 ## Two distinct fidelity targets

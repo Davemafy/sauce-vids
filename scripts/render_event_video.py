@@ -546,7 +546,8 @@ def render(output,seconds=None,static=False):
                            "sourceFrameIndex":layer.source_frame_index,
                            "cropPixelsSha256":layer.source_crop_sha256}
                           for layer in ISOLATION.layers]}
-    output.with_suffix(".json").write_text(json.dumps(record,indent=2))
+    from render_receipt_paths import receipt_path
+    receipt_path(output,args.film_plan).write_text(json.dumps(record,indent=2))
     print("RENDER_RECEIPT",json.dumps(record),flush=True)
 
 if __name__=="__main__":

@@ -153,3 +153,36 @@ def test_complete_component_must_not_appear_before_actual_event(subject):
         "x":108,"y":20,"width":106,"height":120}
     with pytest.raises(ValueError,match="before it exists"):
         load(subject)
+
+
+def test_measured_hold_scale_is_reproducible_and_bounded(subject):
+    src,manifest,raw=subject
+    layer=raw["layers"][0]
+    layer["startAt"]=1.35
+    layer["endAt"]=2.5
+    layer["enterSeconds"]=.05
+    layer["holdScaleEnd"]=1.019736842105263
+    plan=load(subject)
+    assert plan.layers[0].hold_scale_end == pytest.approx(1.019736842105263)
+    first=render_isolated_stage(plan,1.45,(640,360))
+    last=render_isolated_stage(plan,2.44,(640,360))
+    assert first.shape==last.shape==(360,640,3)
+    assert not np.array_equal(first,last)
+    assert np.array_equal(first,render_isolated_stage(plan,1.45,(640,360)))
+
+def test_reject_exaggerated_hold_scale(subject):
+    src,manifest,raw=subject
+    raw["layers"][0]["holdScaleEnd"]=1.5
+    with pytest.raises(ValueError,match="holdScaleEnd"):
+        load(subject)
+
+
+def test_source_true_hard_cut_is_possible_with_zero_entry_delay(subject):
+    source, manifest, raw=subject
+    raw["layers"][0]["enterSeconds"]=0
+    raw["layers"][0]["enterFrom"]=raw["layers"][0]["position"]
+    plan=load(subject)
+    assert plan.layers[0].enter_seconds == 0
+    frame=render_isolated_stage(plan,1.35,(640,360))
+    assert frame is not None
+    assert np.any(frame[180,320]!=frame[0,0])

@@ -77,6 +77,7 @@ class IsolatedLayer:
     enter_from: tuple[float,float]
     enter_seconds: float
     width_fraction: float
+    hold_scale_end: float
     padding_px: int
     radius_px: int
     z_index: int
@@ -125,7 +126,7 @@ def load_isolation_composition(raw, manifest, source_path, source_size, source_d
     try:
         for layer in raw_layers:
             _object(layer,("id","anchor","sourceAt","startAt","endAt","position","enterFrom",
-                           "enterSeconds","widthFraction","paddingPx","radiusPx","zIndex"),
+                           "enterSeconds","widthFraction","holdScaleEnd","paddingPx","radiusPx","zIndex"),
                     ("id","anchor","sourceAt","startAt","endAt","position","widthFraction"),"UI layer")
             layer_id=layer["id"]
             if not isinstance(layer_id,str) or not layer_id or len(layer_id)>40 or not all(c.isalnum() or c in "_-" for c in layer_id) or layer_id in seen:
@@ -148,8 +149,9 @@ def load_isolation_composition(raw, manifest, source_path, source_size, source_d
                 raise ValueError("Invalid UI crop geometry")
             desired=_point(layer["position"],f"{layer_id}.position")
             origin=_point(layer.get("enterFrom",layer["position"]),f"{layer_id}.enterFrom")
-            ease=_number(layer.get("enterSeconds",0.4),f"{layer_id}.enterSeconds",0.05,1.5)
+            ease=_number(layer.get("enterSeconds",0.4),f"{layer_id}.enterSeconds",0,1.5)
             width=_number(layer["widthFraction"],f"{layer_id}.widthFraction",.05,.85)
+            hold_scale_end=_number(layer.get("holdScaleEnd",1.0),f"{layer_id}.holdScaleEnd",.90,1.10)
             radius=round(_number(layer.get("radiusPx",12),f"{layer_id}.radiusPx",0,28))
             z=int(_number(layer.get("zIndex",0),f"{layer_id}.zIndex",-20,20))
             source_frame_index=round(source_at*fps)
@@ -162,7 +164,7 @@ def load_isolation_composition(raw, manifest, source_path, source_size, source_d
             crop=frame[y0:y1,x0:x1].copy()
             crop_sha=hashlib.sha256(crop.tobytes()).hexdigest()
             decoded.append(IsolatedLayer(layer_id,layer["anchor"],source_at,first,last,
-                                        desired,origin,ease,width,padding,radius,z,
+                                        desired,origin,ease,width,hold_scale_end,padding,radius,z,
                                         (x0,y0,x1,y1),source_frame_index,crop_sha,crop))
     finally:
         video.release()
@@ -191,12 +193,14 @@ def render_isolated_stage(spec,t,output_size):
     bg[:]=spec.background_bgr
     for layer in spec.layers:
         if not layer.start_at<=t<layer.end_at:continue
-        u=min(1.0,max(0.0,(t-layer.start_at)/layer.enter_seconds))
+        u=(1.0 if layer.enter_seconds==0 else min(1.0,max(0.0,(t-layer.start_at)/layer.enter_seconds)))
         ease=u*u*(3-2*u)
         nx=layer.enter_from[0]+(layer.position[0]-layer.enter_from[0])*ease
         ny=layer.enter_from[1]+(layer.position[1]-layer.enter_from[1])*ease
         alpha=ease
-        target_width=max(8,round(ow*layer.width_fraction))
+        progress=min(1.0,max(0.0,(t-layer.start_at)/max(1e-6,layer.end_at-layer.start_at)))
+        hold_scale=1.0+(layer.hold_scale_end-1.0)*progress
+        target_width=max(8,round(ow*layer.width_fraction*hold_scale))
         src_height,src_width=layer.crop.shape[:2]
         target_height=max(8,round(target_width*src_height/src_width))
         if target_height>oh*.91:
