@@ -41,6 +41,9 @@ def direction(report:dict,feedback:list[dict]|None=None):
     dialog=next((c for c in report['controls'] if known_dialog_opener(c,report['url'])),None)
     if dialog:
         return normalize({'mode':'interactive','action_ids':[dialog['id']]},report),0,'verified-public-dialog'
+    tab=next((c for c in report['controls'] if c['kind']=='tab'),None)
+    if tab:
+        return normalize({'mode':'interactive','action_ids':[tab['id']]},report),0,'local-tab'
     panel=next((c for c in report['controls']
                 if c['kind']=='button' and c.get('controlled_panel')),None)
     local={'mode':'interactive','action_ids':[panel['id']]} if panel else {}
@@ -136,7 +139,7 @@ def execute(url:str,folder:Path,progress=None):
     record=json.loads((capture_dir/'continuous-capture.json').read_text())
     if not record.get('continuous_recording'):
         raise RuntimeError('No continuous motion stream captured')
-    if not any(a.get('kind') in ('link','button','slider') for a in record.get('actions',[])):
+    if not any(a.get('kind') in ('link','button','slider','tab') for a in record.get('actions',[])):
         plan['mode']='showcase'
     stage('rendering')
     export=folder/'export'

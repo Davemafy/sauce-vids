@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright
 from scripts.capture_safety import validate_public_url,guard_route
 from scripts.session_contract import safe_url
-from .product_explorer import CHROME,known_dialog_opener,allowed,JS
+from .product_explorer import CHROME,known_dialog_opener,allowed,JS,TAB_TARGET_JS
 
 CURSOR_JS=r"""(() => {
  if(window.__saucePointerInstalled)return;
@@ -313,6 +313,8 @@ def capture(url:str,private:Path,report:dict,plan:dict):
        smooth_to(page,max(0,doc_y-270))
        box=loc.bounding_box()
       if not box:continue
+      tab_target=loc.evaluate(TAB_TARGET_JS) if c['kind']=='tab' else None
+      if c['kind']=='tab' and not tab_target:continue
       pointer_to(page,box['x']+box['width']*.5,box['y']+box['height']*.5)
       page.wait_for_timeout(300)
       # Trust visible ARIA panel geometry only after an observed state change.
@@ -338,6 +340,26 @@ def capture(url:str,private:Path,report:dict,plan:dict):
         {'kind':'click','t':click_time,'label':c['text'],'semanticGoal':'Reveal public agent setup'},
         {'kind':'state_change','t':time.monotonic()-video_begin,
          'evidence':'Public agent setup dialog visibly opened','resultRect':region}])
+      if tab_target:
+       region=loc.evaluate("""(e,id) => {
+        const pane=document.getElementById(id);
+        if(e.getAttribute('aria-selected')!=='true'||e.getAttribute('aria-controls')!==id||
+           !pane?.matches('[role="tabpanel"]')||
+           pane.closest('form,[data-private],[data-secret],[data-sensitive]')||
+           pane.querySelector('input[type=password], [data-private], [data-secret], [data-sensitive]')||
+           !pane.checkVisibility({checkOpacity:true, checkVisibilityCSS:true})) return null;
+        const r=pane.getBoundingClientRect();
+        if(r.width<20||r.height<16||r.left<0||r.top<0||r.bottom>innerHeight||r.right>innerWidth)
+         return null;
+        if(!pane.innerText.trim()&&!pane.querySelector('img,svg,canvas,video'))return null;
+        return {x:r.x,y:r.y,width:r.width,height:r.height};
+       }""",tab_target)
+       if page.url!=before or not region:
+        raise RuntimeError('Public tab did not reveal a visible local panel')
+       editorial_events.extend([
+        {'kind':'click','t':click_time,'label':c['text'],'semanticGoal':'Inspect public tab content'},
+        {'kind':'state_change','t':time.monotonic()-video_begin,
+         'evidence':'Inactive tab selected and its panel visibly opened','resultRect':region}])
       mark('action-'+ident)
       events.append({'id':ident,'label':c['text'],'kind':c['kind'],
                      'from':safe_url(before),'to':safe_url(page.url)})

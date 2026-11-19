@@ -81,6 +81,18 @@ class UrlToVideoTests(unittest.TestCase):
         plan, calls, source = direction({'url': url, 'headings': [], 'controls': [button]})
         self.assertEqual((plan['action_ids'], calls, source), (['a0'], 0, 'verified-public-dialog'))
 
+    def test_public_tabs_use_local_direction_across_origins(self):
+        tab = {'id': 'a0', 'kind': 'tab', 'text': 'Profile',
+               'selector': '#profile-tab', 'in_form': False}
+        for url in ('https://getbootstrap.com/', 'https://www.w3.org/'):
+            with self.subTest(url=url), patch.dict(os.environ, {'GEMINI_API_KEY': ''}):
+                self.assertTrue(allowed(tab, url))
+                self.assertFalse(allowed({**tab, 'in_form': True}, url))
+                self.assertFalse(allowed({**tab, 'text': 'Sign in'}, url))
+                report = {'url': url, 'headings': [], 'controls': [tab]}
+                plan, calls, source = direction(report)
+                self.assertEqual((plan['action_ids'], calls, source), (['a0'], 0, 'local-tab'))
+
     def test_missing_key_does_not_generate_fake_direction(self):
         with patch.dict(os.environ,{"GEMINI_API_KEY":""}):
             with self.assertRaises(NeedsKey):

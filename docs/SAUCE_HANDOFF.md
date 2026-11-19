@@ -5,6 +5,18 @@
 
 
 
+
+## 2026-11-19 — Same tab discovery rule verified across three sites
+
+Sauce identifies an inactive ARIA tab whose existing controlled panel is hidden. The recorder rechecks the target before clicking. It verifies selection and the position of the visible, nonempty controlled panel before making a camera shot. The tab rule has no hostname or label allowlist. It preserves the existing unsafe-label and public request guards, and skips form-associated controls. Same URL-only API flow, zero Gemini calls, no per-page selectors entered by the operator.
+
+- [shadcn UI](https://devmcp.davemafy.xyz/sauce-motion-phase2/url-tabs-20261119/shadcn.mp4), job `fe68c604f089113cf1741cc0`, 5.61s. Manual installation changes the panel and the zoom makes the first command legible. Lower instructions extend past the close framing.
+- [W3C WAI](https://devmcp.davemafy.xyz/sauce-motion-phase2/url-tabs-20261119/w3c.mp4), job `8fab8afd64aba43a310998ef`, 6.08s. Carl Andersen changes the visible biography. The dense documentation still distracts.
+- [Bootstrap](https://devmcp.davemafy.xyz/sauce-motion-phase2/url-tabs-20261119/bootstrap.mp4), job `d4bb103be95e78da1115440b`, 5.67s. Profile switches to the matching panel. The selected tab and content are legible after the push, but the surroundings are busy.
+
+60 targeted tests and 14 subtests passed. FFmpeg decoded the 1080p masters. Reviewed opening, active-tab change, and camera hold in encoded frames around 0, 1.27, 3.33, and 4.33 seconds, plus the shadcn result crop at 3.4s. Desktop and 390×844 mobile previews played and sought; HTTPS playback files matched API preview bytes. These are cross-site capture proofs, not film approval. Linear's custom controls are outside the tested ARIA rule. No production deployment in this milestone.
+
+
 ## 2026-11-19 — Brimble URL moves from a scroll-through to a real setup reveal
 
 [Brimble after](https://devmcp.davemafy.xyz/sauce-motion-phase2/first-action-20261119/brimble.mp4) (6.38s) and [before](https://devmcp.davemafy.xyz/sauce-motion-phase2/url-sites-20261119/brimble.mp4) (9.47s). A new isolated job submitted only the Brimble homepage URL, with Gemini disabled. The local rule selects the known non-form “Connect your agent” button on the Brimble homepage. Sauce required a newly visible, viewport-contained setup dialog with the expected heading before planning its camera push. No provider row was clicked and no connection was made. Job `e5bacb0f9d4dcbdb677cc8a8`.

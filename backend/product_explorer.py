@@ -8,6 +8,21 @@ from scripts.session_contract import validate_actions
 SAFE_LABEL=re.compile(r'paste text instead|show example|try (?:a )?sample|demo|preview|show more|read more|learn more|details|see how it works|view example|explore example|open menu|toggle menu|view features|expand|^toggle (?:first|second|both) elements?$|reveal|play video',re.I)
 UNSAFE_LABEL=re.compile(r'delete|remove|purchase|pay|checkout|order|submit|send|register|sign.?up|log.?in|sign.?in|logout|invite|share|publish|subscribe|follow|reset|clear|cancel|upload|download|add to cart|connect|authorize|approve|confirm|book|reserve|refund',re.I)
 UNSAFE_PATH=re.compile(r'/(api|auth|signin|signup|login|logout|register|account|checkout|payment|billing|purchase|unsubscribe|delete|submit|admin|invite|callback|token|session)(/|$)',re.I)
+# A tab is a local UI action only when the DOM identifies a real inactive pane.
+TAB_SELECTOR='button[role="tab"][aria-selected="false"][aria-controls]:not(:disabled)'
+TAB_TARGET_JS=r"""e => {
+ const privateRegion='form,[data-private],[data-secret],[data-sensitive]';
+ if (!e.matches('button[role="tab"][aria-selected="false"][aria-controls]:not(:disabled)')
+     || e.form || e.closest(privateRegion) || e.getAttribute('aria-disabled')==='true') return null;
+ const group=e.closest('[role="tablist"]');
+ const current=group?.querySelector('[role="tab"][aria-selected="true"]');
+ const id=e.getAttribute('aria-controls');
+ const pane=document.getElementById(id);
+ if (!current || current.getAttribute('aria-controls')===id
+     || !pane?.matches('[role="tabpanel"]') || pane.closest(privateRegion)
+     || (pane.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) && pane.getClientRects().length)) return null;
+ return id;
+}"""
 JS=r"""() => {
 const text=e=>(e.innerText||e.getAttribute('aria-label')||e.getAttribute('title')||'').replace(/\s+/g,' ').trim().slice(0,110);
 const visible=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return r.width>=8&&r.height>=8&&s.visibility!=='hidden'&&s.display!=='none'&&Number(s.opacity)>0.04};
@@ -37,6 +52,14 @@ for(const e of document.querySelectorAll('input[type="range"]:enabled')){
  if(controls.length>=4)break;
 }
 
+const tabTarget=TAB_TARGET_EXPRESSION;
+const tabs=[...document.querySelectorAll(TAB_SELECTOR_EXPRESSION)];
+for(const e of tabs){
+ if(!visible(e)||!text(e)||!tabTarget(e))continue;
+ controls.push({id:'a'+controls.length,text:text(e),kind:'tab',selector:path(e),in_form:false});
+ if(controls.length>=12)break;
+}
+
 const candidates = [...document.querySelectorAll('a[href],button,[role="button"],summary')];
 const priority = e => e.matches('button[aria-controls][aria-expanded="false"],[role="button"][aria-controls][aria-expanded="false"]') ? 0 : e.closest('main') ? 1 : 2;
 candidates.sort((a,b)=>priority(a)-priority(b));
@@ -55,6 +78,7 @@ height:document.documentElement.scrollHeight,
 brand:{theme:document.querySelector('meta[name="theme-color"]')?.content||'',background:body.backgroundColor,vars},
 challenge:!!document.querySelector('#challenge-stage,.cf-turnstile,iframe[src*="captcha"]')};
 }"""
+JS=JS.replace('TAB_TARGET_EXPRESSION',TAB_TARGET_JS).replace('TAB_SELECTOR_EXPRESSION',json.dumps(TAB_SELECTOR))
 CHROME='/opt/devmcp-browsers/chromium_headless_shell-1254/chrome-headless-shell-linux64/chrome-headless-shell'
 
 def known_dialog_opener(control, origin):
@@ -69,6 +93,7 @@ def allowed(c,origin):
  if known_dialog_opener(c,origin):return True
  label=c['text']
  if UNSAFE_LABEL.search(label):return False
+ if c['kind']=='tab':return c.get('in_form') is False
  if c['kind']=='slider':return bool(re.search(r'\b(value selector|volume|calculator|estimator|range|slider)\b',label,re.I))
  if c['kind']=='button':return c.get('button_type')!='submit' and bool(SAFE_LABEL.search(label))
  try:
