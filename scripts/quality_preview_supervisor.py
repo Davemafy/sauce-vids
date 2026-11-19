@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Deterministic evidence-led film QA; no inference or compositor mutation."""
-import argparse, hashlib, json, subprocess
+import argparse, hashlib, json, math, subprocess
 from pathlib import Path
 import numpy as np
 
@@ -17,6 +17,143 @@ def frames(path, seconds, fps=10):
     cmd=["ffmpeg","-v","error","-i",str(path),"-t",str(seconds),"-vf",f"fps={fps},scale=160:90,format=gray","-f","rawvideo","-"]
     data=subprocess.check_output(cmd,timeout=90)
     return np.frombuffer(data,dtype=np.uint8).reshape(-1,90,160).astype(np.int16)
+
+def verified_focal_geometry(focal:dict, size:tuple[int,int])->list[dict]:
+    """Opt-in source-verified camera/DOM geometry rejection.
+
+    This is a *narrow* compositional check for primary-object silent studies.
+    It does not measure taste or general-product UI quality. A genuine DOM
+    rectangle plus the compositor's 2x3 affine must be supplied; never infer
+    an attractive made-up region from video pixels.
+    """
+    if not isinstance(focal,dict):
+        raise ValueError("Missing source measured focal geometry")
+    W,H=size
+    expected={"source_rect":4,"source_size":2,"camera_matrix":2,"stage_window":4}
+    for key,num in expected.items():
+        if not isinstance(focal.get(key),list) or len(focal[key])!=num:
+            raise ValueError("Malformed recorded camera geometry: "+key)
+    values=[*focal["source_rect"],*focal["source_size"],*focal["stage_window"]]
+    if not all(type(x) in (int,float) and math.isfinite(x) for x in values):
+        raise ValueError("Nonfinite source geometry")
+    sx,sy,sw,sh=focal["source_rect"]
+    srcw,srch=focal["source_size"]
+    wx,wy,ww,wh=focal["stage_window"]
+    if not (min(sx,sy)>=0 and min(sw,sh)>=8 and
+            sx+sw<=srcw and sy+sh<=srch and
+            0<=wx<W and 0<=wy<H and ww>0 and wh>0 and
+            wx+ww<=W and wy+wh<=H):
+        raise ValueError("Source/stage rectangle outside verified frame")
+    m=np.asarray(focal["camera_matrix"],dtype=np.float64)
+    if m.shape!=(2,3) or not np.isfinite(m).all():
+        raise ValueError("Invalid real camera matrix")
+    def visible(rect):
+        x,y,w,h=rect
+        corners=np.array([[x,y,1],[x+w,y,1],[x,y+h,1],[x+w,y+h,1]],np.float64)
+        projected=(m@corners.T).T
+        x0,y0=np.min(projected,axis=0)
+        x1,y1=np.max(projected,axis=0)
+        area=max(0.,x1-x0)*max(0.,y1-y0)
+        cx0=max(wx,x0);cy0=max(wy,y0)
+        cx1=min(wx+ww,x1);cy1=min(wy+wh,y1)
+        visible_area=max(0.,cx1-cx0)*max(0.,cy1-cy0)
+        return (visible_area,visible_area/max(area,1e-9),
+                [round(float(v),2) for v in (x0,y0,x1-x0,y1-y0)])
+    area,in_frame,projected=visible((sx,sy,sw,sh))
+    fraction=float(area/(W*H))
+    findings=[]
+    if fraction < .08:
+        findings.append({"code":"SMALL_VERIFIED_PRIMARY_SUBJECT",
+                         "detail":{"fraction_of_output":round(fraction,5),
+                                   "projected_rect":projected,
+                                   "threshold":.08}})
+    if in_frame < .975:
+        findings.append({"code":"FOCAL_TARGET_CLIPPED",
+                         "detail":{"fraction_inside_screen":round(in_frame,5)}})
+    texts=focal.get("protected_text",[])
+    if not isinstance(texts,list) or len(texts)>64:
+        raise ValueError("Invalid protected text evidence")
+    for item in texts:
+        if not isinstance(item,dict) or not isinstance(item.get("text"),str):
+            raise ValueError("Invalid text source receipt")
+        rect=item.get("rect")
+        if not isinstance(rect,list) or len(rect)!=4 or any(
+            type(v) not in (int,float) or not math.isfinite(v) for v in rect
+        ):
+            raise ValueError("Missing source-measured text rectangle")
+        px,py,pw,ph=rect
+        if min(px,py)<0 or min(pw,ph)<1 or px+pw>srcw or py+ph>srch:
+            raise ValueError("Text evidence outside source")
+        visible_area,ratio,_=visible(rect)
+        if visible_area>0 and .025<ratio<.975:
+            findings.append({"code":"PARTIALLY_CROPPED_SOURCE_TEXT",
+                             "detail":{"text":item["text"][:80],
+                                       "fraction_visible":round(ratio,5)}})
+        # Only operator-selected *critical* text with a measured browser
+        # font size is subject to the mobile readability heuristic.
+        if "source_font_px" in item:
+            font=item["source_font_px"]
+            if (type(font) not in (int,float) or not math.isfinite(font)
+                or not 4<=font<=250):
+                raise ValueError("Invalid measured source font size")
+            native_scale=float(np.sqrt(abs(np.linalg.det(m[:,:2]))))
+            mobile_px=float(font*native_scale*390/W)
+            if ratio>=.975 and mobile_px<8.5:
+                findings.append({"code":"UNREADABLE_CRITICAL_TEXT_AT_390PX",
+                                 "detail":{"text":item["text"][:80],
+                                           "mobile_font_px":round(mobile_px,2),
+                                           "threshold_px":8.5}})
+    return findings
+
+
+def verified_focal_sequence(sequence:dict,size:tuple[int,int])->list[dict]:
+    """Review *all supplied source-timed* camera samples, not a cherry-picked still.
+
+    Safe as an opt-in before/after-encode measurement, without altering camera
+    paths or moving browser events. Only contiguous frame-indexed sequences
+    are admitted as full-sequence evidence. Never claims the film is beautiful.
+    """
+    if not isinstance(sequence,dict) or not isinstance(sequence.get("base"),dict):
+        raise ValueError("Missing source-measured sequence base")
+    frames=sequence.get("frames")
+    if not isinstance(frames,list) or not 1<=len(frames)<=900:
+        raise ValueError("Full geometry sequence requires 1..900 camera frames")
+    if not isinstance(frames[0],dict) or frames[0].get("frame")!=0 or any(
+        not isinstance(frame,dict) or type(frame.get("frame")) is not int
+        or frame["frame"]!=idx for idx,frame in enumerate(frames)
+    ):
+        raise ValueError("Camera geometry sequence must be contiguous from frame zero")
+    rollup={}
+    source_texts=sequence["base"].get("protected_text",[])
+    if not isinstance(source_texts,list):
+        raise ValueError("Missing real text visibility evidence")
+    for item in source_texts:
+        if not isinstance(item,dict):
+            raise ValueError("Invalid time-scoped source text evidence")
+        for name in ("start_frame","end_frame"):
+            if name in item and (type(item[name]) is not int
+                or not 0<=item[name]<=len(frames)):
+                raise ValueError("Invalid real text visibility clock")
+        if item.get("end_frame",len(frames))<item.get("start_frame",0):
+            raise ValueError("Reversed source text visibility")
+    for entry in frames:
+        active_text=[
+            {key:value for key,value in item.items()
+             if key not in ("start_frame","end_frame")}
+            for item in source_texts
+            if item.get("start_frame",0)<=entry["frame"]<
+               item.get("end_frame",len(frames))]
+        payload={**sequence["base"],"camera_matrix":entry.get("camera_matrix"),
+                 "protected_text":active_text}
+        for finding in verified_focal_geometry(payload,size):
+            code=finding["code"]
+            current=rollup.setdefault(code,{
+                "code":code,"detail":{"first_frame":entry["frame"],
+                                      "affected_frames":0,
+                                      "first_evidence":finding["detail"]}})
+            current["detail"]["affected_frames"]+=1
+    return list(rollup.values())
+
 
 def analyze(path, evidence=None, seconds=15):
     info=probe(path); video=next(s for s in info["streams"] if s["codec_type"]=="video")
@@ -51,6 +188,13 @@ def analyze(path, evidence=None, seconds=15):
     if ev.get("focus_box"):
         b=ev["focus_box"]
         if b.get("width",0)*b.get("height",0) < .04*video["width"]*video["height"]: issue("SMALL_FOCAL_CONTENT",{"focus_box":b})
+    if "verified_focal_geometry" in ev:
+        for finding in verified_focal_geometry(
+                ev["verified_focal_geometry"],(video["width"],video["height"])):
+            findings.append(finding)
+    if "verified_focal_sequence" in ev:
+        findings.extend(verified_focal_sequence(
+            ev["verified_focal_sequence"],(video["width"],video["height"])))
     return {"schema":"sauce-film-quality-v1","film":str(path),"film_sha256":digest(path),"duration":duration,"video_dimensions":[video["width"],video["height"]],"sampled_frames":len(a),"sample_fps":10,"findings":findings,"verdict":"REJECT" if findings else "HUMAN_REVIEW_REQUIRED"}
 
 def repair_edl(edit,manifest,report):
