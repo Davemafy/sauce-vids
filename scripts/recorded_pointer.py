@@ -31,8 +31,8 @@ def draw_pointer(stage, tip_x, tip_y, scale=1.):
     cv2.polylines(stage,[polygon],True,(249,249,249),max(1,round(scale * height/385)),cv2.LINE_AA,shift=4)
 
 
-@lru_cache(maxsize=1)
-def _loupe_cursor_asset():
+@lru_cache(maxsize=2)
+def _loupe_cursor_asset(clean=False):
     # Render a conventional arrow on a transparent, supersampled tile.
     # The forward tip sits at (4, 4); rounded joins keep the stem clean.
     from cairosvg import svg2png
@@ -42,14 +42,20 @@ def _loupe_cursor_asset():
                Q5 41 5 38 Z" fill="#151618" stroke="#f6f6f6"
         stroke-width="2.05" stroke-linejoin="round"/>
     </svg>'''
+    if clean:
+        # A straight, constant-width shaft with parallel edges.
+        svg = b'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 50">
+          <path d="M4 4 L4 35 L12.5 27 L20 43 L25.4 40.5 L17.9 24.5 L29 24.5 Z"
+                fill="#121316" stroke="#ffffff" stroke-width="1.65" stroke-linejoin="round"/>
+        </svg>'''
     png=svg2png(bytestring=svg,output_width=160,output_height=200)
     rgba=cv2.imdecode(np.frombuffer(png,np.uint8),cv2.IMREAD_UNCHANGED).astype(np.float32)/255.
     rgba[:,:,:3] *= rgba[:,:,3:4]
     return rgba
 
 
-def draw_loupe_pointer(stage, tip_x, tip_y, *, scale=1.):
-    asset = _loupe_cursor_asset()
+def draw_loupe_pointer(stage, tip_x, tip_y, *, scale=1., clean=False):
+    asset = _loupe_cursor_asset(clean)
     size = scale*stage.shape[0]/1080
     left,top = tip_x-4*size,tip_y-4*size
     x0,y0 = max(0,int(np.floor(left))),max(0,int(np.floor(top)))

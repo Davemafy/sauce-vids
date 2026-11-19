@@ -146,7 +146,7 @@
       "additionalProperties": false,
       "properties": {
         "cursor_style": {
-          "enum": ["rounded", "outlined"]
+          "enum": ["rounded", "outlined", "clean"]
         },
         "entry_delay": {
           "type": "number",

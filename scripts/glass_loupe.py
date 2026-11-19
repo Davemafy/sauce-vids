@@ -31,7 +31,7 @@ class LoupeStyle:
     def from_plan(cls, data):
         if not isinstance(data, dict) or set(data) - {f.name for f in fields(cls)}:
             raise ValueError("Unknown glass loupe control")
-        if data.get("cursor_style", "rounded") not in ("rounded", "outlined"):
+        if data.get("cursor_style", "rounded") not in ("rounded", "outlined", "clean"):
             raise ValueError("Invalid glass loupe cursor_style")
         for name, value in data.items():
             if name == "cursor_style":
@@ -260,6 +260,8 @@ def apply_loupe(stage, source, transform, shot, time, style=LoupeStyle()):
     tip_y = base_y+(center_y+dy*radial_scale-base_y)*strength
     if style.cursor_style == "outlined":
         draw_pointer(stage,tip_x,tip_y,scale=1.+strength*(.43-.24*reveal))
+    elif style.cursor_style == "clean":
+        draw_loupe_pointer(stage,tip_x,tip_y,scale=.93,clean=True)
     else:
         draw_loupe_pointer(stage,tip_x,tip_y,scale=1.+strength*(.28-.14*reveal))
     return stage

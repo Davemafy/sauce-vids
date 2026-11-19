@@ -126,3 +126,9 @@ The optional `glassLoupe.cursor_style` selects `rounded` (the default) or
 `outlined`. Both use the same recorded hotspot and lens projection. The
 [liquid-glass example](../examples/sauce-film-plan-glass-loupe-liquid.json)
 uses the outlined style and the timing of the standalone 4.65-second reference.
+
+Use `glassLoupe.cursor_style: "clean"` for a straight-shaft arrow with a
+thin white outline and fixed screen-space size. Its hotspot follows the
+same recorded path through the lens. The [clean cursor example](../examples/sauce-film-plan-glass-loupe-clean-cursor.json)
+uses the exact-reference plan as its starting point and changes only the
+cursor style.

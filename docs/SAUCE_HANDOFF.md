@@ -2,6 +2,12 @@
 
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
+## 2026-11-19 — Straight-shaft cursor for the liquid-glass cut
+
+`examples/sauce-film-plan-glass-loupe-clean-cursor.json` selects a thinner, straight-shaft arrow at a fixed screen-space size. It uses the same recorded cursor hotspot and optical mapping as the liquid-glass reference plan. The existing rounded and outlined styles remain available, including the byte-identical reference fixture.
+
+The new 4.65s Vultr master is `sauce-loupe-json-proof/qa/clean-cursor/master.mp4` (1920×1080, 60fps, 279 frames, SHA-256 `a92e208f148cf72e85e862cc83f6e35118bff3fed280c6b4a933795efb8b3e15`). Compared encoded frames 8, 80, 150, 221, 250 and 272 against the reference cut. The outline and arrow shaft stay readable around the white slider thumb. Pre-encode comparisons at six phases verified that pixel changes stay within the pointer footprint. Full decode, Chromium desktop and phone playback and seeking, and 28 focused tests passed. Production was not deployed.
+
 ## 2026-11-19 — Exact JSON replay of the standalone liquid-glass reference
 
 The standalone file `1000421253.mp4` is the earlier liquid-glass cut with an outlined pointer. This is a different review target from the preceding split-screen comparison. Recovered the original verified 2880×1800 browser recording, timing sidecar and backdrop from the existing Vultr worker. The [liquid-glass plan](../examples/sauce-film-plan-glass-loupe-liquid.json) selects the original timing, normalized lens layout and outlined cursor through the existing film-plan compositor. Rounded remains the default.
