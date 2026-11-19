@@ -115,3 +115,41 @@ def test_reject_layer_count_overflow(subject):
 def test_original_source_cursor_reappears_when_isolation_ends(subject):
     spec=load(subject)
     assert render_isolated_stage(spec,2.9,(640,360)) is None
+
+
+def test_complete_component_region_is_used_without_heuristic_padding(subject):
+    source, manifest, raw = subject
+    manifest["events"][0]["componentRect"]={
+        "x":108,"y":20,"width":106,"height":120}
+    layer=raw["layers"][0]
+    layer["anchor"]="event:0:component"
+    layer["paddingPx"]=0
+    plan=load(subject)
+    assert plan.layers[0].source_bounds==(108,20,214,140)
+    assert plan.layers[0].anchor=="event:0:component"
+
+
+def test_missing_component_does_not_fallback_to_changed_price_text(subject):
+    source,manifest,raw=subject
+    raw["layers"][0]["anchor"]="event:0:component"
+    with pytest.raises(ValueError,match="Missing verified source rectangle"):
+        load(subject)
+
+
+def test_reject_partial_component_outside_recorded_frame(subject):
+    source,manifest,raw=subject
+    raw["layers"][0]["anchor"]="event:0:component"
+    manifest["events"][0]["componentRect"]={
+        "x":108,"y":20,"width":106,"height":181}
+    with pytest.raises(ValueError,match="outside verified source pixels"):
+        load(subject)
+
+
+def test_complete_component_must_not_appear_before_actual_event(subject):
+    source,manifest,raw=subject
+    raw["layers"][0]["anchor"]="event:0:component"
+    raw["layers"][0]["sourceAt"]=.4
+    manifest["events"][0]["componentRect"]={
+        "x":108,"y":20,"width":106,"height":120}
+    with pytest.raises(ValueError,match="before it exists"):
+        load(subject)

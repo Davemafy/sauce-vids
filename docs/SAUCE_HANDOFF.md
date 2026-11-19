@@ -2,6 +2,19 @@
 
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
+## 2026-11-19 — Complete source-true component capture for JSON UI layers
+
+**Problem verified in actual film:** Earlier separated Resend UI was clipped because its resultRect described only changed price text, while the real Pro card was 299x658px and crossed the bottom of the initial 1080px viewport. Adding arbitrary padding cannot recover missing authentic pixels.
+
+**Verified code change, isolated main checkout:** backend/live_capture.py optionally preframes a bounded, decorated DOM price card before the real slider action, then records a whole componentRect from the changed numeric outcome's visible decorated ancestor. Missing or partial components are left absent. The source-true film-plan camera, UI-isolation layer and schema now accept the strict event:N:component anchor with no fallback to resultRect. Browser and negative tests cover missing, offscreen, pre-outcome and non-component geometry.
+
+**Real browser evidence:** public Resend at 1920x1080 CSS/DPR2; actual slider changed $20 / mo to $35 / mo with 26 pointer samples and scrollY=97. Full observed card: (x=655,y=368.796875,width=299,height=658.3125). Genuine 1920x1080 VP9/25fps capture 7.68s, SHA256 902805cf5c146f995ef2ade1b3076a1841deaf62c3adf105a749aa8595b4c9da. Private isolated checkout proof: sauce-ship-proof/.tmp_component-proof/.
+
+**Rendered and visually inspected:** full-card-study.mp4 (7.52s, 188 H264 frames, 1920x1080/25fps) uses two separate genuine source crops. Pixel-provenance receipt records component bounds (655,368,954,1028), source frame 107 and crop SHA256 9bf4b987dcc9a3e83597a8bf8afd25e2ae8e8907c63014ec44a8216d1f208eff. A second minimal-study.mp4 (6.24s, 156 H264 frames) uses one whole-card layer after genuine source trimming and event timestamp rebasing. Both fully decode. **Both remain unapproved:** first composition duplicates the result and has a slow wide opening; second removes duplication but has weak initial framing and an overly empty neutral stage. No customer film, no narration, no 60fps native source claim.
+
+**Testing and operational boundary:** 259 passed, 10 skipped and 10 subtests across Phase 2, URL/live edit and local Chromium geometry. No new server, paid inference, public MP4 deployment, billing, production checkout edits or customer outreach. Next: transfer full-component extraction to another authorized product, improve opening and visual payoff until the independent publishability gate passes.
+
+
 ## 2026-11-19 — Straight-shaft cursor for the liquid-glass cut
 
 `examples/sauce-film-plan-glass-loupe-clean-cursor.json` selects a thinner, straight-shaft arrow at a fixed screen-space size. It uses the same recorded cursor hotspot and optical mapping as the liquid-glass reference plan. The existing rounded and outlined styles remain available, including the byte-identical reference fixture.

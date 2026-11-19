@@ -146,11 +146,78 @@ def capture_quality():
          'viewport':{'width':width,'height':height},
          'video_size':{'width':width,'height':height}}
 
+# Browser-derived geometry, never guessed from pricing-card names or site CSS.
+# If an outcome text node lives inside a compact, visually bounded DOM component,
+# capture the entire component when it is fully visible. Failure to find one is
+# explicit: an unbounded price-text rectangle must not masquerade as a full card.
+COMPONENT_RECT_JS = r"""node => {
+  if (!(node instanceof Element) || node.closest('form,[data-private],[data-secret],[data-sensitive]'))
+    return null;
+  const leaf=node.getBoundingClientRect();
+  const visibleRect=r=>r.width>0&&r.height>0&&r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight;
+  for(let a=node.parentElement,depth=0;a&&depth<8;depth++,a=a.parentElement){
+    if(a.matches('body,html,main,nav,footer,form') ||
+       a.closest('[data-private],[data-secret],[data-sensitive]'))break;
+    const r=a.getBoundingClientRect(), css=getComputedStyle(a);
+    if(!visibleRect(r) || r.width<160 || r.height<120 ||
+       r.width>innerWidth*.50 || r.height>innerHeight*.90 ||
+       r.width*r.height<leaf.width*leaf.height*3)continue;
+    const radius=parseFloat(css.borderTopLeftRadius)||0;
+    const bordered=parseFloat(css.borderTopWidth)>0&&css.borderTopStyle!=='none';
+    const backed=css.backgroundColor!=='rgba(0, 0, 0, 0)'&&css.backgroundColor!=='transparent';
+    if(!(radius>=6&&(bordered||backed)||css.boxShadow!=='none'))continue;
+    // A component is not a full-page panel. Return only the nearest qualifying container.
+    return {x:r.x,y:r.y,width:r.width,height:r.height};
+  }
+  return null;
+}"""
+
+def prepare_slider_component_view(page, loc):
+ """Move a compact pricing component fully into frame before the real drag.
+
+ Only the existing visible numerical price and its bordered DOM ancestor can
+ justify a tiny scroll. This is an optional source-quality improvement; if the
+ slider and whole component cannot coexist, no artificial reconstruction occurs.
+ """
+ if loc.count()!=1:return 0
+ delta=loc.evaluate(r"""e => {
+   let root=e;
+   for(let i=0;root?.parentElement&&i<9;i++){
+     if(root.querySelectorAll('span').length>0 && root.innerText?.includes('/ mo'))break;
+     root=root.parentElement;
+   }
+   if(!root)return 0;
+   const input=e.getBoundingClientRect();
+   const findCard=node=>{
+     for(let a=node.parentElement,d=0;a&&d<7;d++,a=a.parentElement){
+       const r=a.getBoundingClientRect(),style=getComputedStyle(a);
+       if(r.width>=160&&r.width<=innerWidth*.5&&r.height>=120&&
+          r.height<=innerHeight*.90&&parseFloat(style.borderTopWidth)>0&&
+          (parseFloat(style.borderTopLeftRadius)||0)>=6)return r;
+     }
+     return null;
+   };
+   const candidates=[...root.querySelectorAll('span,p')]
+      .filter(n=>n.children.length===0&&/^\$\s*\d{1,4}\s*\/\s*mo$/i.test(n.innerText?.trim()||''));
+   for(const node of candidates){
+      const card=findCard(node);
+      if(!card||card.height>innerHeight-96||card.left<0||card.right>innerWidth)continue;
+      const needed=Math.ceil(card.bottom-innerHeight+52);
+      if(needed>0 && needed<=210 && input.top-needed>=90)return needed;
+   }
+   return 0;
+ }""")
+ if delta>0:
+  page.evaluate("delta=>window.scrollBy({top:delta,behavior:'instant'})",delta)
+  page.wait_for_timeout(260)
+ return delta
+
 def capture_slider(page, loc, time_zero):
  """Record a real drag and verify one dependent visible value group."""
  if loc.count()!=1 or not loc.is_enabled():
   print('Slider locator unavailable',loc.count(),flush=True)
   return None
+ prepare_slider_component_view(page,loc)
  setup=loc.evaluate_handle(r"""e => {
   if (!e.matches('input[type=range]') ||
       e.closest('form,[data-private],[data-secret],[data-sensitive]') ||
@@ -210,7 +277,7 @@ def capture_slider(page, loc, time_zero):
   released=time.monotonic()-time_zero
   points.append({'t':released,'x':geometry['end'],'y':y})
   page.wait_for_timeout(280)
-  result=setup.evaluate(r"""s => {
+  result=setup.evaluate("s => {\n    const componentFor = "+COMPONENT_RECT_JS+";\n"+r"""
     if(!s.e.isConnected || Number(s.e.value)===s.value)return null;
     const changes=s.candidates.flatMap(({node,text})=>{
       if(!node.isConnected || node.checkVisibility?.({opacityProperty:true,visibilityProperty:true})===false)
@@ -226,14 +293,19 @@ def capture_slider(page, loc, time_zero):
       const monthly=/\/\s*mo\b/i;
       const price=currency.test(text)&&currency.test(after) &&
         (monthly.test(text)&&monthly.test(after) || row.length<=90&&monthly.test(row));
-      return [{r, price:price ? {before:text,after,period:'month'} : null}];
+      return [{r,node, price:price ? {before:text,after,period:'month'} : null}];
     });
     if(!changes.length)return null;
     const rects=changes.map(c=>c.r);
     const x=Math.min(...rects.map(r=>r.left)),y=Math.min(...rects.map(r=>r.top));
     const prices=changes.map(c=>c.price).filter(Boolean);
+    const priced=changes.filter(c=>c.price);
+    // A precise card boundary is only admitted for a single verified
+    // numeric product outcome, not an unverified marketing container.
+    const componentRect=priced.length===1?componentFor(priced[0].node):null;
     return {rect:{x,y,width:Math.max(...rects.map(r=>r.right))-x,
                  height:Math.max(...rects.map(r=>r.bottom))-y},
+            componentRect,
             price:prices.length===1 ? prices[0] : null};
   }""")
   if result is None:
@@ -243,7 +315,8 @@ def capture_slider(page, loc, time_zero):
   return {'kind':'slider_change','start':start,'t':released,'end':released,
           'evidence':'Range changed with a visible dependent numeric result',
           'targetRect':{k:track[k] for k in ('x','y','width','height')},
-          'resultRect':result['rect'],'price_change':result['price'],'pointer_samples':points}
+          'resultRect':result['rect'],'componentRect':result['componentRect'],
+          'price_change':result['price'],'pointer_samples':points}
  finally:
   setup.dispose()
 

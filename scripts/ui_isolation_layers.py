@@ -42,8 +42,8 @@ def _anchor_box(anchor, manifest, width, height, source_at):
     if not isinstance(anchor,str):
         raise ValueError("UI layer anchor must be a verified event reference")
     parts=anchor.split(":")
-    if len(parts)!=3 or parts[0]!="event" or not parts[1].isdigit() or parts[2] not in ("target","result"):
-        raise ValueError("UI layer requires event:N:target or event:N:result")
+    if len(parts)!=3 or parts[0]!="event" or not parts[1].isdigit() or parts[2] not in ("target","result","component"):
+        raise ValueError("UI layer requires event:N:target, event:N:result or event:N:component")
     idx=int(parts[1]);events=manifest.get("events")
     if not isinstance(events,list) or idx>=len(events):
         raise ValueError("Missing verified UI event")
@@ -51,9 +51,10 @@ def _anchor_box(anchor, manifest, width, height, source_at):
     if not isinstance(event,dict) or not isinstance(event.get("evidence"),str) or not event["evidence"].strip():
         raise ValueError("UI layer requires genuine verified outcome evidence")
     at=_number(event.get("t"),"event outcome time",0,float("inf"))
-    if parts[2]=="result" and source_at < at:
+    if parts[2] in ("result","component") and source_at < at:
         raise ValueError("Cannot extract a result before it exists")
-    rect=event.get("targetRect" if parts[2]=="target" else "resultRect")
+    rect=event.get({"target":"targetRect","result":"resultRect",
+                    "component":"componentRect"}[parts[2]])
     if not isinstance(rect,dict):
         raise ValueError("Missing verified source rectangle")
     try:

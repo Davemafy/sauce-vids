@@ -104,6 +104,14 @@ This is an excerpt and needs the top-level source/media/manifest hashes, camera 
 
 Private first proof `studio/.tmp/layer-proof/isolated-ui.mp4`: 6.9s 414 frames 1920×1080/60 H264, full FFmpeg decode passed, total 19.34s rendering, no audio. The input is the **60fps resampled presentation**, whose actual browser source was ~25fps; this does not establish native 60fps capture. Contact sheet reviewed at ~0.4/1.8/3.1/3.85/4.15/4.5/5.2/6.3 seconds; the cutout/clip defects remain and the film is rejected for sale.
 
+## Verified full-component anchors for UI isolation (2026-11-19)
+
+The editor now supports event:N:component as a camera or UI-isolation anchor, but only when the original captured event contains the complete, verified componentRect. event:N:result remains the changed-price/text rectangle and is never silently enlarged. The source and event manifest are SHA256-pinned. A missing, clipped or future component fails validation.
+
+The public slider capture now scrolls slightly before interaction only when a compact bordered pricing component can fit entirely in the viewport without losing the real slider. After the genuine change, capture records the exact decorated DOM ancestor as componentRect. No website-specific selector or synthetic pixels are involved. The isolated UI crop remains a frozen browser frame rather than a re-created dynamic component.
+
+In an isolated genuine Resend probe at 1920x1080 CSS/DPR2, one recorded slider drag changed $20/mo to $35/mo. Preframing moved scrollY to 97 and measured the complete Pro card at x=655,y=368.797,width=299,height=658.313. The recorded source was 1920x1080 VP9 at 25fps (not native 60fps). A 7.52s H264 study of the whole card plus duplicate price close-up and a second 6.24s H264 minimal study both decoded fully. Creative review rejected both: the first duplicates the price and opens too wide, while the second has a weak opening and abrupt empty stage. See living handoff for full hashes and proof paths. No commercial approval or production deployment.
+
 ## What v1 does NOT claim
 
 It supports static UI isolation as a bounded experimental primitive, but still does not generate polished creative decisions on its own, perform unsafe browser actions, synthesize motion between distinct real UI states, replace the existing advanced scene/3D renderer, produce arbitrary layered typography, provide an interactive animation editor or promise any given JSON is cinematic. Advanced compositing must be added as **versioned reusable engine primitives** (masks, depth planes, transforms, accessible title/caption layers, reversible time warps, audio tracks), with independent source-truth proofs and tests—not through per-website Python hacks.

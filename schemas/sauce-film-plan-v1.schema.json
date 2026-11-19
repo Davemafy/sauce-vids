@@ -94,7 +94,7 @@
           },
           "anchor": {
             "type": "string",
-            "pattern": "^(wide|event:[0-9]+:(target|result|group))$"
+            "pattern": "^(wide|event:[0-9]+:(target|result|group|component))$"
           },
           "zoom": {
             "type": "number",
@@ -255,7 +255,7 @@
               },
               "anchor": {
                 "type": "string",
-                "pattern": "^event:[0-9]+:(target|result)$"
+                "pattern": "^event:[0-9]+:(target|result|component)$"
               },
               "sourceAt": {
                 "type": "number",

@@ -51,8 +51,8 @@ def _anchor(anchor, time, manifest, width, height):
     if not isinstance(anchor,str):
         raise ValueError("Anchor must be a string")
     parts=anchor.split(":")
-    if len(parts)!=3 or parts[0]!="event" or not parts[1].isdigit() or parts[2] not in ("target","result","group"):
-        raise ValueError("Only wide or event:<index>:<target|result|group> are supported")
+    if len(parts)!=3 or parts[0]!="event" or not parts[1].isdigit() or parts[2] not in ("target","result","group","component"):
+        raise ValueError("Only wide or event:<index>:<target|result|group|component> are supported")
     index=int(parts[1])
     events=manifest.get("events")
     if not isinstance(events,list) or index>=len(events):
@@ -63,14 +63,14 @@ def _anchor(anchor, time, manifest, width, height):
     result_time=_float(event.get("t"),"observed result time",0)
     if result_time > manifest.get("_source_duration",float("inf")):
         raise ValueError("Event is outside source video duration")
-    if parts[2] in ("result","group") and time < result_time:
+    if parts[2] in ("result","group","component") and time < result_time:
         raise ValueError("Camera cannot anticipate a not-yet-observed result")
     target=_rectangle(event,"targetRect",width,height)
     if parts[2]=="target":
         boxes=[target]
     else:
-        result=_rectangle(event,"resultRect",width,height)
-        boxes=[result] if parts[2]=="result" else [target,result]
+        result=_rectangle(event,"componentRect" if parts[2]=="component" else "resultRect",width,height)
+        boxes=[result] if parts[2] in ("result","component") else [target,result]
     x0=min(r[0] for r in boxes);y0=min(r[1] for r in boxes)
     x1=max(r[0]+r[2] for r in boxes);y1=max(r[1]+r[3] for r in boxes)
     return (x0+x1)/2,(y0+y1)/2,(x0,y0,x1,y1)
@@ -226,7 +226,7 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
         # toward that future result during the preceding action.
         if isinstance(anchor,str) and anchor.startswith("event:"):
             parts=anchor.split(":")
-            if len(parts)==3 and parts[2] in ("result","group"):
+            if len(parts)==3 and parts[2] in ("result","group","component"):
                 observed_at=_float(m["events"][int(parts[1])].get("t"),"observed result time",0)
                 if start_at < observed_at:
                     raise ValueError("Camera would anticipate unobserved result during easing")

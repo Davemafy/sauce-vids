@@ -194,3 +194,20 @@ def test_window_backdrop_must_match_hash_and_stay_local(tmp_path):
     asset.write_bytes(b"different backdrop")
     with pytest.raises(ValueError, match="SHA256"):
         load_window(style, plan_path)
+
+
+def test_json_camera_can_frame_complete_source_component(source):
+    movie,m,plan=source
+    m["events"][0]["componentRect"]={
+        "x":560,"y":260,"width":400,"height":650}
+    plan["camera"][-1]["anchor"]="event:0:component"
+    plan["camera"][-1]["zoom"]=1.0
+    result=compile_plan(source)
+    assert result.camera_keys[-1].anchor=="event:0:component"
+
+
+def test_json_camera_component_cannot_fallback_to_text_result(source):
+    movie,m,plan=source
+    plan["camera"][-1]["anchor"]="event:0:component"
+    with pytest.raises(ValueError,match="Missing verified componentRect"):
+        compile_plan(source)
