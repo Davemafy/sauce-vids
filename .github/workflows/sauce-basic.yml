@@ -1,0 +1,31 @@
+name: Sauce Basic deterministic tour
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/basic_tour_*.py'
+      - 'tests/phase2/test_basic_tour_*.py'
+      - 'tests/fixtures/basic-tour-offline.html'
+      - 'docs/SAUCE_BASIC_V1.md'
+      - '.github/workflows/sauce-basic.yml'
+  workflow_dispatch:
+
+jobs:
+  basic-tour-contract-and-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install deterministic browser and media test dependencies
+        run: |
+          python -m pip install --disable-pip-version-check 'playwright>=1.55,<2' 'numpy>=1.26,<3' 'Pillow>=10,<14'
+          python -m playwright install --with-deps chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+      - name: Basic source/contract/adversarial/media tests
+        run: python -m unittest discover -s tests/phase2 -p 'test_basic_tour_*.py' -v
+      - name: Compile Basic modules
+        run: python -m py_compile scripts/basic_tour_planner.py scripts/basic_tour_discovery.py scripts/basic_tour_quality.py scripts/basic_tour_native.py scripts/basic_tour_media_qa.py

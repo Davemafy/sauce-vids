@@ -1,5 +1,27 @@
 # Sauce — living handoff for new agents and new chats
 
+## 2026-11-19 — Sauce Basic: rejected slow first glance, private cinematic-free Short Cut review
+
+Owner feedback: the original 172.85-second Brimble Basic film was boring and discouraging at first glance. Treat that as a creative failure even though source/replay/codec checks passed. Basic now has two separate source-true deliverables: the complete three-chapter full-site sample and an opt-in 20.9-second Short Cut. Do not make the Short Cut the public default without real film quality approval.
+
+Source-truth and architecture: all code is built on latest GitHub MAIN in an isolated clean Vultr checkout. Sauce Basic scans only explicitly allowlisted public hosts, observes robots, generates a deterministic JSON scrolling plan, records real native-1920 CSS browser source with existing Playwright capture, and produces per-page genuine source/manifest SHA256-pinned sauce-film-plan-v1 JSON validated by the unchanged advanced renderer. Short Cut EDL controls only clip selection, source pixel-only framing and hard cuts. NO new compositing engine, fake UI, simulated SaaS click, model inference, paid activity, or public arbitrary URL API.
+
+First shorter cut was rejected as a 17.47-second slideshow. The revised 20.9-second seven-shot cut starts with real Brimble Sandboxes code UI rather than an empty white bee hero, has a mild bounded camera push on that actual source, includes genuine browser scroll arrivals, actual Agent/landing sections and authentic final CTA. It still contains long near-static holds and does NOT yet count as a high-quality customer film.
+
+QA MP4: https://devmcp.davemafy.xyz/sauce-motion-phase2/basic-hook-review-20261119/brimble-short-cut-1080p30.mp4
+Verified SHA256 c914857cbb2150301261df4d2661aea9238b3d307adff0c8fd02a76de698fae3, 1920x1080, 30fps H.264 from 25fps Chromium source, 627 frames, 20.9 seconds, full FFmpeg decode; identical SHA on public host, 200 video/mp4, HTTP206 range.
+QA contact sheet: https://devmcp.davemafy.xyz/sauce-motion-phase2/basic-hook-review-20261119/contact-sheet.jpg
+The full 3-page 172.85s master is retained separately:
+https://devmcp.davemafy.xyz/sauce-motion-phase2/basic-native-20261119/master-1080p60.mp4 .
+40 focused pure/Chromium/encoded media tests passed against the updated latest MAIN, plus actual existing Sauce --film-plan --validate-only passed against a verified recorded source.
+
+Important caveats: the source is genuinely 1920x1080 CSS/DPR2 but only 25 distinct frames/second; all higher FPS outputs are resampled. Brimble Sandboxes previously exceeded its preflight estimate by over 20 percent: Short Cut flags it LOW CONFIDENCE. Ten-site bounded discovery is not ten accepted films; Ghost incomplete images and Resend severe 41.9s browser stalling remain rejected. High-contrast source salience is not a substitute for creative art direction. No customer payment, launched self-service URL box or approved premium/basic film has been claimed.
+
+Immediate next steps: improve the actual first seconds and eliminate dead holds; then verify three distinct convincing sites with human visual review, native source FPS economics, loading/overlay/consent policy and hardened network sandbox before accepting arbitrary URLs. Preserve all advanced work and do not overwrite production.
+
+---
+
+
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
 ## 2026-11-19 — Reject approximate reference JSON; exact Arcade frame evidence (not 1:1 yet)
