@@ -2,6 +2,13 @@
 
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
+## 2026-11-19 — Live competitor trials and decoded public video references
+
+[Independent browser and film audit](SAUCE_COMPETITOR_LIVE_AUDIT_20261119.md). On Vultr Chromium, DemoVisor's free unauthenticated Resend pricing preview proposed a generic overview/sign-up/navigation sequence and **missed the verified slider $20→$35 interaction**. This is a planning-preview observation, not a failed finished output. DemoBot's email login delivered a one-time code into an AgentMail benchmark inbox; authenticated continuation was blocked and not bypassed. Arcade's free-video subdomain returned Cloudflare Error 1000 from that worker; the main Arcade example gallery worked. No paid plan, production deployment or customer contact.
+
+Decoded and actually sampled public MP4s: DemoVisor OpenSwarm 62s/1080p30, Clueso Agents launch film 30s/1080p30, and Arcade Stack by Ramp 67.2s/1080p30. The audit records direct official video links, SHA256 receipts, and sampled timecodes. Arcade's clear functional closeups and legible result continuity are the most pertinent benchmark for Sauce; Clueso's brand-motion craft is a separate launch-film category. No competitor video, screenshot, login email, or inbox data committed. **No creative approval granted to Sauce.**
+
+
 ## 2026-11-19 — Declarative source-true film JSON (isolated engine proof)
 
 A new site-independent `sauce-film-plan-v1` contract drives the EXISTING `scripts/render_event_video.py` with `--film-plan` instead of adding another Resend-specific renderer. See [JSON film-plan specification](SAUCE_JSON_FILM_PLAN.md), schema `schemas/sauce-film-plan-v1.schema.json`, and genuine-capture sample `examples/sauce-film-plan-slider.json`. Explicit keyframes interpolate the actual source camera; anchors are independently measured event target/result/group rectangles, source media and event sidecar are each SHA256-pinned, and optional source-timed recorded cursor and previously authorized local narration audio stay controlled by JSON. Camera transitions toward verified results are forbidden before observed event time, including their EASING START. Safety rejects mismatched source/manifest, unsupported properties, clipped proof, invalid pointer/audio and excessive camera motion. Fast `--validate-only` checks the plan before rendering; old CLI behavior is untouched when no film plan is passed.
