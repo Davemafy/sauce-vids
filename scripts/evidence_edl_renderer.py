@@ -179,9 +179,15 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
            motion_shutter=False,floating_stage=False,premium_cursor=False,
            click_water_ripple=False,stage_scale=.79,
            source_verified_whip=False,continuity_receipt:Path|None=None,
-           protect_summary_group=False):
+           protect_summary_group=False,
+           visual_preflight_receipt:Path|None=None):
     manifest=json.loads(manifest_path.read_text())
     edit=json.loads(edit_path.read_text())
+    if visual_preflight_receipt is not None:
+        from story_viability_preflight import validate_preview_admission
+        validate_preview_admission(
+            json.loads(Path(visual_preflight_receipt).read_text()),
+            manifest, limit, edit.get("openingStudy"))
     probe=json.loads(subprocess.check_output([
       'ffprobe','-v','error','-select_streams','v:0',
       '-show_entries','stream=width,height,nb_frames,avg_frame_rate',
@@ -400,6 +406,8 @@ def main():
                         help='Fit all recorded summary cards in opt-in summary shots')
     parser.add_argument('--camera-shutter',action='store_true',
                         help='Opt-in 3-sample camera-motion exposure; holds stay sharp')
+    parser.add_argument('--visual-preflight-receipt',type=Path,
+                        help='Require source-true before/after admission; only a <=3s opening study')
     parser.add_argument('--quality-gate',action='store_true',
                         help='Reject source-true but editorially misleading films')
     parser.add_argument('--bounded-repair',action='store_true',
@@ -412,6 +420,7 @@ def main():
            click_water_ripple=a.click_water_ripple,stage_scale=a.stage_scale,
            source_verified_whip=a.source_verified_whip,
            continuity_receipt=a.continuity_receipt,
-           protect_summary_group=a.protect_summary_group)
+           protect_summary_group=a.protect_summary_group,
+           visual_preflight_receipt=a.visual_preflight_receipt)
 
 if __name__=='__main__':main()
