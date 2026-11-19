@@ -2,6 +2,17 @@
 
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
+## 2026-11-19 — Reject approximate reference JSON; exact Arcade frame evidence (not 1:1 yet)
+
+**Owner correction:** a 15-frame editorial impression is NOT good enough to feed Gemini as a premium reference. A reference needs observable visual-and-motion 1:1 reconstruction, not narrative approximation. This explicitly supersedes the earlier Gemini director-packet proposal as a production plan: the existing Arcade recipe is marked analysis_only, and the packet script now **fails closed for production**; it runs only with --research-only and emits productionGeminiEligible:false. Simply relabeling an unverified recipe verified_1to1 raises an error. A verified render-match certification path is not implemented.
+
+**Original exact-source measurements:** the same public Arcade Stack by Ramp film was reopened on persistent Vultr; MP4 SHA256 7d22a17f97d3183cae73df90321f7be7943006d9bf7f4ecd7c2a79f15215bbbf. Full-res 1920x1080/30fps decode: **2016/2016 frames** SHA256-fingerprinted from actual decoded BGR pixels, with full-frame measured changes; zero resized/proxy pixels used. Source-true derived-data ledger: references/arcade-stack-by-ramp.frame-ledger.json. A full-res change heuristic nominated 10 discontinuities; visual before/after pairs were inspected at exact incoming frames **66, 624, 792, 1015, 1104, 1261, 1392, 1438, 1579, 1833**. See references/arcade-stack-by-ramp.cut-review.json. These indices are correct for the observed large discontinuities, but are NOT an exhaustive shot/crossfade segmentation. Exact layer masks, camera curves, easing, pointer tracks and physical motion parameters remain unmeasured.
+
+**Code/QA:** new scripts/reference_frame_ledger.py and tests/phase2/test_reference_frame_ledger.py; original scripts/reference_director_packet.py and its tests hardened; new docs/SAUCE_REFERENCE_FIDELITY.md explains the strict gold-data and visual reproduction gate. Source MP4, raw frames and private QA contact images remain on the isolated worker and were not added to Git. The Phase 2/URL/live edit/component capture regression suite passed **279 tests, 10 skipped and 10 nested subtests**, in 14.30s; production deployment, paid inference and customer outreach were not performed. The older Arcade production-direction quality claim is withdrawn; no reference has earned 1:1 certification.
+
+**Next:** rebuild ONE short Arcade UI motion shot from independently captured/authorized content and actual frame-accurate measurements; compare every output frame and reject until source-true visual/motion equivalence is independently reviewed. Do not create 9 more approximate JSON examples.
+
+
 
 ## 2026-11-19 — Reference motion grammar → source-verified Gemini director packet (offline pilot)
 

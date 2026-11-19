@@ -2,6 +2,8 @@
 
 **Status:** one reference converted from actual public MP4 samples; a local, privacy-reduced packet builder and regression tests exist. **No Gemini API call, paid inference, live Studio integration, production deployment or creative acceptance.**
 
+**QUALITY CORRECTION (2026-11-19):** This initial Arcade recipe was only a 15-frame editorial impression, NOT 1:1 reference-quality data. The source has now been examined across all 2016 decoded frames; 10 strong cut boundaries are visually confirmed, but element tracks and independent motion reconstruction have NOT been completed. The reference MUST NOT be sent to Gemini production. See [SAUCE_REFERENCE_FIDELITY.md](SAUCE_REFERENCE_FIDELITY.md) for the new fail-closed contract. The packet builder requires the explicit research-only mode until an independently compared and approved reconstruction exists.
+
 ## Two JSON contracts, with a strict boundary
 
 1. **Reference grammar** (`references/arcade-stack-by-ramp.reference.json`, `sauce-reference-grammar-v1`) is learned **offline** from a benchmark film. It describes shot purposes, measured/sampled observations, compositional principles, intentional timing and restrictions. It has **no authority over product pixels or source events**. Store source URL, SHA256 and what was and wasn't actually measured; do **not** commit the MP4 or still frames. The sampled Arc​ade source has public provenance but no implied license to redistribute its media.
@@ -37,7 +39,7 @@ Use a small shortlist of proven *shot families*, not all 60 references on every 
 ### Local packet generation (no cloud or inference)
 
 ```bash
-python scripts/reference_director_packet.py \
+python scripts/reference_director_packet.py --research-only \
   --reference references/arcade-stack-by-ramp.reference.json \
   --source /private/real-browser-source.webm \
   --manifest /private/events.json \
@@ -46,7 +48,7 @@ python scripts/reference_director_packet.py \
   --out /private/gemini-director-packet.json
 ```
 
-The packet excludes the reference film's screenshots, text, source URL and branding, and it uses an anonymous style fingerprint and excludes the capture's raw event text, private URLs, source pixels, credentials and numeric product claims. It includes only allowlisted measured rectangles and source timestamps. **An actual external-model request still needs customer authorization for sharing their brief and sanitized capture facts.** Prefer a server-side key, no client-side model credentials. No private app session or raw capture gets sent by default.
+This packet is research-only and marked productionGeminiEligible:false; do not send it to Gemini as a verified example. The packet excludes the reference film's screenshots, text, source URL and branding, and it uses an anonymous style fingerprint and excludes the capture's raw event text, private URLs, source pixels, credentials and numeric product claims. It includes only allowlisted measured rectangles and source timestamps. **An actual external-model request still needs customer authorization for sharing their brief and sanitized capture facts.** Prefer a server-side key, no client-side model credentials. No private app session or raw capture gets sent by default.
 
 ### Gemini contract
 

@@ -4,7 +4,7 @@
   "label": "Task-first UI story with a clear finish",
   "source": {
     "publicUrl": "https://cdn.arcade.software/mp4s/K1Mzh18aG5dgLR54rxAN_JRh26WeXAOyQSmeqJD8f.mp4",
-    "attribution": "Stack by Ramp — publicly shared Arcade example",
+    "attribution": "Stack by Ramp \u2014 publicly shared Arcade example",
     "sha256": "7d22a17f97d3183cae73df90321f7be7943006d9bf7f4ecd7c2a79f15215bbbf",
     "durationSeconds": 67.2,
     "frameRate": 30,
@@ -36,7 +36,11 @@
     ],
     "cutTimesMeasured": false,
     "easingCurvesMeasured": false,
-    "exactPixelRecreationPermitted": false
+    "exactPixelRecreationPermitted": false,
+    "fidelityTier": "analysis_only",
+    "frameLedgerFile": "arcade-stack-by-ramp.frame-ledger.json",
+    "verifiedCutReviewFile": "arcade-stack-by-ramp.cut-review.json",
+    "oneToOneEngineMatch": false
   },
   "observedFrames": [
     {

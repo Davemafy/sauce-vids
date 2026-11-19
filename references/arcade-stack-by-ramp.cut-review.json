@@ -1,0 +1,69 @@
+{
+  "schema": "sauce-reference-cut-review-v1",
+  "referenceSha256": "7d22a17f97d3183cae73df90321f7be7943006d9bf7f4ecd7c2a79f15215bbbf",
+  "decodedFrameLedgerSha256": "68921aa60c081f4e816d7ac7a7c165dea8ccccba5505972c967cc28c4b82838d",
+  "frameCount": 2016,
+  "fps": {
+    "numerator": 30,
+    "denominator": 1
+  },
+  "reviewMode": "Direct visual comparison of immediately adjacent original decoded video frames (previous and current); not temporal interpolation.",
+  "reviewedBoundaries": [
+    {
+      "incomingFrame": 66,
+      "precedingFrame": 65,
+      "confidence": "observed_hard_discontinuity"
+    },
+    {
+      "incomingFrame": 624,
+      "precedingFrame": 623,
+      "confidence": "observed_hard_discontinuity"
+    },
+    {
+      "incomingFrame": 792,
+      "precedingFrame": 791,
+      "confidence": "observed_hard_discontinuity"
+    },
+    {
+      "incomingFrame": 1015,
+      "precedingFrame": 1014,
+      "confidence": "observed_hard_discontinuity"
+    },
+    {
+      "incomingFrame": 1104,
+      "precedingFrame": 1103,
+      "confidence": "observed_hard_discontinuity"
+    },
+    {
+      "incomingFrame": 1261,
+      "precedingFrame": 1260,
+      "confidence": "observed_hard_discontinuity"
+    },
+    {
+      "incomingFrame": 1392,
+      "precedingFrame": 1391,
+      "confidence": "observed_hard_discontinuity"
+    },
+    {
+      "incomingFrame": 1438,
+      "precedingFrame": 1437,
+      "confidence": "observed_hard_discontinuity"
+    },
+    {
+      "incomingFrame": 1579,
+      "precedingFrame": 1578,
+      "confidence": "observed_hard_discontinuity"
+    },
+    {
+      "incomingFrame": 1833,
+      "precedingFrame": 1832,
+      "confidence": "observed_hard_discontinuity"
+    }
+  ],
+  "reviewCoverage": "high-change candidates only; not all visible transitions or easing; full shot segmentation NOT established",
+  "allShotsCatalogued": false,
+  "transitionDurationsFullyMeasured": false,
+  "sourceElementTracksRecovered": false,
+  "oneToOneMotionReconstructionMatched": false,
+  "productionGeminiEligible": false
+}

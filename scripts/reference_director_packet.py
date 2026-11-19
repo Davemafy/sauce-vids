@@ -66,6 +66,15 @@ def load_reference(path: Path):
     transfer = recipe["transfer"]
     if not isinstance(transfer.get("neverTransfer"), list) or len(transfer["neverTransfer"]) < 3:
         raise ValueError("Reference requires explicit copyright/source-truth restrictions")
+    if recipe["review"].get("fidelityTier") not in ("analysis_only", "verified_1to1"):
+        raise ValueError("Reference must declare its fidelity tier explicitly")
+    if recipe["review"].get("fidelityTier") == "verified_1to1":
+        # Never trust a declaration alone; only allow a verified reference
+        # after a separate actual render-vs-reference matching receipt and
+        # human shot QA. Neither is implemented yet: fail closed.
+        raise ValueError("Reference 1:1 certification requires independently verified render-match receipt")
+    if recipe["review"].get("oneToOneEngineMatch") is not False:
+        raise ValueError("Analysis-only reference cannot claim 1:1 engine match")
     return recipe
 
 
@@ -84,6 +93,7 @@ def _validated_rect(raw, width, height):
 def build_director_packet(
     recipe: dict, manifest: dict, manifest_sha256: str, source_sha256: str,
     brief: str, requested_seconds: float, source_width: int, source_height: int,
+    *, research_only: bool = False,
 ):
     """Create a compact local packet. This function never sends media or data to Gemini."""
     if not _HASH.fullmatch(source_sha256) or not _HASH.fullmatch(manifest_sha256):
@@ -126,7 +136,11 @@ def build_director_packet(
             })
     if not candidates:
         raise ValueError("No externally shareable verified events or anchors")
-    # An analysis-only reference is transferred as abstract film grammar.
+    # The original 15-frame Arcade recipe was NOT a 1:1 reconstruction.
+    # It must never quietly become production model context.
+    if not research_only:
+        raise ValueError("Reference 1:1 match is unverified: production Gemini packet blocked")
+    # Explicit research mode only; never claim a deployable Gemini prompt.
     # Absolute reference video times are *not* copied into the new product plan.
     return {
         "schema": "sauce-director-packet-v1",
@@ -154,7 +168,8 @@ def build_director_packet(
             "neverTransfer": recipe["transfer"]["neverTransfer"],
         },
         "constraints": {
-            "style_only_reference": True, "source_truth_from_capture_only": True,
+            "style_only_reference": True, "reference_fidelity": "analysis_only",
+            "productionGeminiEligible": False, "source_truth_from_capture_only": True,
             "future_result_anchors_forbidden": True, "original_ui_pixels_only": True,
             "output_film_plan_schema": "sauce-film-plan-v1",
             "requires_local_strict_validation_before_render": True,
@@ -163,8 +178,10 @@ def build_director_packet(
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Build a local Gemini-ready Sauce direction packet; no API calls")
+    ap = argparse.ArgumentParser(description="Build analysis-only Sauce direction packet; blocked for Gemini production")
     ap.add_argument("--reference", type=Path, required=True)
+    ap.add_argument("--research-only", action="store_true",
+                    help="Explicitly permit unverified editorial reference for local QA; never production")
     ap.add_argument("--manifest", type=Path, required=True)
     ap.add_argument("--source", type=Path, required=True)
     ap.add_argument("--brief", required=True)
@@ -178,10 +195,11 @@ def main():
     packet = build_director_packet(
         recipe, manifest, _sha256(args.manifest), _sha256(args.source),
         args.brief, args.seconds, args.width, args.height,
+        research_only=args.research_only,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(packet, indent=2) + "\n")
-    print(f"Created local style-only director packet for {len(packet['actualCapture']['verifiedEvents'])} verified events")
+    print(f"Created RESEARCH-ONLY director packet for {len(packet['actualCapture']['verifiedEvents'])} verified events")
     print("Not sent to any external model; no film rendered or creatively approved.")
 
 

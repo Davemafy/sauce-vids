@@ -37,7 +37,8 @@ def capture():
 
 def packet(recipe, capture):
     return build_director_packet(recipe, capture, "1" * 64, "2" * 64,
-        "Show the real pricing slider and resulting change", 8, 1920, 1080)
+        "Show the real pricing slider and resulting change", 8, 1920, 1080,
+        research_only=True)
 
 
 def test_actual_reference_recipe_has_grounded_frames(recipe):
@@ -138,3 +139,25 @@ def test_evidence_timestamp_cannot_exceed_source_duration(recipe, capture):
     capture["events"][0]["t"] = 9.1
     with pytest.raises(ValueError, match="finite"):
         packet(recipe, capture)
+
+
+def test_analysis_only_reference_rejected_for_production_packet(recipe, capture):
+    with pytest.raises(ValueError, match="production Gemini packet blocked"):
+        build_director_packet(recipe, capture, "1"*64, "2"*64,
+            "Demonstrate verified pricing action", 8, 1920, 1080)
+
+
+def test_false_claim_of_verified_reference_cannot_bypass_gate(recipe, tmp_path):
+    claimed=copy.deepcopy(recipe)
+    claimed["review"]["fidelityTier"]="verified_1to1"
+    claimed["review"]["oneToOneEngineMatch"]=True
+    path=tmp_path/"false-claim.json"
+    path.write_text(json.dumps(claimed))
+    with pytest.raises(ValueError, match="independently verified render-match"):
+        load_reference(path)
+
+
+def test_research_packet_explicitly_not_production_eligible(recipe, capture):
+    p=packet(recipe, capture)
+    assert p["constraints"]["productionGeminiEligible"] is False
+    assert p["constraints"]["reference_fidelity"]=="analysis_only"
