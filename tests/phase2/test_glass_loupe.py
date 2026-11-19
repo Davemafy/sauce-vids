@@ -103,3 +103,21 @@ def test_liquid_edge_changes_slope_without_distorting_center():
     assert np.all(np.diff(mapped)>0)
     assert _edge_bend(.55) == 1.
     assert _edge_bend(1.) > 1.3
+
+
+def test_plan_loupe_style_changes_pixels_and_rejects_invalid_controls():
+    import pytest
+    from glass_loupe import LoupeStyle
+
+    shot, = plan_loupe({"cursorless": True, "events": [event()]}, 320, 180, 4)
+    source = np.full((180, 320, 3), 100, dtype=np.uint8)
+    stage = np.full_like(source, 20)
+    matrix = np.float64([[1, 0, 0], [0, 1, 0]])
+    style = LoupeStyle.from_plan({"entry_delay": .5, "expanded_radius": .75})
+    baseline = apply_loupe(stage.copy(), source, matrix, shot, .85)
+    revised = apply_loupe(stage.copy(), source, matrix, shot, .85, style)
+    assert np.count_nonzero(baseline != stage) > np.count_nonzero(revised != stage)
+    for item in ({"entry_delay": True}, {"small_radius": .86},
+                 {"expanded_radius": .3}, {"payoff_y": float("nan")}, {"script": "path"}):
+        with pytest.raises(ValueError):
+            LoupeStyle.from_plan(item)

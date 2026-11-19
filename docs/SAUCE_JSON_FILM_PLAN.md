@@ -113,3 +113,11 @@ It supports static UI isolation as a bounded experimental primitive, but still d
 An original 25fps Chromium recording of the public Resend pricing calculator had already been transformed to a continuous 1920×1080/60fps **presentation-source** MP4 for the revised test. The JSON renderer reused that presentation media and its source-verified `slider_change` event, not a fresh capture or a native 60fps browser session. It produced a full **414-frame, 6.9s** 1080p/60 H.264 preview (initial variant 180 frames/3s), and a separate 6.9s 1080p/60 H.264+48kHz AAC render using audio extracted from the existing verified local Kokoro narration. FFmpeg full decode passed.
 
 Actual frame review at 0.3/1.8/3.65/4.65/5.4/6.5s still exposes small pricing cards, dark UI and weak surrounding composition. The material remains **rejected for sale**. This test establishes **JSON→existing engine→real output**, not studio quality or a customer approval. Raw source, manifests and review videos stay private. No inference calls, new servers, production deploy or external publishing.
+
+## Floating browser and recorded glass loupe
+
+For a window presentation, optional `window.scale` sets the size of the floating window. An optional local JPEG or PNG backdrop requires its SHA-256 in `window.backdropSha256`. Store the image next to the plan and use an asset you have permission to render.
+
+The optional `glassLoupe` object enables the existing source-sampled loupe. It requires a verified slider result and its recorded pointer samples. The controls set entry, expansion and exit timing in seconds, lens radii relative to the stage height, and center and payoff placement as fractions of the stage. The lens still derives its interaction cues and sampled pixels from the capture. It draws one cursor projected through the same optical mapping. Omit these objects for the existing film-plan behavior.
+
+`examples/sauce-film-plan-glass-loupe.json` uses the retained Resend capture and local backdrop. Put the JSON and the matching `backdrop.jpg` together, then pass that JSON to `--film-plan` with the verified source and manifest. The reference comparison video is a review input only. No reference pixels are needed for the export.

@@ -106,7 +106,7 @@ class FilmPlan:
     camera_keys: tuple[CameraKey,...]
     source_size: tuple[int,int]
 
-    def at(self,t,output_size):
+    def at(self,t,output_size,*,stretch=False):
         """Affine matrix in *source-pixel* coordinates; output 16:9."""
         keys=self.camera_keys
         previous=keys[0];next_key=previous;alpha=0.
@@ -124,17 +124,35 @@ class FilmPlan:
         zoom=previous.zoom+(next_key.zoom-previous.zoom)*alpha
         sw,sh=self.source_size; ow,oh=output_size
         base=max(ow/sw,oh/sh)
-        scale=base*zoom
-        cw=ow/scale/2;ch=oh/scale/2
-        # Keep the camera crop inside real source pixels.
+        sx,sy=((ow/sw*zoom,oh/sh*zoom) if stretch else (base*zoom,base*zoom))
+        cw=ow/sx/2;ch=oh/sy/2
         focus_x=min(sw-cw,max(cw,focus_x))
         focus_y=min(sh-ch,max(ch,focus_y))
-        return np.array([[scale,0,ow/2-focus_x*scale],
-                         [0,scale,oh/2-focus_y*scale]],dtype=np.float64)
+        return np.array([[sx,0,ow/2-focus_x*sx],
+                         [0,sy,oh/2-focus_y*sy]],dtype=np.float64)
+
+
+
+def load_window(data, plan_path):
+    _obj(data, ("scale", "backdrop", "backdropSha256"), "window")
+    scale = _float(data.get("scale", 1), "window.scale", .65, 1)
+    relative = data.get("backdrop")
+    digest = data.get("backdropSha256")
+    if relative is None and digest is None:
+        return scale, None
+    if not isinstance(relative, str) or not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
+        raise ValueError("Backdrop must be local to the plan")
+    home = Path(plan_path).resolve().parent
+    backdrop = (home / relative).resolve()
+    if not backdrop.is_relative_to(home) or backdrop.suffix.lower() not in (".jpg", ".jpeg", ".png") or not backdrop.is_file():
+        raise ValueError("Backdrop missing or outside the plan directory")
+    if backdrop.stat().st_size > 20*1024*1024 or hashlib.sha256(backdrop.read_bytes()).hexdigest() != digest:
+        raise ValueError("Backdrop is too large or does not match the plan SHA256")
+    return scale, backdrop
 
 
 def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_duration,plan_path):
-    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","camera","audio","composition"),"film plan")
+    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","camera","audio","composition","window","glassLoupe"),"film plan")
     if data.get("schema")!=SCHEMA:
         raise ValueError("Unsupported Sauce film-plan schema")
     expected=data.get("sourceSha256")
@@ -162,7 +180,11 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
         raise ValueError("Unsupported presentation")
     if data.get("cursor") not in ("recorded","none"):
         raise ValueError("Cursor mode must be recorded or none")
-    if data["cursor"]=="recorded":
+    if ("window" in data or "glassLoupe" in data) and data["presentation"] != "window":
+        raise ValueError("Window and glass loupe controls require window presentation")
+    if "glassLoupe" in data and data["cursor"] != "recorded":
+        raise ValueError("Glass loupe requires the recorded cursor")
+    if data["cursor"]=="recorded" and "glassLoupe" not in data:
         from recorded_pointer import pointer_track
         if pointer_track(manifest,sw,sh) is None:
             raise ValueError("Recorded cursor requires a valid, source-timed track")

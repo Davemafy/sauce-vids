@@ -1,5 +1,6 @@
 """Evidence-driven glass loupe for cursorless browser captures."""
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+from numbers import Real
 import math
 from bisect import bisect_right
 
@@ -9,6 +10,36 @@ import cv2
 import numpy as np
 
 from autozoom_event_planner import smooth5
+
+
+@dataclass(frozen=True)
+class LoupeStyle:
+    entry_delay: float = .10
+    entry_duration: float = .31
+    expand_duration: float = .34
+    expand_delay: float = .12
+    exit_delay: float = .24
+    exit_duration: float = .47
+    small_radius: float = .40
+    expanded_radius: float = .71
+    expanded_center_x: float = .50
+    expanded_center_y: float = .72
+    payoff_y: float = .65
+
+    @classmethod
+    def from_plan(cls, data):
+        if not isinstance(data, dict) or set(data) - {f.name for f in fields(cls)}:
+            raise ValueError("Unknown glass loupe control")
+        for name, value in data.items():
+            low, high = ((.20, .85) if "radius" in name else
+                         (.15, .85) if "center" in name or name == "payoff_y" else
+                         (.08, 1.5) if name.endswith("duration") else (0., 1.))
+            if isinstance(value, bool) or not isinstance(value, Real) or not low <= value <= high:
+                raise ValueError(f"Invalid glass loupe {name}")
+        style = cls(**data)
+        if style.small_radius > style.expanded_radius:
+            raise ValueError("Expanded loupe radius must be at least the entry radius")
+        return style
 
 
 @dataclass(frozen=True)
@@ -103,20 +134,20 @@ def _edge_bend(radius_fraction):
     return 1.+.075*skirt**2+.46*skirt**5-.23*lip**2
 
 
-def apply_loupe(stage, source, transform, shot, time):
+def apply_loupe(stage, source, transform, shot, time, style=LoupeStyle()):
     """Sample original capture pixels directly. Color separation stays at the rim."""
     height,width = stage.shape[:2]
-    entry_phase = (time-shot.start-.10)/.31
+    entry_phase = (time-shot.start-style.entry_delay)/style.entry_duration
     entry = smooth5(entry_phase)
-    exit_strength = smooth5((shot.end-time-.24)/.47) if shot.dissolve else 1.
+    exit_strength = smooth5((shot.end-time-style.exit_delay)/style.exit_duration) if shot.dissolve else 1.
     strength = min(entry,exit_strength)
     pointer_x,pointer_y = shot.pointer(time)
     anchor_x,anchor_y = shot.pointer(min(time,shot.released))
     x,y,w,h = shot.result
     reframe = shot.reframe if shot.reframe is not None else shot.changed
-    reframe_phase = (time-reframe)/.34
+    reframe_phase = (time-reframe)/style.expand_duration
     if reframe < shot.changed:
-        reframe_phase -= .12/.34
+        reframe_phase -= style.expand_delay/style.expand_duration
     reveal = smooth5(reframe_phase)
     # Keep the live control as the anchor, then include the entire changed value group.
     left,right = min(anchor_x,x),max(anchor_x,x+w)
@@ -127,9 +158,9 @@ def apply_loupe(stage, source, transform, shot, time):
     center_x = focus_x*sx+transform[0,2]
     center_y = focus_y*sy+transform[1,2]
     center_x += width*.03*(1.-reveal)
-    center_x += (width*.50-center_x)*reveal*.82
-    center_y += (height*.72-center_y)*reveal*.82
-    settled_radius = height*(.40+.31*reveal)
+    center_x += (width*style.expanded_center_x-center_x)*reveal*.82
+    center_y += (height*style.expanded_center_y-center_y)*reveal*.82
+    settled_radius = height*(style.small_radius+(style.expanded_radius-style.small_radius)*reveal)
     radius = settled_radius*(.36+.64*strength)
     center_x = float(np.clip(center_x,radius*.72,width-radius*.72))
     center_y = float(np.clip(center_y,radius*.66,height-radius*.66))
@@ -143,7 +174,7 @@ def apply_loupe(stage, source, transform, shot, time):
     # the neighboring plan remains in context, with space beneath the price.
     focus_x += (1.-reveal)*radius*.30/(sx*magnification)
     focus_x += reveal*(x+w/2+(center_x-width*.37)/(sx*magnification)-focus_x)
-    focus_y += reveal*(y+h/2+(center_y-height*.65)/(sy*magnification)-focus_y)
+    focus_y += reveal*(y+h/2+(center_y-height*style.payoff_y)/(sy*magnification)-focus_y)
     if strength > 0:
         x0,y0=max(0,math.floor(center_x-radius-18)),max(0,math.floor(center_y-radius-18))
         x1,y1=min(width,math.ceil(center_x+radius+18)),min(height,math.ceil(center_y+radius+18))
@@ -172,7 +203,7 @@ def apply_loupe(stage, source, transform, shot, time):
         # Stable frames use only the original sharp sample.
         phase = max(0.,1.-abs(2.*entry_phase-1.),1.-abs(2.*reframe_phase-1.))
         if shot.dissolve:
-            exit_phase = (shot.end-time-.24)/.47
+            exit_phase = (shot.end-time-style.exit_delay)/style.exit_duration
             phase = max(phase,1.-abs(2.*exit_phase-1.))
         if phase > .03:
             spread = .034*phase**2

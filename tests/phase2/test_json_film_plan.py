@@ -178,3 +178,19 @@ def test_manifest_hash_must_match_actual_evidence(source):
     p["manifestSha256"]="0"*64
     with pytest.raises(ValueError,match="manifest SHA256 mismatch"):
         compile_plan(source)
+
+
+def test_window_backdrop_must_match_hash_and_stay_local(tmp_path):
+    from film_plan import load_window
+
+    asset = tmp_path / "stage.jpg"
+    asset.write_bytes(b"local backdrop")
+    style = {"scale": .865, "backdrop": asset.name,
+             "backdropSha256": hashlib.sha256(asset.read_bytes()).hexdigest()}
+    plan_path = tmp_path / "plan.json"
+    assert load_window(style, plan_path) == (.865, asset)
+    with pytest.raises(ValueError, match="local to the plan"):
+        load_window({**style, "backdrop": "../stage.jpg"}, plan_path)
+    asset.write_bytes(b"different backdrop")
+    with pytest.raises(ValueError, match="SHA256"):
+        load_window(style, plan_path)

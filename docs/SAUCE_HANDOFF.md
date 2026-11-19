@@ -2,6 +2,16 @@
 
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
+## 2026-11-19 — JSON-driven Resend glass-loupe reference
+
+The owner supplied a 4.65s split-screen MP4. The left panel is the target and the right panel is the previous Sauce rounded-cursor cut. The render uses the original verified 2880×1800 browser capture and its action trace, plus the previously approved-for-review graded backdrop. No frames from the comparison are used in the output.
+
+`examples/sauce-film-plan-glass-loupe.json` declares the fixed window, backdrop identity, lens entry/expansion/exit, lens size and payoff placement. A baseline JSON using the old settings reproduced the rounded-cursor MP4 byte for byte (SHA-256 `920d2a5ea7658cba735b13f14adf5a045e4236614b66cb2054d0c86dedeb09b0`). Changing only the JSON delayed the entry and revised the lens and result placement. The capture and backdrop remained identical.
+
+The revised Vultr master `sauce-loupe-json-proof/qa/timed/film.mp4` is 1920×1080, 60fps, 279 frames and 4.65 seconds. SHA-256 `ffcd52eb9d39b6dea73f33aab15075acf3fc873084110e32933d9e6418b38952`. FFmpeg full decode, 37 targeted tests, and Chromium playback and seeking at 1280×720 and 390×844 passed. [Revised review preview](https://chatgpt.com/library?file_id=libfile_988ad89b721481919facbcb037546452&account_id=personal).
+
+Compared actual frames 15, 83, 150, 227 and 264 to the left panel. The wide opening, small lens, full $35 hold, return to $20 and wide ending are present. The early disc stays more centered, the background differs, and the enlarged lens shows more Pricing headline and less of the neighboring card outlines. Creative approval is open. No production deployment.
+
 ## 2026-11-19 — Source-true UI separation via creative JSON (private technique proof)
 
 Owner provided actual **Arcade / Stack by Ramp** 67.2s 1920×1080/30fps MP4 as the motion/composition reference. Inspected the complete video via contact frames: isolated prompt and approval UI around 15–27s, and clear result-card → dashboard hierarchy around 47–55s. This is a reference technique study, not licensed media for Sauce redistribution or evidence of Arcade's capture methodology.

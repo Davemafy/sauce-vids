@@ -1,0 +1,41 @@
+{
+  "schema": "sauce-film-plan-v1",
+  "sourceSha256": "dcae7d4a6fc4e622d04c985e6c41f51f8ca554913e3d79adba61e959a0ec83d0",
+  "manifestSha256": "db70e38751f6ee5a3eba322e62e07507db2c436a134dca1adecd173a45b3cab0",
+  "durationSeconds": 4.65,
+  "presentation": "window",
+  "cursor": "recorded",
+  "audio": {
+    "mode": "clean"
+  },
+  "camera": [
+    {
+      "at": 0,
+      "anchor": "wide",
+      "zoom": 1
+    },
+    {
+      "at": 4.65,
+      "anchor": "wide",
+      "zoom": 1
+    }
+  ],
+  "window": {
+    "scale": 0.865,
+    "backdrop": "backdrop.jpg",
+    "backdropSha256": "5942efa4137066713f24a824ac01841135021ae7d07c6db600f6bb930fb0cae1"
+  },
+  "glassLoupe": {
+    "entry_delay": 0.23,
+    "entry_duration": 0.30,
+    "expand_delay": 0.1,
+    "expand_duration": 0.4,
+    "exit_delay": 0.24,
+    "exit_duration": 0.47,
+    "small_radius": 0.365,
+    "expanded_radius": 0.69,
+    "expanded_center_x": 0.485,
+    "expanded_center_y": 0.7,
+    "payoff_y": 0.61
+  }
+}

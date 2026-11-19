@@ -18,7 +18,7 @@ from anchored_result_cut import plan_result_cut
 from verified_workflow_editorial import plan_verified_workflow
 from source_region_mask import dim_outside_region
 from recorded_pointer import pointer_track, project_pointer
-from glass_loupe import apply_loupe,plan_loupe
+from glass_loupe import LoupeStyle,apply_loupe,plan_loupe
 from slider_framing import slider_framing
 from live_edit_plan import sample_zoom
 
@@ -65,7 +65,7 @@ if args.film_plan:
     # The film plan is authoritative for presentation and pointer configuration.
     FILM_PLAN_DATA=json.loads(args.film_plan.read_text())
     args.presentation=FILM_PLAN_DATA.get("presentation","fullscreen")
-    args.recorded_pointer=FILM_PLAN_DATA.get("cursor")=="recorded"
+    args.recorded_pointer=(FILM_PLAN_DATA.get("cursor")=="recorded" and "glassLoupe" not in FILM_PLAN_DATA)
 else:
     FILM_PLAN_DATA=None
 if args.validate_only and FILM_PLAN_DATA is None:
@@ -116,11 +116,18 @@ if FPS not in (24,25,30,50,60):
 DURATION=min(float(MANIFEST.get("duration") or probe["format"]["duration"]),
              float(probe["format"]["duration"]))
 FILM_PLAN=None
+LOUPE_STYLE=LoupeStyle()
+WINDOW_SCALE=None
 ISOLATION=None
 if FILM_PLAN_DATA is not None:
-    from film_plan import load_film_plan
+    from film_plan import load_film_plan, load_window
     FILM_PLAN=load_film_plan(FILM_PLAN_DATA, MANIFEST,SRC,MANIFEST_PATH,(INPUT_W,INPUT_H),
                             DURATION,args.film_plan)
+    if "glassLoupe" in FILM_PLAN_DATA:
+        LOUPE_STYLE=LoupeStyle.from_plan(FILM_PLAN_DATA["glassLoupe"])
+        args.glass_loupe=True
+    if "window" in FILM_PLAN_DATA:
+        WINDOW_SCALE,args.stage_image=load_window(FILM_PLAN_DATA["window"],args.film_plan)
     if args.seconds is not None and not .5<=args.seconds<=FILM_PLAN.duration:
         parser.error("Review duration must be within the source-verified plan")
     args.seconds=args.seconds or FILM_PLAN.duration
@@ -149,7 +156,9 @@ CONTENT_H=round(FRAME_W*INPUT_H/INPUT_W)
 FRAME_HEADER_H=46
 FRAME_H=FRAME_HEADER_H+CONTENT_H
 FRAME_SCALE=min(1.114,(MASTER_W-210)/FRAME_W,(MASTER_H-150)/FRAME_H)
-if args.glass_loupe:
+if WINDOW_SCALE is not None:
+    FRAME_SCALE *= WINDOW_SCALE
+elif args.glass_loupe:
     FRAME_SCALE *= .865
 WINDOW_W=round(FRAME_W*FRAME_SCALE)
 WINDOW_H=round(FRAME_H*FRAME_SCALE)
@@ -173,6 +182,9 @@ if args.slider_framing:
         parser.error("Expected one timed slider result")
     SLIDER_SHOT = slider_framing(slider_events[0], INPUT_W, INPUT_H)
 LOUPE_SHOTS=plan_loupe(MANIFEST,INPUT_W,INPUT_H,DURATION) if args.glass_loupe else []
+if FILM_PLAN is not None and args.glass_loupe and not LOUPE_SHOTS:
+    parser.error("JSON glass loupe requires a verified slider with recorded pointer samples")
+
 RESULT_CUT=plan_result_cut(MANIFEST.get("events",[]),(INPUT_W,INPUT_H),
                            (MASTER_W,MASTER_H),FPS,min(args.seconds or DURATION,DURATION)
                            ) if args.anchored_result_cut and not args.static else None
@@ -290,7 +302,7 @@ OVERLAY_RGB=OVERLAY[:,:,:3].astype(np.float32)
 
 def camera_matrix(t,static=False):
     if FILM_PLAN is not None:
-        return FILM_PLAN.at(t,(SCREEN_W,SCREEN_H))
+        return FILM_PLAN.at(t,(SCREEN_W,SCREEN_H),stretch=args.glass_loupe)
     if WORKFLOW_SHOT is not None and not static:
         return WORKFLOW_SHOT.matrix(t)
     if RESULT_CUT is not None and not static and round(t*FPS)>=RESULT_CUT.frame:
@@ -394,7 +406,7 @@ def apply(source,t,static=False):
         return stage
     matrix=camera_matrix(t,static)
     matrix[:,2]+=(SCREEN_X,SCREEN_Y)
-    return apply_loupe(stage,source,matrix,shot,t)
+    return apply_loupe(stage,source,matrix,shot,t,LOUPE_STYLE)
 
 def diagnostics():
     end_frames=round(min(args.seconds or DURATION,DURATION)*FPS)

@@ -114,6 +114,94 @@
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "dependentRequired": {
+        "backdrop": [
+          "backdropSha256"
+        ],
+        "backdropSha256": [
+          "backdrop"
+        ]
+      },
+      "properties": {
+        "scale": {
+          "type": "number",
+          "minimum": 0.65,
+          "maximum": 1
+        },
+        "backdrop": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backdropSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "glassLoupe": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entry_delay": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "entry_duration": {
+          "type": "number",
+          "minimum": 0.08,
+          "maximum": 1.5
+        },
+        "expand_duration": {
+          "type": "number",
+          "minimum": 0.08,
+          "maximum": 1.5
+        },
+        "expand_delay": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "exit_delay": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "exit_duration": {
+          "type": "number",
+          "minimum": 0.08,
+          "maximum": 1.5
+        },
+        "small_radius": {
+          "type": "number",
+          "minimum": 0.2,
+          "maximum": 0.85
+        },
+        "expanded_radius": {
+          "type": "number",
+          "minimum": 0.2,
+          "maximum": 0.85
+        },
+        "expanded_center_x": {
+          "type": "number",
+          "minimum": 0.15,
+          "maximum": 0.85
+        },
+        "payoff_y": {
+          "type": "number",
+          "minimum": 0.15,
+          "maximum": 0.85
+        },
+        "expanded_center_y": {
+          "type": "number",
+          "minimum": 0.15,
+          "maximum": 0.85
+        }
+      }
+    },
     "composition": {
       "type": "object",
       "additionalProperties": false,
