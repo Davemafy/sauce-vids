@@ -70,7 +70,14 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
  # Playwright starts the recorder before the initial page is ready. Remove
  # that dead-air loading time, retaining a short establishing lead-in.
  trim=max(0,min(full_duration-2.0,float(receipt.get('lead_in_seconds',0))-0.40))
+ initial_trim=trim
  cursorless=receipt.get('cursorless') is True
+ if mode=='interactive' and not cursorless:
+  events=receipt.get('editorial_events',[])
+  first=next((e for e in events if e.get('kind')=='click' and e.get('semanticGoal')),None)
+  if first and any(e.get('kind')=='state_change' and e.get('resultRect')
+                   and first['t']<=e['t']<=first['t']+1.8 for e in events):
+   trim=round(max(trim,first['t']-1.05),3)
  if cursorless:
   slider=next(event for event in receipt['editorial_events']
               if event['kind']=='slider_change')
@@ -157,7 +164,8 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
   'verified_camera_shots':metrics['zoom_shots'],
   'verified_glass_shots':metrics['glass_loupe_shots'],'source_url':safe_url(receipt['source_url']),
   'title':title,'description':story,'film_mode':mode,'duration_seconds':round(duration,2),
-  'discarded_initial_loading_seconds':round(trim,2),
+  'discarded_initial_loading_seconds':round(initial_trim,2),
+  'discarded_before_action_seconds':round(trim-initial_trim,2),
   'source_sha256':receipt['sha256'],
   'source_pixel_stream_recorded':True,
   'recorded_source_dimensions':profile['dimensions'],

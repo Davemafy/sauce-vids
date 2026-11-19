@@ -69,6 +69,18 @@ class UrlToVideoTests(unittest.TestCase):
         self.assertEqual(normalize({'mode': 'interactive', 'action_ids': ['a1', 'a0']},
                                    report)['action_ids'], ['a0'])
 
+    def test_public_brimble_setup_is_scoped_to_the_homepage_and_non_form_button(self):
+        url = 'https://www.brimble.io/'
+        button = {'id': 'a0', 'text': 'Connect your agent', 'kind': 'button',
+                  'tag': 'button', 'button_type': 'submit', 'in_form': False,
+                  'selector': 'button'}
+        self.assertTrue(allowed(button, url))
+        self.assertFalse(allowed(button, 'https://example.com/'))
+        self.assertFalse(allowed(button, url + 'account'))
+        self.assertFalse(allowed({**button, 'in_form': True}, url))
+        plan, calls, source = direction({'url': url, 'headings': [], 'controls': [button]})
+        self.assertEqual((plan['action_ids'], calls, source), (['a0'], 0, 'verified-public-dialog'))
+
     def test_missing_key_does_not_generate_fake_direction(self):
         with patch.dict(os.environ,{"GEMINI_API_KEY":""}):
             with self.assertRaises(NeedsKey):

@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright
 from scripts.capture_safety import validate_public_url,guard_route
 from scripts.session_contract import safe_url
-from .product_explorer import CHROME,allowed,JS
+from .product_explorer import CHROME,known_dialog_opener,allowed,JS
 
 CURSOR_JS=r"""(() => {
  if(window.__saucePointerInstalled)return;
@@ -301,6 +301,10 @@ def capture(url:str,private:Path,report:dict,plan:dict):
       box=loc.bounding_box()
       if not box:continue
       before=page.url
+      dialog_opener=known_dialog_opener(c,before)
+      dialogs=page.locator('[role="dialog"]:visible,dialog[open]:visible')
+      if dialog_opener and (dialogs.count() or not loc.evaluate("e => !e.form && !e.closest('form')")):
+       continue
       if box['y']<70 or box['y']>580:
        doc_y=page.evaluate("""s => {
          const e=document.querySelector(s);
@@ -319,6 +323,21 @@ def capture(url:str,private:Path,report:dict,plan:dict):
       page.wait_for_timeout(950)
       if urlsplit(page.url).netloc.lower()!=urlsplit(url).netloc.lower():
        raise RuntimeError('Unsafe navigation outside original product')
+      if dialog_opener:
+       if page.url!=before or dialogs.count()!=1:
+        raise RuntimeError('Public setup dialog did not open')
+       dialog=dialogs.first
+       region=dialog.bounding_box()
+       heading=dialog.get_by_role('heading',name='Connect your agent',exact=True)
+       w,h=(page.viewport_size[k] for k in ('width','height'))
+       if (not region or heading.count()!=1 or not heading.is_visible()
+           or region['x']<0 or region['y']<0
+           or region['x']+region['width']>w or region['y']+region['height']>h):
+        raise RuntimeError('Public setup instructions are not fully visible')
+       editorial_events.extend([
+        {'kind':'click','t':click_time,'label':c['text'],'semanticGoal':'Reveal public agent setup'},
+        {'kind':'state_change','t':time.monotonic()-video_begin,
+         'evidence':'Public agent setup dialog visibly opened','resultRect':region}])
       mark('action-'+ident)
       events.append({'id':ident,'label':c['text'],'kind':c['kind'],
                      'from':safe_url(before),'to':safe_url(page.url)})
@@ -374,7 +393,7 @@ def capture(url:str,private:Path,report:dict,plan:dict):
      page.wait_for_timeout(360)
      mark('read-'+str(i))
    if editorial_events:
-    page.wait_for_timeout(1950 if cursorless else 1400)
+    page.wait_for_timeout(1950 if cursorless else 2000)
     editorial_events.append({'kind':'interaction_complete','t':time.monotonic()-video_begin})
    page.wait_for_timeout(1000)
    length=time.monotonic()-start

@@ -11,7 +11,7 @@ from urllib.request import Request,urlopen
 
 ROOT=Path(__file__).resolve().parents[1]
 from scripts.capture_safety import validate_public_url
-from backend.product_explorer import inspect,normalize,workflow,preflight
+from backend.product_explorer import inspect,normalize,workflow,preflight,known_dialog_opener
 
 PROMPT="""You are the creative director for Sauce, a browser-recorded product-film tool.
 Decide how to show a REAL public website using the provided screenshot and
@@ -38,6 +38,9 @@ def direction(report:dict,feedback:list[dict]|None=None):
     slider=next((c for c in report['controls'] if c['kind']=='slider'),None)
     if slider:
         return normalize({'mode':'interactive','action_ids':[slider['id']]},report),0,'local-slider'
+    dialog=next((c for c in report['controls'] if known_dialog_opener(c,report['url'])),None)
+    if dialog:
+        return normalize({'mode':'interactive','action_ids':[dialog['id']]},report),0,'verified-public-dialog'
     panel=next((c for c in report['controls']
                 if c['kind']=='button' and c.get('controlled_panel')),None)
     local={'mode':'interactive','action_ids':[panel['id']]} if panel else {}

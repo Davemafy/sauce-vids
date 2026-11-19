@@ -45,7 +45,7 @@ for(const e of candidates){
  const tag=e.tagName.toLowerCase(),kind=tag==='a'?'link':'button';
  const href=kind==='link'?e.href:null;
  const controlled_panel=e.hasAttribute('aria-controls')&&e.getAttribute('aria-expanded')==='false';
- controls.push({id:'a'+controls.length,text:text(e),tag,kind,href,controlled_panel,selector:path(e),button_type:tag==='button'?e.type||'':'',y:Math.round(e.getBoundingClientRect().top+scrollY)});
+ controls.push({id:'a'+controls.length,text:text(e),tag,kind,href,controlled_panel,selector:path(e),button_type:tag==='button'?e.type||'':'',in_form:!!e.form||!!e.closest('form'),y:Math.round(e.getBoundingClientRect().top+scrollY)});
  if(controls.length>=80)break;
 }
 const root=getComputedStyle(document.documentElement),body=getComputedStyle(document.body);
@@ -57,7 +57,16 @@ challenge:!!document.querySelector('#challenge-stage,.cf-turnstile,iframe[src*="
 }"""
 CHROME='/opt/devmcp-browsers/chromium_headless_shell-1254/chrome-headless-shell-linux64/chrome-headless-shell'
 
+def known_dialog_opener(control, origin):
+ # This public Brimble control opens setup instructions locally.
+ base=urlsplit(origin)
+ return (base.scheme=='https' and base.netloc in ('www.brimble.io','brimble.io')
+         and base.path in ('','/') and control.get('tag')=='button'
+         and control.get('in_form') is False
+         and control.get('text')=='Connect your agent')
+
 def allowed(c,origin):
+ if known_dialog_opener(c,origin):return True
  label=c['text']
  if UNSAFE_LABEL.search(label):return False
  if c['kind']=='slider':return bool(re.search(r'\b(value selector|volume|calculator|estimator|range|slider)\b',label,re.I))
