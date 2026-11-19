@@ -1,10 +1,11 @@
 """Disk restart safety for Sauce's background product-film jobs."""
 from __future__ import annotations
+from hashlib import sha256
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
-from backend.job_store import recover_jobs, save_job
+from backend.job_store import recover_jobs, save_job, write_render_checkpoint
 
 
 class ProductJobRecoveryTests(unittest.TestCase):
@@ -40,6 +41,25 @@ class ProductJobRecoveryTests(unittest.TestCase):
                 self.assertEqual(jobs[self.job_id]["last_stage"], phase)
                 self.assertEqual(json.loads((self.root/self.job_id/"status.json").read_text())
                                  ["status"], "failed")
+
+    def test_only_a_verified_checkpoint_with_budget_can_restart_rendering(self):
+        job = self.record(stage="rendering")
+        folder = self.root / self.job_id
+        motion = folder / "private" / "motion"
+        motion.mkdir(parents=True)
+        source = b"captured browser bytes"
+        raw = json.dumps({"continuous_recording": True, "sha256": sha256(source).hexdigest()}).encode()
+        (motion / "continuous-source.webm").write_bytes(source)
+        (motion / "continuous-capture.json").write_bytes(raw)
+        checkpoint = {"url": job["url"], "receipt_sha256": sha256(raw).hexdigest(), "attempts": 1}
+        write_render_checkpoint(folder, checkpoint)
+        self.assertEqual(recover_jobs(self.root)[1], [self.job_id])
+        write_render_checkpoint(folder, {**checkpoint, "attempts": 2})
+        self.assertFalse(recover_jobs(self.root)[1])
+        self.record(stage="rendering")
+        write_render_checkpoint(folder, checkpoint)
+        (motion / "continuous-source.webm").write_bytes(b"changed")
+        self.assertFalse(recover_jobs(self.root)[1])
 
     def test_completed_video_retained_unchanged(self):
         original = self.record(status="needs_review", stage="needs_review")

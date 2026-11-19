@@ -4,9 +4,10 @@ Source is continuous Chromium footage. The presentation compositor wraps it
 in a window and may add camera motion after a verified browser event.
 """
 from __future__ import annotations
-import hashlib,json,subprocess,sys,math,shutil
+import hashlib,json,os,subprocess,sys,math,shutil
 from pathlib import Path
 from scripts.session_contract import safe_url
+from backend.price_narration import render_narration
 
 sys.path.insert(0,str(Path(__file__).parents[1]/'scripts'))
 from produce_cinematic_demo import verify_mp4,build_web_player
@@ -55,7 +56,7 @@ def source_video_profile(stream:dict,receipt:dict):
          'source_fps':stream.get('r_frame_rate'),'filter':filter_graph}
 
 
-def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
+def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", audio="auto"):
  source_dir=Path(source_dir);out=Path(out)
  receipt=json.loads((source_dir/'continuous-capture.json').read_text())
  src=source_dir/'continuous-source.webm'
@@ -72,6 +73,7 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
  trim=max(0,min(full_duration-2.0,float(receipt.get('lead_in_seconds',0))-0.40))
  initial_trim=trim
  cursorless=receipt.get('cursorless') is True
+ loupe=cursorless and os.getenv('SAUCE_SLIDER_LOUPE')=='1'
  if mode=='interactive' and not cursorless:
   events=receipt.get('editorial_events',[])
   first=next((e for e in events if e.get('kind')=='click' and e.get('semanticGoal')),None)
@@ -82,8 +84,8 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
   slider=next(event for event in receipt['editorial_events']
               if event['kind']=='slider_change')
   # Keep enough pre-gesture context and finish on the verified price hold.
-  trim=round(max(trim,slider['start']-.92),3)
-  full_duration=min(full_duration,slider['end']+2.70)
+  trim=round(max(trim,slider['start']-(.92 if loupe else 1.60)),3)
+  full_duration=min(full_duration,slider['end']+(2.70 if loupe else 3.55))
  duration=full_duration-trim
  out.mkdir(parents=True,exist_ok=True)
  master=out/'master-1080p60.mp4'
@@ -151,19 +153,24 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
     for p in event['pointer_samples']]
   events.append(event)
  manifest.write_text(json.dumps({'source':safe_url(receipt['source_url']),
-  'cursorless':cursorless,'events':events,'capture_rect':{'width':1920,'height':1080}}))
+  'cursorless':cursorless,'events':events,'capture_rect':{'width':1920,'height':1080},
+  'pointer_samples':next((e['pointer_samples'] for e in events if e['kind']=='slider_change'), [])}))
  command=[sys.executable,str(Path(__file__).resolve().parents[1]/'scripts/render_event_video.py'),
     '--video',str(prepared),'--manifest',str(manifest),'--output',str(composed),
     '--camera-profile','action-first','--presentation','window']
- if cursorless:
+ if loupe:
   command+=['--glass-loupe']
+ elif cursorless:
+  command[-1]='fullscreen'
+  command+=['--slider-framing','--recorded-pointer']
  with (source_dir/'presentation.log').open('w') as log:
   subprocess.run(command,check=True,stdout=log,stderr=subprocess.STDOUT,timeout=240)
  print(f'REPLAY {2*total} of {2*total}',flush=True)
  metrics=json.loads((source_dir/'camera-metrics.json').read_text())
- if cursorless and not metrics['glass_loupe_shots']:
+ if loupe and not metrics['glass_loupe_shots']:
   raise RuntimeError('Recorded slider evidence could not produce a glass shot')
- shutil.copyfile(source_dir/'SHOTCANDY-LICENSE.txt',out/'SHOTCANDY-LICENSE.txt')
+ if not cursorless or loupe:
+  shutil.copyfile(source_dir/'SHOTCANDY-LICENSE.txt',out/'SHOTCANDY-LICENSE.txt')
  composed.replace(master)
  verify_mp4(master,1920,1080,60)
  if subjects:
@@ -178,6 +185,17 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
   '-pix_fmt','yuv420p','-movflags','+faststart',str(preview)],
   check=True,timeout=110)
  verify_mp4(preview,1280,720,30)
+ narration=render_narration(source_dir,events,float(probe(preview)['format']['duration']),brief,audio)
+ if narration:
+  clean=out/'preview-clean.mp4'
+  preview.replace(clean)
+  subprocess.run(['ffmpeg','-v','error','-xerror','-nostdin','-y','-i',str(clean),
+    '-i',str(narration),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac',
+    '-ar','48000','-b:a','96k','-af','apad','-shortest','-movflags','+faststart',str(preview)],
+    check=True,timeout=35)
+  verify_mp4(preview,1280,720,30)
+  if not any(x.get('codec_type')=='audio' for x in probe(preview)['streams']):
+   raise RuntimeError('Narrated export is missing audio')
  poster=out/'poster.jpg'
  subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-nostdin',
   '-ss',str(min(2.2,max(.25,duration*.3))),'-i',str(master),
@@ -187,7 +205,7 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
  build_web_player(Path(__file__).parents[1]/'docs/sauce-premium-player-template.html',
                    out,title,story,duration)
  result={
-  'render_mode':'continuous-browser-capture','presentation':'floating-browser',
+  'render_mode':'continuous-browser-capture','presentation':'slider-framing' if cursorless and not loupe else 'floating-browser',
   'verified_camera_shots':metrics['zoom_shots'],
   'subject_shot_count':len(subjects),
   'verified_glass_shots':metrics['glass_loupe_shots'],'source_url':safe_url(receipt['source_url']),
@@ -204,7 +222,7 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
   'continuous_motion':True,'source_verified':True,'replay_verified':False,
   'observed_actions':receipt['actions'],
   'master_dimensions':[1920,1080],'master_fps':60,'preview_dimensions':[1280,720],
-  'preview_fps':30,'limitations':[
+  'preview_fps':30,'narrated':narration is not None,'clean_preview':bool(narration),'limitations':[
    'A continuous Chromium recording is actual UI motion, not a deterministic DOM replay.',
    'Master 60fps resamples the browser recorder frame rate; it does not create new UI frames.',
    'Controls behind authentication and sensitive form submission are not explored.']}
@@ -219,5 +237,11 @@ if __name__=='__main__':
  p.add_argument('--title',default='Website demo')
  p.add_argument('--story',default='Recorded public website')
  p.add_argument('--mode',default='public_showcase')
+ p.add_argument('--brief',default='')
+ p.add_argument('--audio',choices=('auto','clean','narrated'),default='auto')
  a=p.parse_args()
- print(json.dumps(render(a.source,a.out,a.title,a.story,a.mode)),flush=True)
+ try:
+  print(json.dumps(render(a.source,a.out,a.title,a.story,a.mode,brief=a.brief,audio=a.audio)),flush=True)
+ except subprocess.TimeoutExpired as exc:
+  print(f'Render stage exceeded {exc.timeout}s',file=sys.stderr)
+  raise SystemExit(124) from exc

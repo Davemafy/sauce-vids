@@ -6,7 +6,7 @@ import {FilmLibrary,rememberFilm,recentFilmIds} from "./film-library";
 
 const api=(process.env.NEXT_PUBLIC_SAUCE_BASE_PATH||"")+"/api/studio/url";
 type Stage="queued"|"inspecting"|"directing"|"capturing"|"rendering"|"needs_access"|"needs_review"|"failed"|"needs_key";
-type Job={id:string;url:string;stage:Stage;status:string;reason?:string;error?:string;message?:string;created_at?:number;updated_at?:number;stage_started_at?:number;frames_rendered?:number;frames_total?:number;title?:string;ai_calls?:number;capture_mode?:"interactive"|"showcase";render_mode?:string;direction_source?:string;video_type?:string;};
+type Job={id:string;url:string;stage:Stage;status:string;reason?:string;error?:string;message?:string;created_at?:number;updated_at?:number;stage_started_at?:number;frames_rendered?:number;frames_total?:number;title?:string;ai_calls?:number;capture_mode?:"interactive"|"showcase";render_mode?:string;direction_source?:string;video_type?:string;narrated?:boolean;revision_of?:string;};
 const steps:[Stage,string,string][]=[
  ["inspecting","Explore","Reading real page structure"],
  ["directing","Direct","Finding the story worth showing"],
@@ -39,6 +39,8 @@ const details:Record<string,string>={
 
 export function UrlFlowScreen(){
  const [url,setUrl]=useState("");
+ const [brief,setBrief]=useState("");
+ const [audio,setAudio]=useState<"auto"|"clean"|"narrated">("auto");
  const [code,setCode]=useState("");
  const [unlocked,setUnlocked]=useState(false);
  const [authLoading,setAuthLoading]=useState(true);
@@ -113,7 +115,7 @@ export function UrlFlowScreen(){
    parsed.search="";parsed.hash="";
    const publicUrl=parsed.toString();
    const response=await fetch(api+"/jobs",{
-    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:publicUrl}),
+    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:publicUrl,brief:brief.trim(),audio}),
    });
    const body=await response.json();
    if(!response.ok)throw Error(body.error||"Could not create film job");
@@ -123,6 +125,24 @@ export function UrlFlowScreen(){
    rememberFilm(id);
    setJob({id,url:publicUrl,stage:"queued",status:"queued",created_at:Date.now()/1000});
   }catch(e){setError(e instanceof Error?e.message:"Could not start this film");}
+  finally{setSending(false);}
+ }
+ async function requestRevision(){
+  if(!jobId||!job||sending)return;
+  setError("");setSending(true);
+  try{
+   const response=await fetch(api+"/jobs/"+jobId+"/revision",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({brief:brief.trim(),audio}),
+   });
+   const body=await response.json();
+   if(!response.ok)throw Error(body.error||"Could not start revision");
+   if(typeof body.jobId!=="string"||!/^[a-f0-9]{24}$/.test(body.jobId))throw Error("Invalid job identifier");
+   const id=body.jobId;
+   rememberFilm(id);sessionStorage.setItem("sauce-url-job",id);
+   setJobId(id);setJob({id,url:job.url,stage:"rendering",status:"queued",created_at:Date.now()/1000});
+   setRating(0);setReview("");setSaved(false);
+  }catch(e){setError(e instanceof Error?e.message:"Could not start revision");}
   finally{setSending(false);}
  }
  async function submitReview(){
@@ -180,6 +200,19 @@ export function UrlFlowScreen(){
       <button type="submit" disabled={!unlocked||showProgress||!url.trim()}>
        {sending?"Starting…":showProgress?"Making film…":"Make film"} <span aria-hidden="true">↗</span>
       </button>
+     </div>
+     <div className={s.filmOptions}>
+      <label>What should the demo show?
+       <input value={brief} onChange={e=>setBrief(e.target.value)} maxLength={240}
+        placeholder="Show how the monthly price changes" disabled={showProgress}/>
+      </label>
+      <label>Audio
+       <select value={audio} onChange={e=>setAudio(e.target.value as typeof audio)} disabled={showProgress}>
+        <option value="auto">Narration when available</option>
+        <option value="clean">Clean footage</option>
+        <option value="narrated">Require narration</option>
+       </select>
+      </label>
      </div>
      <p className={s.fieldNote}>Public websites only. No sign-ins or application submissions.</p>
     </form>
@@ -241,6 +274,7 @@ export function UrlFlowScreen(){
      <video src={api+"/jobs/"+jobId+"/media"} className={s.video} controls preload="metadata" playsInline aria-label="AI-directed Sauce video preview"/>
      <div className={s.outputLinks}>
        <a href={api+"/jobs/"+jobId+"/media"} download={"sauce-"+(job?.capture_mode||"preview")+".mp4"}>Download MP4 <span aria-hidden="true">↓</span></a>
+       {job?.narrated&&<a href={api+"/jobs/"+jobId+"/clean-media"} download="sauce-clean.mp4">Download clean footage <span aria-hidden="true">↓</span></a>}
        <a href={(process.env.NEXT_PUBLIC_SAUCE_BASE_PATH||"")+"/studio?job="+jobId}>Open review link <span aria-hidden="true">↗</span></a>
      </div>
      <div className={s.review}>
@@ -249,6 +283,8 @@ export function UrlFlowScreen(){
       <label htmlFor="film-feedback">What should change? <span>(optional)</span></label>
       <textarea id="film-feedback" value={review} maxLength={2000} onChange={e=>setReview(e.target.value)} placeholder="Framing, pacing, readability…"/>
       <button className={s.reviewButton} type="button" disabled={!rating||saving} onClick={submitReview}>{saving?"Saving…":saved?"Review saved ✓":"Save review"}</button>
+      {!job?.revision_of&&job?.render_mode==="continuous-browser-capture"&&
+       <button className={s.reviewButton} type="button" disabled={sending} onClick={requestRevision}>Request revision using the brief and audio above</button>}
      </div>
     </>}
     {blocked&&<><h2>This product needs more than a link.</h2><p>{job?.reason||"The meaningful product workflow requires access. Sauce will not fabricate footage."}</p><div className={s.notice}>No video created. Use an authorized test account for the real workflow.</div></>}

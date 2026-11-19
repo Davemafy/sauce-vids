@@ -5,6 +5,7 @@ a billed direction call or performed an external browser interaction.
 """
 from __future__ import annotations
 
+from hashlib import file_digest, sha256
 import json
 import os
 from pathlib import Path
@@ -53,9 +54,8 @@ def _has_verified_export(folder: Path) -> bool:
 def recover_jobs(root: Path) -> tuple[dict[str, dict], list[str]]:
     """Return existing records and truly untouched pending jobs to enqueue.
 
-    A queued job which reached inspection, direction, capture or rendering
-    must NOT be automatically rerun: we cannot certify whether it consumed
-    the one paid direction request before the process died.
+    Resume rendering only from a source-verified checkpoint with budget left.
+    Other interrupted jobs never repeat direction or browser actions.
     """
     jobs: dict[str, dict] = {}
     pending: list[str] = []
@@ -78,6 +78,10 @@ def recover_jobs(root: Path) -> tuple[dict[str, dict], list[str]]:
         stage = job.get("stage")
         if status == "queued":
             if stage == "queued":
+                pending.append(folder.name)
+            elif stage == "rendering" and (
+                (checkpoint := load_render_checkpoint(folder, job.get("url", ""))) and checkpoint["attempts"] < 2
+            ):
                 pending.append(folder.name)
             elif stage == "needs_review" and _has_verified_export(folder):
                 # Legacy state: finished film and receipt, pending status.
@@ -112,3 +116,34 @@ def recover_jobs(root: Path) -> tuple[dict[str, dict], list[str]]:
                 save_job(root, folder.name, job)
         jobs[folder.name] = job
     return jobs, pending
+
+
+def write_render_checkpoint(folder: Path, data: dict) -> None:
+    """Publish only a fully persisted renderer input manifest."""
+    temporary = folder / ".render-checkpoint.tmp"
+    with temporary.open("w", encoding="utf-8") as stream:
+        json.dump(data, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, folder / "render-checkpoint.json")
+
+
+def load_render_checkpoint(folder: Path, url: str):
+    """Recover a local capture only when both source and receipt identities match."""
+    motion = folder / "private" / "motion"
+    try:
+        data = json.loads((folder / "render-checkpoint.json").read_text())
+        if data["url"] != url or data["attempts"] not in (0, 1, 2):
+            return None
+        receipt = (motion / "continuous-capture.json").read_bytes()
+        if sha256(receipt).hexdigest() != data["receipt_sha256"]:
+            return None
+        record = json.loads(receipt)
+        if record.get("continuous_recording") is not True:
+            return None
+        with (motion / "continuous-source.webm").open("rb") as source:
+            if file_digest(source, "sha256").hexdigest() != record["sha256"]:
+                return None
+        return data
+    except (OSError, KeyError, ValueError, TypeError):
+        return None

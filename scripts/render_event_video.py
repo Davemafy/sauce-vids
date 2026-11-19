@@ -19,6 +19,9 @@ from verified_workflow_editorial import plan_verified_workflow
 from source_region_mask import dim_outside_region
 from recorded_pointer import pointer_track, project_pointer
 from glass_loupe import apply_loupe,plan_loupe
+from slider_framing import slider_framing
+
+cv2.setNumThreads(2)
 
 PROJECT=Path(__file__).resolve().parents[1]
 DEFAULT_ROOT=PROJECT/"studio"/".tmp"/"sauce-autozoom-v1"
@@ -42,6 +45,8 @@ parser.add_argument("--recorded-pointer",action="store_true",
                     help="Draw the timed mouse path on cursorless fullscreen footage")
 parser.add_argument("--result-focus",action="store_true",
                     help="Gently dim the context outside the result after an anchored cut")
+parser.add_argument("--slider-framing", action="store_true",
+                    help="Keep the verified slider and its result in an undistorted crop")
 parser.add_argument("--glass-loupe",action="store_true",help="Magnify a verified slider and its observed result")
 parser.add_argument("--camera-profile",choices=["standard","screenstudio","action-first"],default="standard",
                     help="Reference or post-result timing; all focus targets still require observed DOM change")
@@ -125,6 +130,14 @@ SHOTS=plan(MANIFEST.get("events",[]),{"width":INPUT_W,"height":INPUT_H},DURATION
 if args.presentation=="fullscreen":
     SCREEN_W,SCREEN_H=MASTER_W,MASTER_H
     SCREEN_X,SCREEN_Y=0,0
+SLIDER_SHOT = None
+if args.slider_framing:
+    if args.presentation != "fullscreen" or args.glass_loupe or POINTER is None:
+        parser.error("Slider framing requires a recorded pointer and fullscreen footage")
+    slider_events = [event for event in MANIFEST.get("events", []) if event.get("kind") == "slider_change"]
+    if len(slider_events) != 1 or not 0 < slider_events[0]["t"] < DURATION:
+        parser.error("Expected one timed slider result")
+    SLIDER_SHOT = slider_framing(slider_events[0], INPUT_W, INPUT_H)
 LOUPE_SHOTS=plan_loupe(MANIFEST,INPUT_W,INPUT_H,DURATION) if args.glass_loupe else []
 RESULT_CUT=plan_result_cut(MANIFEST.get("events",[]),(INPUT_W,INPUT_H),
                            (MASTER_W,MASTER_H),FPS,min(args.seconds or DURATION,DURATION)
@@ -262,6 +275,10 @@ def camera_matrix(t,static=False):
         zoom=opening+(max(opening,end)-opening)*progress
         fx=((left+right)*.5/INPUT_W)*(1-progress)+(GUIDED_SHOT.focus_x-.12/end)*progress
         fy=((top+bottom)*.5/INPUT_H)*(1-progress)+GUIDED_SHOT.focus_y*progress
+    if SLIDER_SHOT is not None and not static:
+        opening, tight, fx, fy = SLIDER_SHOT
+        progress = smooth5((t - slider_events[0]["t"]) / .55)
+        zoom = opening + (tight - opening) * progress
     if args.presentation=="fullscreen":
         # Pixel-perfect isotropic scaling. Preserve source aspect ratio.
         # The target content region moves toward the optical center without
@@ -320,7 +337,7 @@ def apply(source,t,static=False):
         press=max((1.-smooth5((t-down)/.18) for down in POINTER_PRESSES
                    if 0<=t-down<.18),default=0.)
         stage=project_pointer(stage,POINTER,camera_matrix(t,static),t,
-                              scale=1.6-.18*press)
+                              scale=.85 if SLIDER_SHOT else 1.6-.18*press)
     if args.result_focus and RESULT_CUT is not None and not static:
         elapsed_frames = round(t * FPS) - RESULT_CUT.frame
         if elapsed_frames > 0:
@@ -361,6 +378,7 @@ def diagnostics():
        "cut_on_verified_result_source_frame":(
            math.ceil(WORKFLOW_SHOT.result_start*FPS) if WORKFLOW_SHOT else None),
        "glass_loupe_shots":len(LOUPE_SHOTS),
+       "slider_framed": SLIDER_SHOT is not None,
        "recorded_pointer_samples":len(POINTER) if POINTER is not None else 0,
        "max_translation_per_frame_px":round(float(np.max(np.abs(vel[:,[2,5]]),initial=0)),4),
        "max_continuous_translation_per_frame_px":round(

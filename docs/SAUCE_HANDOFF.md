@@ -7,6 +7,16 @@
 
 
 
+## 2026-11-19 — Undistorted Resend pricing revision and automatic narration
+
+The revised 6.97-second review film reuses the prior 8.36-second WebM (`9d543569…ad8`, 1920×1080, 25 fps capture). The camera opens on the slider and Pro price, preserves the recorded drag, then makes a small isotropic push after the verified $35 result. The old glass loupe is opt-in via `SAUCE_SLIDER_LOUPE=1`. Both pricing states and the slider remain readable in the reviewed preview. Adjacent cards are clipped at the periphery. The pricing interaction is a regression case and awaits approval as a film.
+
+The older receipt did not store before/after price text. The operator verified and annotated its price values from raw frames at 2.15s and 5.2s without modifying the capture. The regular URL job now records matching monthly prices directly from the changed DOM node. A fresh isolated submission on Vultr (`542c967dd53a5bf6120e58c5`) returned a narrated private preview in about 36 seconds with no paid inference and no manual edit. Its live recorded values were `$20 / mo` and `$35 / mo`. The narration uses the captured values and starts the result line 120 ms after the observed outcome. The retained-capture revision was submitted through the authenticated API and the second request was rejected with 409. Both narrated and clean downloads were received. A request without authentication returned 401.
+
+Set `SAUCE_KOKORO_PYTHON`, `SAUCE_KOKORO_MODEL`, and `SAUCE_KOKORO_VOICES` to the installed offline runtime and files. Studio's default `auto` narrates recognized monthly US-dollar price changes when the runtime is configured. `clean` requests no narration and `narrated` requires evidence. For this release the optional brief selects whether a pricing narration is appropriate. It never supplies facts or repeats arbitrary brief text. This is a bounded pricing narration strategy. The separate strict cinematic admission gate still governs cinematic-only jobs. The private broker now checkpoints the capture and permits one rendering retry for timeouts or an interrupted render with remaining budget. Revision uses the same verified WebM.
+
+Verified 56 tests and 29 subtests on the combined changes and the Studio TypeScript check. FFmpeg decoded both 1280×720/30 previews. Playback and seeking passed at 1280×720 and 390×844. Narrated preview uses AAC at 48 kHz, duration 6.966667s, SHA-256 `c24a2b9d203d674dadc9640f97f19a9ab1cb6ca9de63f769f5e60e209fd5cc76`. Worker proof: `sauce-resend-revision/qa-review/sauce-resend-revised.mp4`. No production deployment or prospect approval.
+
 ## 2026-11-19 — Private URL narration timing test
 
 A fresh public Resend pricing capture on main `4118b5b` recorded a real slider gesture and a verified visible numeric result. The encoded Pro price changes from $20/mo to $35/mo. The stock URL renderer exports silently. The first test invocation hit a 60-second supervision limit and left an incomplete composition. Rendering was restarted from the existing verified WebM, without recapturing. The bounded renderer recovered a 326-frame 1080p60 silent master from 25 fps source footage.

@@ -212,16 +212,29 @@ def capture_slider(page, loc, time_zero):
   page.wait_for_timeout(280)
   result=setup.evaluate(r"""s => {
     if(!s.e.isConnected || Number(s.e.value)===s.value)return null;
-    const rects=s.candidates.filter(({node,text})=>node.isConnected&&
-      node.innerText?.trim()!==text&&/\d/.test(node.innerText)&&
-      node.checkVisibility?.({opacityProperty:true,visibilityProperty:true})!==false)
-      .map(({node})=>node.getBoundingClientRect())
-      .filter(r=>r.width>6&&r.height>10&&r.left>=0&&r.right<=innerWidth&&
-            r.top>=s.track.top&&r.bottom<=innerHeight&&r.width<innerWidth*.48);
-    if(!rects.length)return null;
+    const changes=s.candidates.flatMap(({node,text})=>{
+      if(!node.isConnected || node.checkVisibility?.({opacityProperty:true,visibilityProperty:true})===false)
+        return [];
+      const after=node.innerText?.trim(), r=node.getBoundingClientRect();
+      if(!after || after===text || !/\d/.test(after) || r.width<=6 || r.height<=10 ||
+         r.left<0 || r.right>innerWidth || r.top<s.track.top ||
+         r.bottom>innerHeight || r.width>=innerWidth*.48) return [];
+      const currency=/^\$\s*\d{1,4}(?:\s*\/\s*mo)?$/i;
+      // Record a numeric claim only when both values and the billing period
+      // are visible inside the same compact pricing row.
+      const row=(node.parentElement?.innerText||'').replace(/\s+/g,' ').trim();
+      const monthly=/\/\s*mo\b/i;
+      const price=currency.test(text)&&currency.test(after) &&
+        (monthly.test(text)&&monthly.test(after) || row.length<=90&&monthly.test(row));
+      return [{r, price:price ? {before:text,after,period:'month'} : null}];
+    });
+    if(!changes.length)return null;
+    const rects=changes.map(c=>c.r);
     const x=Math.min(...rects.map(r=>r.left)),y=Math.min(...rects.map(r=>r.top));
-    return {x,y,width:Math.max(...rects.map(r=>r.right))-x,
-                 height:Math.max(...rects.map(r=>r.bottom))-y};
+    const prices=changes.map(c=>c.price).filter(Boolean);
+    return {rect:{x,y,width:Math.max(...rects.map(r=>r.right))-x,
+                 height:Math.max(...rects.map(r=>r.bottom))-y},
+            price:prices.length===1 ? prices[0] : null};
   }""")
   if result is None:
    print('Slider drag did not verify dependent text',flush=True)
@@ -230,7 +243,7 @@ def capture_slider(page, loc, time_zero):
   return {'kind':'slider_change','start':start,'t':released,'end':released,
           'evidence':'Range changed with a visible dependent numeric result',
           'targetRect':{k:track[k] for k in ('x','y','width','height')},
-          'resultRect':result,'pointer_samples':points}
+          'resultRect':result['rect'],'price_change':result['price'],'pointer_samples':points}
  finally:
   setup.dispose()
 

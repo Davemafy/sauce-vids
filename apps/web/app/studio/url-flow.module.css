@@ -124,3 +124,8 @@
 .outputLinks a:focus-visible{outline:2px solid #f0c39e;outline-offset:2px}
 .outputLinks a:hover{filter:brightness(1.07)}
 @media(max-width:600px){.outputLinks a{flex:1;min-width:145px}}
+
+.filmOptions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;margin-top:12px}
+.filmOptions label{min-width:0}
+.filmOptions input,.filmOptions select{display:block;width:100%;min-width:0;box-sizing:border-box;margin-top:6px;padding:10px 11px;border:1px solid #413733;border-radius:8px;background:#201a18;color:#f4e9e0;font:inherit}
+@media (max-width:540px){.filmOptions{grid-template-columns:1fr;gap:5px}}

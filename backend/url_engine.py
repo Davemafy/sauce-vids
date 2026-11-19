@@ -4,7 +4,8 @@ Public browser motions and source streams are SHA-verified. No generated CSS
 selectors or fabricated UI, and no false claims of deterministic DOM replay.
 """
 from __future__ import annotations
-import base64,json,os,subprocess,sys
+import base64,json,os,signal,subprocess,sys
+from hashlib import sha256
 from pathlib import Path
 from urllib.error import HTTPError,URLError
 from urllib.request import Request,urlopen
@@ -12,6 +13,7 @@ from urllib.request import Request,urlopen
 ROOT=Path(__file__).resolve().parents[1]
 from scripts.capture_safety import validate_public_url
 from backend.product_explorer import inspect,normalize,workflow,preflight,known_dialog_opener
+from backend.job_store import load_render_checkpoint, write_render_checkpoint
 
 PROMPT="""You are the creative director for Sauce, a browser-recorded product-film tool.
 Decide how to show a REAL public website using the provided screenshot and
@@ -162,12 +164,20 @@ def captured(folder:Path,url:str,actions:list[dict],*,tag:str='session'):
         raise RuntimeError('Browser capture contained no usable state sequence')
     return output
 
-def execute(url:str,folder:Path,progress=None):
+def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto"):
     validate_public_url(url)
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
     private=folder/'private';private.mkdir(parents=True,exist_ok=True)
     def stage(x):
         if progress:progress(x)
+    cinematic_only=os.getenv('SAUCE_CINEMATIC_ONLY')=='1'
+    checkpoint=load_render_checkpoint(folder,url)
+    if checkpoint:
+        if cinematic_only and checkpoint.get('cinematic_only') is not True:
+            raise RuntimeError('Cinematic film rejected: checkpoint lacks cinematic admission')
+        return render_checkpoint(folder,checkpoint,stage,brief,audio)
+    if (folder/'render-checkpoint.json').exists():
+        raise RuntimeError('Saved capture failed checkpoint verification')
     stage('inspecting')
     report=inspect(url,private)
     stage('directing')
@@ -176,7 +186,6 @@ def execute(url:str,folder:Path,progress=None):
     plan,calls,source=direction(report,previous_feedback(folder.parent))
     (folder/'direction.json').write_text(json.dumps({
        **plan,'ai_calls':calls,'direction_source':source},indent=2))
-    cinematic_only=os.getenv('SAUCE_CINEMATIC_ONLY')=='1'
     if cinematic_only and plan['mode']!='interactive':
         raise RuntimeError('Cinematic film rejected: marketing showcase is not real product demo')
     steps=workflow(plan,report) if not plan.get('beats') else []
@@ -243,19 +252,47 @@ def execute(url:str,folder:Path,progress=None):
         if cinematic_only:
             raise RuntimeError('Cinematic film rejected: source recording lost actual product action')
         plan['mode']='showcase'
-    stage('rendering')
+    checkpoint={'url':url,'title':plan['title'],'mode':plan['mode'],'ai_calls':calls,
+                'direction_source':source,'attempts':0,'subject_shots':bool(record.get('subject_shots')),
+                'cinematic_only':cinematic_only,
+                'receipt_sha256':sha256((capture_dir/'continuous-capture.json').read_bytes()).hexdigest()}
+    write_render_checkpoint(folder,checkpoint)
+    return render_checkpoint(folder,checkpoint,stage,brief,audio)
+
+
+def render_checkpoint(folder,checkpoint,stage,brief,audio):
+    capture_dir=folder/'private'/'motion'
     export=folder/'export'
-    with (folder/'render.log').open('w') as log:
-        finished=subprocess.run([sys.executable,'-m','backend.live_render',
-          '--source',str(capture_dir),'--out',str(export),
-          '--title',plan['title'],
-          '--story',('Actual public UI interaction' if plan['mode']=='interactive'
-                   else 'Public product-page reel' if record.get('subject_shots')
-                   else 'Public website preview; private features not demonstrated'),
-          '--mode',plan['mode']],cwd=ROOT,env=env,
-          stdout=log,stderr=subprocess.STDOUT,check=False,timeout=350)
-    if finished.returncode!=0:
+    stage('rendering')
+    command=[sys.executable,'-m','backend.live_render',
+             '--source',str(capture_dir),'--out',str(export),
+             '--title',checkpoint['title'],'--mode',checkpoint['mode'],
+             '--brief='+brief,'--audio',audio,
+             '--story',('Actual public UI interaction' if checkpoint['mode']=='interactive'
+                        else 'Public product-page reel' if checkpoint['subject_shots']
+                        else 'Public website preview; private features not demonstrated')]
+    while checkpoint['attempts']<2:
+        checkpoint['attempts']+=1
+        write_render_checkpoint(folder,checkpoint)
+        with (folder/'render.log').open('a') as log:
+            with subprocess.Popen(command,cwd=ROOT,stdout=log,stderr=subprocess.STDOUT,
+                                  start_new_session=True) as worker:
+                try:
+                    result=worker.wait(timeout=500)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(worker.pid,signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    continue
+        if result==0:
+            break
+        if result==124:
+            continue
+        # An invalid evidence or configuration error won't be repaired by rerendering.
         raise RuntimeError('Continuous motion video encoder failed')
+    else:
+        raise RuntimeError('Verified capture retained after renderer retry limit')
     release=export/'release.json'
     if not release.is_file() or not (export/'preview.mp4').is_file():
         raise RuntimeError('No real-motion export produced')
@@ -263,9 +300,9 @@ def execute(url:str,folder:Path,progress=None):
     if not receipt.get('continuous_motion') or not receipt.get('source_verified'):
         raise RuntimeError('Source motion evidence was not verified')
     stage('needs_review')
-    return {'status':'needs_review','ai_calls':calls,'title':plan['title'],
-       'direction_source':source,'capture_mode':plan['mode'],
-       'render_mode':receipt['render_mode'],
+    return {'status':'needs_review','ai_calls':checkpoint['ai_calls'],'title':checkpoint['title'],
+       'direction_source':checkpoint['direction_source'],'capture_mode':checkpoint['mode'],
+       'render_mode':receipt['render_mode'],'narrated':receipt.get('narrated',False),
        'quality':'human-review-required','video_type':
        'Real continuous browser recording; authenticated features not verified',
        'preview':'preview.mp4'}

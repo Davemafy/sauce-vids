@@ -4,18 +4,21 @@ POST /v1/inspect {"url": "..."} -> grounded public site scan (no AI key)
 POST /v1/jobs {"url": "..."} -> one-call direction + capture + render
 GET  /v1/jobs/{id} -> stage, outcome, review requirement
 GET  /v1/jobs/{id}/preview.mp4 -> private, authenticated preview
+GET  /v1/jobs/{id}/preview-clean.mp4 -> clean version when available
+POST /v1/jobs/{id}/revision -> one rerender from the retained capture
 POST /v1/jobs/{id}/feedback {"rating":1..5,"notes":"..."} -> review ledger
 GET /health -> readiness; no secrets or raw browser recordings.
 """
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
-import hmac,json,os,re,secrets,threading,time,socketserver
+from hashlib import sha256
+import hmac,json,os,re,secrets,threading,time,socketserver,shutil
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlsplit
 from .url_engine import execute
 from .url2video import inspect_url,validate_public_url,NeedsKey,NeedsAccess
-from .job_store import recover_jobs, save_job
+from .job_store import load_render_checkpoint, recover_jobs, save_job, write_render_checkpoint
 
 HOST="127.0.0.1"
 PORT=int(os.getenv("SAUCE_API_PORT","8767"))
@@ -43,7 +46,9 @@ def worker(job_id):
             JOBS[job_id]["stage_started_at"]=time.time()
             save(job_id)
     try:
-        result=execute(JOBS[job_id]["url"],folder,progress=stage)
+        job=JOBS[job_id]
+        result=execute(job["url"],folder,progress=stage,
+                       brief=job.get("brief",""),audio=job.get("audio","auto"))
         with LOCK:
             JOBS[job_id].update(result)
             JOBS[job_id]["updated_at"]=time.time()
@@ -122,7 +127,7 @@ class Handler(BaseHTTPRequestHandler):
                 "status":"ready","director_key_configured":bool(os.getenv("GEMINI_API_KEY")),
                 "one_ai_call":True,"export_requires_review":True})
         if not self.require_auth(): return
-        match=re.fullmatch(r"/v1/jobs/([a-f0-9]{24})(/preview\.mp4)?",path)
+        match=re.fullmatch(r"/v1/jobs/([a-f0-9]{24})(/preview(?:-clean)?\.mp4)?",path)
         if not match: return self.send_json(404,{"error":"Not found"})
         job_id,video=match.group(1),match.group(2)
         with LOCK: job=JOBS.get(job_id)
@@ -134,7 +139,7 @@ class Handler(BaseHTTPRequestHandler):
             response={key:value for key,value in job.items()
                       if key in ("id","url","stage","status","created_at",
                                  "updated_at","stage_started_at","reason",
-                                 "error","message","ai_calls","title","quality","note","render_mode","direction_source","capture_mode","video_type")}
+                                 "error","message","ai_calls","title","quality","note","render_mode","direction_source","capture_mode","video_type","narrated","revision_of")}
             if job.get("stage")=="rendering":
                 log=OUT/job_id/"render.log"
                 try:
@@ -151,7 +156,7 @@ class Handler(BaseHTTPRequestHandler):
                             response["frames_total"]=total
                 except (OSError,ValueError): pass
             return self.send_json(200,response)
-        video_path=OUT/job_id/"export"/"preview.mp4"
+        video_path=OUT/job_id/"export"/video[1:]
         if job.get("status")!="needs_review" or not video_path.is_file():
             return self.send_json(404,{"error":"Preview unavailable"})
         self.send_response(200)
@@ -183,19 +188,60 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/v1/jobs":
             try: url=validate_public_url(body.get("url",""))
             except ValueError as exc: return self.send_json(422,{"error":str(exc)})
+            brief=body.get("brief","")
+            audio=body.get("audio","auto")
+            if not isinstance(brief,str) or len(brief)>240 or audio not in ("auto","clean","narrated"):
+                return self.send_json(422,{"error":"Invalid brief or audio preference"})
             with LOCK:
                 if sum(x.get("status")=="queued" or x.get("stage") in
                        ("inspecting","directing","capturing","rendering")
                        for x in JOBS.values())>=2:
                     return self.send_json(429,{"error":"Sauce queue full"})
                 job_id=secrets.token_hex(12)
-                JOBS[job_id]={"id":job_id,"url":url,"stage":"queued",
+                JOBS[job_id]={"id":job_id,"url":url,"brief":brief,"audio":audio,"stage":"queued",
                               "status":"queued","created_at":time.time(),
                               "updated_at":time.time(),"stage_started_at":time.time()}
                 save(job_id)
                 POOL.submit(worker,job_id)
             return self.send_json(202,{"job_id":job_id,
                 "status_url":"/v1/jobs/"+job_id})
+        match=re.fullmatch(r"/v1/jobs/([a-f0-9]{24})/revision",path)
+        if match:
+            source_id=match.group(1)
+            with LOCK:
+                original=JOBS.get(source_id)
+                if not original or original.get("status")!="needs_review":
+                    return self.send_json(404,{"error":"Completed film unavailable"})
+                if original.get("revision_of"):
+                    return self.send_json(409,{"error":"Revision limit reached"})
+                audio=body.get("audio",original.get("audio","auto"))
+                brief=body.get("brief",original.get("brief",""))
+                if (audio not in ("auto","clean","narrated") or
+                        not isinstance(brief,str) or len(brief)>240):
+                    return self.send_json(422,{"error":"Invalid brief or audio preference"})
+                if (audio,brief)==(original.get("audio","auto"),original.get("brief","")):
+                    return self.send_json(422,{"error":"Supply a revised brief or audio preference"})
+                revision_id=sha256(("sauce-revision:" + source_id).encode()).hexdigest()[:24]
+                if revision_id in JOBS or (OUT/revision_id/"status.json").exists():
+                    return self.send_json(409,{"error":"Revision limit reached"})
+                if sum(x.get("status")=="queued" for x in JOBS.values())>=2:
+                    return self.send_json(429,{"error":"Sauce queue full"})
+                checkpoint=load_render_checkpoint(OUT/source_id,original["url"])
+                if not checkpoint:
+                    return self.send_json(409,{"error":"Verified capture unavailable for revision"})
+                motion=OUT/revision_id/"private"/"motion"
+                motion.mkdir(mode=0o700,parents=True,exist_ok=True)
+                for filename in ("continuous-capture.json","continuous-source.webm"):
+                    shutil.copyfile(OUT/source_id/"private"/"motion"/filename,motion/filename)
+                write_render_checkpoint(OUT/revision_id,{**checkpoint,"attempts":0})
+                now=time.time()
+                JOBS[revision_id]={"id":revision_id,"revision_of":source_id,
+                    "url":original["url"],"brief":brief,"audio":audio,
+                    "status":"queued","stage":"rendering",
+                    "created_at":now,"updated_at":now,"stage_started_at":now}
+                save(revision_id)
+                POOL.submit(worker,revision_id)
+            return self.send_json(202,{"job_id":revision_id,"status_url":"/v1/jobs/"+revision_id})
         match=re.fullmatch(r"/v1/jobs/([a-f0-9]{24})/feedback",path)
         if match:
             job_id=match.group(1)

@@ -98,8 +98,9 @@ export async function GET(req:NextRequest,{params}:Context){
    const {status,data}=await backendJson("/v1/jobs/"+id);
    return json(status===200?{job:data}:{error:"Job unavailable"},status===200?200:404);
   }
-  if(parts.length===3&&parts[2]==="media"){
-   const remote=await backend("/v1/jobs/"+id+"/preview.mp4");
+  if(parts.length===3&&(parts[2]==="media"||parts[2]==="clean-media")){
+   const video=parts[2]==="clean-media"?"preview-clean.mp4":"preview.mp4";
+   const remote=await backend("/v1/jobs/"+id+"/"+video);
    if(!remote.ok)return json({error:"Preview not ready"},remote.status===404?404:502);
    const buf=await remote.arrayBuffer();
    return new NextResponse(buf,{status:200,headers:{
@@ -141,12 +142,18 @@ export async function POST(req:NextRequest,{params}:Context) {
    const parsed=new URL(url);
    if(!["https:","http:"].includes(parsed.protocol)||parsed.username||parsed.password)
     return json({error:"Public HTTP(S) URLs only"},400);
-   const {status,data}=await backendJson("/v1/jobs",{url});
+   const {status,data}=await backendJson("/v1/jobs",{url,brief:body.brief,audio:body.audio});
    return json(status===202?{jobId:data.job_id}:{error:data.error||"Unable to start job"},status);
   }catch(e){
    if(e instanceof TypeError)return json({error:"Enter a valid URL"},400);
    return json({error:"Render worker unavailable"},503);
   }
+ }
+ if(parts.length===3&&parts[0]==="jobs"&&jobPattern.test(parts[1])&&parts[2]==="revision"){
+  try{
+   const {status,data}=await backendJson("/v1/jobs/"+parts[1]+"/revision",{brief:body.brief,audio:body.audio});
+   return json(status===202?{jobId:data.job_id}:{error:data.error||"Unable to revise film"},status);
+  }catch{return json({error:"Render worker unavailable"},503);}
  }
  if(parts.length===3&&parts[0]==="jobs"&&jobPattern.test(parts[1])&&parts[2]==="feedback"){
   const rating=body.rating,notes=body.notes;
