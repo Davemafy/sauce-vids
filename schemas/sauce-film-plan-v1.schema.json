@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Davemafy/sauce-vids/blob/main/schemas/sauce-film-plan-v1.schema.json",
+  "title": "Sauce source-true film plan v1",
+  "description": "Declarative site-independent camera, recorded pointer and licensed media binding over a hash-pinned browser capture. Real source events are validated separately.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "sourceSha256",
+    "manifestSha256",
+    "durationSeconds",
+    "presentation",
+    "cursor",
+    "camera"
+  ],
+  "properties": {
+    "schema": {
+      "const": "sauce-film-plan-v1"
+    },
+    "sourceSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "durationSeconds": {
+      "type": "number",
+      "minimum": 0.5
+    },
+    "presentation": {
+      "enum": [
+        "fullscreen",
+        "window"
+      ]
+    },
+    "cursor": {
+      "enum": [
+        "recorded",
+        "none"
+      ]
+    },
+    "audio": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "const": "clean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "file"
+          ],
+          "properties": {
+            "mode": {
+              "const": "file"
+            },
+            "file": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "camera": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "at",
+          "anchor",
+          "zoom"
+        ],
+        "properties": {
+          "at": {
+            "type": "number",
+            "minimum": 0
+          },
+          "startAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "anchor": {
+            "type": "string",
+            "pattern": "^(wide|event:[0-9]+:(target|result|group))$"
+          },
+          "zoom": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 2.5
+          },
+          "easing": {
+            "enum": [
+              "quintic",
+              "linear"
+            ]
+          }
+        }
+      }
+    },
+    "manifestSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

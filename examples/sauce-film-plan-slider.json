@@ -1,0 +1,45 @@
+{
+  "schema": "sauce-film-plan-v1",
+  "sourceSha256": "7d20dd35923409ee10f79428e2be7ea210d173c4a8fa86a872c6326306595072",
+  "durationSeconds": 6.9,
+  "presentation": "fullscreen",
+  "cursor": "recorded",
+  "audio": {
+    "mode": "clean"
+  },
+  "camera": [
+    {
+      "at": 0,
+      "anchor": "event:0:target",
+      "zoom": 1.42,
+      "easing": "quintic"
+    },
+    {
+      "at": 3.44,
+      "anchor": "event:0:target",
+      "zoom": 1.42,
+      "easing": "quintic"
+    },
+    {
+      "at": 4.65,
+      "startAt": 3.44,
+      "anchor": "event:0:result",
+      "zoom": 1.65,
+      "easing": "quintic"
+    },
+    {
+      "at": 5.5,
+      "anchor": "event:0:result",
+      "zoom": 1.65,
+      "easing": "quintic"
+    },
+    {
+      "at": 6.9,
+      "startAt": 5.5,
+      "anchor": "event:0:group",
+      "zoom": 1.44,
+      "easing": "quintic"
+    }
+  ],
+  "manifestSha256": "793aff4390bed548818814c6907f77a51f23d674b619f492815e47d830d6fd64"
+}

@@ -29,6 +29,8 @@ DEFAULT_ROOT=PROJECT/"studio"/".tmp"/"sauce-autozoom-v1"
 parser=argparse.ArgumentParser(description="Render a real browser recording with an evidence-based camera path.")
 parser.add_argument("--video",type=Path,help="An actual captured browser recording, not reconstructed footage")
 parser.add_argument("--manifest",type=Path,help="Timestamped capture sidecar with verified DOM events")
+parser.add_argument("--film-plan",type=Path,help="Validated source-true creative plan JSON; alternative to hardcoded site edits")
+parser.add_argument("--validate-only",action="store_true",help="Check source, keyframes and motion without exporting frames")
 parser.add_argument("--output",type=Path,help="Output MP4 path (default: alongside the manifest)")
 parser.add_argument("--music",type=Path,help="Optional licensed audio recording")
 parser.add_argument("--preview",type=float)
@@ -55,6 +57,19 @@ parser.add_argument("--presentation",choices=["window","fullscreen"],default="wi
                     help="Window uses a licensed browser frame; fullscreen preserves raw product pixels without invented chrome")
 parser.add_argument("--stage-image",type=Path,help="Operator-supplied backdrop for the window presentation")
 args=parser.parse_args()
+if args.film_plan:
+    if any((args.anchored_result_cut,args.trim_real_idle_intro,args.verified_workflow_editorial,
+            args.guided_result,args.slider_framing,args.result_focus,args.glass_loupe,
+            args.stage_image is not None,args.static)):
+        parser.error("--film-plan owns the camera/editorial path; conflicting legacy flags are rejected")
+    # The film plan is authoritative for presentation and pointer configuration.
+    FILM_PLAN_DATA=json.loads(args.film_plan.read_text())
+    args.presentation=FILM_PLAN_DATA.get("presentation","fullscreen")
+    args.recorded_pointer=FILM_PLAN_DATA.get("cursor")=="recorded"
+else:
+    FILM_PLAN_DATA=None
+if args.validate_only and FILM_PLAN_DATA is None:
+    parser.error("--validate-only requires --film-plan")
 if args.stage_image and (args.presentation!="window" or not args.stage_image.is_file()):
     parser.error("--stage-image requires an existing image and window presentation")
 if args.anchored_result_cut and (args.presentation!="fullscreen" or args.glass_loupe):
@@ -100,6 +115,17 @@ if FPS not in (24,25,30,50,60):
     parser.error("Source must have a supported constant 24/25/30/50/60 fps video stream")
 DURATION=min(float(MANIFEST.get("duration") or probe["format"]["duration"]),
              float(probe["format"]["duration"]))
+FILM_PLAN=None
+if FILM_PLAN_DATA is not None:
+    from film_plan import load_film_plan
+    FILM_PLAN=load_film_plan(FILM_PLAN_DATA, MANIFEST,SRC,MANIFEST_PATH,(INPUT_W,INPUT_H),
+                            DURATION,args.film_plan)
+    if args.seconds is not None and not .5<=args.seconds<=FILM_PLAN.duration:
+        parser.error("Review duration must be within the source-verified plan")
+    args.seconds=args.seconds or FILM_PLAN.duration
+    if FILM_PLAN.audio_file and args.music:
+        parser.error("Film-plan audio and CLI music cannot be mixed implicitly")
+
 if DURATION<0.5:parser.error("Video duration is too short")
 VENDOR=PROJECT/"studio"/"assets"/"vendor"/"shotcandy"
 FRAME=VENDOR/"browser-dark.svg"
@@ -257,6 +283,8 @@ OVERLAY_ALPHA=OVERLAY[:,:,3:4].astype(np.float32)/255.0
 OVERLAY_RGB=OVERLAY[:,:,:3].astype(np.float32)
 
 def camera_matrix(t,static=False):
+    if FILM_PLAN is not None:
+        return FILM_PLAN.at(t,(SCREEN_W,SCREEN_H))
     if WORKFLOW_SHOT is not None and not static:
         return WORKFLOW_SHOT.matrix(t)
     if RESULT_CUT is not None and not static and round(t*FPS)>=RESULT_CUT.frame:
@@ -335,11 +363,13 @@ def compose_window(source,t,static=False):
 
 def apply(source,t,static=False):
     stage=compose_window(source,t,static)
-    if POINTER is not None:
+    if POINTER is not None and (FILM_PLAN is None or t >= float(POINTER[0,0])):
         press=max((1.-smooth5((t-down)/.18) for down in POINTER_PRESSES
                    if 0<=t-down<.18),default=0.)
         stage=project_pointer(stage,POINTER,camera_matrix(t,static),t,
-                              scale=EDIT_CAMERA.get("cursor_scale",.85) if SLIDER_SHOT else 1.6-.18*press)
+                              scale=(.73 if FILM_PLAN is not None else
+                                     EDIT_CAMERA.get("cursor_scale",.85) if SLIDER_SHOT
+                                     else 1.6-.18*press))
     if args.result_focus and RESULT_CUT is not None and not static:
         elapsed_frames = round(t * FPS) - RESULT_CUT.frame
         if elapsed_frames > 0:
@@ -372,7 +402,8 @@ def diagnostics():
             continuous_vel=np.delete(vel,cut_at-1,axis=0)
     metrics={
        "frames":len(rows),
-       "zoom_shots":0 if args.static or RESULT_CUT else len(SHOTS),
+       "zoom_shots":(len(FILM_PLAN.camera_keys)-1 if FILM_PLAN is not None else
+                     0 if args.static or RESULT_CUT else len(SHOTS)),
        "anchored_result_frame":RESULT_CUT.frame if RESULT_CUT else None,
        "result_focus":bool(args.result_focus and RESULT_CUT),
        "verified_workflow_editorial":WORKFLOW_SHOT is not None,
@@ -389,11 +420,13 @@ def diagnostics():
              round(float(np.max(np.abs(accel[:,[2,5]]),initial=0)),4),
        "max_zoom_per_frame":round(float(np.max(np.abs(vel[:,0]),initial=0)),8),
        "frame_source":("unmodified browser recording" if args.presentation=="fullscreen" else "Shotcandy MIT browser-dark.svg"),
-       "camera_profile":("verified-workflow-editorial" if WORKFLOW_SHOT else
+       "camera_profile":("json-film-plan-v1" if FILM_PLAN is not None else
+                         "verified-workflow-editorial" if WORKFLOW_SHOT else
                          "guided-result" if GUIDED_SHOT else args.camera_profile),
        "presentation":args.presentation,
        "source_capture":str(MANIFEST.get("source_kind",MANIFEST.get("capture","verified browser recording"))),
-       "camera_plan_source":"recorded click and DOM state change",
+       "camera_plan_source":("source-verified JSON keyframes"
+                              if FILM_PLAN is not None else "recorded click and DOM state change"),
        "browser_frame_not_handmade":True,
        "stable_window":True,
        "interpolation":("verified outcome cut + C2 quintic motion"
@@ -401,6 +434,12 @@ def diagnostics():
                         "hard cut" if RESULT_CUT else "C2 quintic"),
     }
     if not np.isfinite(rows).all():raise RuntimeError("Nonfinite camera matrix")
+    if FILM_PLAN is not None:
+        # Validate motion in 60fps-equivalent units, even for 24/25/30fps sources.
+        speed60=metrics["max_translation_per_frame_px"] * FPS/60
+        zoom60=metrics["max_zoom_per_frame"] * FPS/60
+        if speed60 > 16.0 or zoom60 > .015:
+            raise ValueError("JSON film camera moves too abruptly: revise the keyframes, not the source video")
     (WORKDIR/"camera-metrics.json").write_text(json.dumps(metrics,indent=2))
     print("CAMERA_METRICS",json.dumps(metrics),flush=True)
     return metrics
@@ -420,7 +459,10 @@ def render(output,seconds=None,static=False):
        "-f","rawvideo","-pix_fmt","bgr24",
        "-video_size",f"{MASTER_W}x{MASTER_H}",
        "-framerate",str(FPS),"-i","pipe:0"]
-    if MUSIC.exists():
+    if FILM_PLAN is not None and FILM_PLAN.audio_file is not None:
+        cmd+=["-i",str(FILM_PLAN.audio_file),"-map","0:v:0","-map","1:a:0",
+              "-c:a","aac","-ar","48000","-b:a","128k"]
+    elif MUSIC.exists():
         cmd+=["-stream_loop","-1","-i",str(MUSIC),
               "-filter_complex",
               f"[1:a]atrim=duration={frames/FPS},volume=.16,highpass=f=60,lowpass=f=9000,"
@@ -464,11 +506,28 @@ def render(output,seconds=None,static=False):
             "render_seconds":round(time.monotonic()-start,2),
             "full_decode_verified":True,"static":static,
             "video":video}
+    if FILM_PLAN is not None:
+        record["film_plan"]={"schema":"sauce-film-plan-v1",
+            "planSha256":__import__("hashlib").sha256(args.film_plan.read_bytes()).hexdigest(),
+            "sourceSha256":FILM_PLAN.source_sha256,
+            "manifestSha256":FILM_PLAN.manifest_sha256,
+            "cameraKeyframes":len(FILM_PLAN.camera_keys),
+            "audioFileIncluded":bool(FILM_PLAN.audio_file),
+            "creativeApproval":False}
     output.with_suffix(".json").write_text(json.dumps(record,indent=2))
     print("RENDER_RECEIPT",json.dumps(record),flush=True)
 
 if __name__=="__main__":
     diagnostics()
+    if args.validate_only:
+        print("JSON_FILM_PLAN_VALIDATED",json.dumps({
+            "sourceSha256":FILM_PLAN.source_sha256,
+            "manifestSha256":FILM_PLAN.manifest_sha256,
+            "planSha256":__import__("hashlib").sha256(args.film_plan.read_bytes()).hexdigest(),
+            "durationSeconds":FILM_PLAN.duration,
+            "keyframes":len(FILM_PLAN.camera_keys),
+            "creativeApproval":False},sort_keys=True),flush=True)
+        sys.exit(0)
     if args.preview is not None:
         if args.preview < 0 or args.preview >= DURATION:
             parser.error("--preview must be within the actual recording duration")
