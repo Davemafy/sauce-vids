@@ -1,5 +1,62 @@
 # Sauce Basic — deterministic website-tour contract
 
+## Automatic quality gate and bounded self-repair — November 19, 2026
+
+**Why:** the owner rejected the manually polished Brimble opening as
+boring and unscalable. Sauce Basic cannot depend on ChatGPT or an
+operator handpicking the hook, scrubbing frames, editing scene order,
+or fixing a customer's video after rendering.
+
+Implemented scripts/basic_tour_autodirect.py and wired it into
+scripts/basic_tour_native.py after source capture and full-tour assembly.
+
+1. Preserve the complete source-true chaptered archive, scene receipts,
+   SHA256-pinned sauce-film-plan-v1 JSON. No paid model inference,
+   invented clicks, rebuilt compositor or synthetic UI pixels.
+2. Compile a Short Cut from existing verified recorded segments.
+3. Decode the ACTUAL preview MP4 at 4fps/192x108. Measure frame
+   differences, real opening motion, longest still run, flatness, and
+   underlying source-receipt quality issues.
+4. Reject when more than 70 percent of samples are near-static, more
+   than 2.5 seconds continuously static, opening motion below 20 percent
+   of checked intervals, too many flat frames, or source has flagged
+   quality issues. These are provisional negative checks, not a
+   scientifically validated subjective-quality model.
+5. One bounded repair can promote real recorded browser movement,
+   shorten passive holds, and omit flagged pages from the SHORT
+   preview while preserving them in the full tour and manifest.
+   No fake cursor clicks or camera-only motion counts as real UI action.
+6. Rerender and reevaluate one time. Preserve both media candidates,
+   exact source hashes, edit decisions and reject reasons. If neither
+   passes, status is rejected_no_saleable_preview. No infinite retries
+   and no automatic public publication. The private release JSON
+   explicitly states automaticPreviewPublicationAllowed=false.
+
+Real Brimble evaluation: original 20.9s short cut was 77.1 percent
+static, with zero measured opening movement during the first 2s,
+2.75s longest still run and low-confidence Sandboxes source.
+It was rejected automatically. One genuine-source movement-first
+repair shortened the film to 11.27s, raised opening motion to 50
+percent, reduced longest still stretch to 2.25s, and omitted the
+flagged Sandboxes page ONLY from the preview. That repaired film
+remained 72.7 percent static and was also rejected. This is an
+intentional fail-closed outcome, not a shippable film.
+
+Five additional automated ffmpeg and pure tests verify static-film
+rejection, genuine source movement recognition, flagged source
+rejection, no invented motion and bounded repair. Current focused
+Basic suite: 45 passing.
+
+These checks cannot certify cinematic beauty or semantic product
+payoff. Calibrate thresholds against independent approved/rejected
+films across three different products, measure false positives and
+false negatives, and finish per-site capture/readiness/scroll/overlay
+quality, actual source frame rate, worker economics and network-level
+sandbox safety before claiming automatic customer-deliverable quality.
+Do not expose arbitrary untrusted URLs in the private pilot.
+
+---
+
 ## Cross-site QA and real capture wall-budget
 
 The private allowlisted preflight tested ten public websites with at

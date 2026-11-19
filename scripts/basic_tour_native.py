@@ -43,6 +43,7 @@ sys.path.insert(0,str(ROOT))
 from backend.live_capture import (ensure_video_helper,ARROW_CURSOR_JS)
 from scripts.film_plan import load_film_plan
 from basic_tour_media_qa import analyse_master
+from basic_tour_autodirect import run as automatically_direct_basic_preview
 
 CHROME=os.environ.get("SAUCE_CHROME_BIN") or (
     "/opt/devmcp-browsers/chromium_headless_shell-1254/"
@@ -334,7 +335,7 @@ def join_scenes(scenes,out:Path)->dict:
 
 def run(url,root:Path,allowed_hosts,*,scope="navigation",max_pages=3,
         profile="balanced",quality="1080",max_minutes=5,
-        cursor_policy="none",preflight_only=False):
+        cursor_policy="none",auto_preview=True,preflight_only=False):
     if (urlsplit(url).hostname or "").lower() not in set(allowed_hosts):
         raise ValueError("Explicit test host allowlist required")
     validate_public_url(url)
@@ -389,8 +390,26 @@ def run(url,root:Path,allowed_hosts,*,scope="navigation",max_pages=3,
                       source_rates=[scene["source_rate"] for scene in scenes])
     quality_issues=sorted(set(
         issue for scene in scenes for issue in scene["issues"]))
+    automatic_preview=None
+    if auto_preview and not qa["issues"]:
+        try:
+            automatic_preview=automatically_direct_basic_preview(
+                [Path(scene["manifest"]).parent for scene in scenes],
+                root/"automatic-preview",max_seconds=30)
+        except Exception as exc:
+            automatic_preview={
+                "schema":"sauce.basic.autodirect.v1",
+                "status":"rejected_automatic_preview_error",
+                "error":type(exc).__name__+":"+str(exc)[:180],
+                "acceptedByAutomaticChecks":False,
+                "creativeQualityVerified":False,
+            }
+    preview_rejected=bool(auto_preview and (
+        not automatic_preview or
+        not automatic_preview.get("acceptedByAutomaticChecks",False)))
     result={"schema":"sauce.basic.tour-release.v1",
         "status":("technical_reject" if qa["issues"] else
+                  "automatic_preview_rejected" if preview_rejected else
                   "low_confidence_review_required" if quality_issues or errors else
                   "review_required"),
         "mode":"basic","contract":contract.manifest(),
@@ -399,6 +418,8 @@ def run(url,root:Path,allowed_hosts,*,scope="navigation",max_pages=3,
         "chapters":preflight["chapters"],
         "recordings":[{k:v for k,v in s.items() if k!="hold_samples"} for s in scenes],
         "master":master,"qa":qa,"quality_issues":quality_issues,
+        "automaticPreview":automatic_preview,
+        "automaticPreviewPublicationAllowed":False,
         "limitations":["Not authorized for public user URL ingestion",
         "Requires film-level quality approval before sale",
         "60fps CFR presentation does not establish native 60fps browser capture",
@@ -418,11 +439,14 @@ def main():
     p.add_argument("--quality",choices=["1080"],default="1080")
     p.add_argument("--cursor-policy",choices=["none","arrow"],default="none")
     p.add_argument("--preflight-only",action="store_true")
+    p.add_argument("--skip-auto-preview",action="store_true",
+                   help="Operator QA only: disable bounded automatic preview")
     p.add_argument("--experimental",action="store_true",required=True)
     a=p.parse_args()
     print(json.dumps(run(a.url,a.out,a.allow_host,scope=a.scope,
         max_pages=a.max_pages,max_minutes=a.max_minutes,profile=a.profile,
         quality=a.quality,cursor_policy=a.cursor_policy,
+        auto_preview=not a.skip_auto_preview,
         preflight_only=a.preflight_only),indent=2),flush=True)
 
 if __name__=="__main__":

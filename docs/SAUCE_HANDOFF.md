@@ -1,5 +1,47 @@
 # Sauce — living handoff for new agents and new chats
 
+## 2026-11-19 — Sauce Basic self-directed render rejection and bounded source-true repair
+
+The owner pointed out that human-curated Short Cuts cannot scale to
+production. Added deterministic automatic film-level critique and
+bounded repair to the private Basic workflow.
+
+scripts/basic_tour_autodirect.py compiles hash-verified source scenes,
+decodes the actual preview MP4, measures opening motion, static-frame
+ratio, longest still interval, flatness and source quality flags.
+When rejected it permits ONE bounded source-only edit: promote a
+real browser-motion interval as the opening and shorten dead holds,
+excluding low-confidence scenes from the Short Cut but never from
+the complete archive. Maximum two actual encoded candidates.
+Every candidate, metric, EDL, exclusion and rejection is recorded.
+It does NOT synthesize UI, fake clicks, or auto-publish a poor preview.
+
+Real Brimble original 20.9s Short Cut: 77.1 percent static; zero
+visible motion in opening two seconds; 2.75s longest stillness;
+Sandboxes source carried timing-drift issue. Automatic first pass
+REJECTED. Repaired 11.27s candidate: real Agent scroll opening;
+50 percent opening motion; 2.25s longest static period; 72.7
+percent static overall. Automatic second pass REJECTED. Thus no
+human editor was needed for this decision and no technically valid
+but creatively weak candidate was declared finished.
+
+Integrated automatic preview invocation into the private Basic CLI
+after source capture and full-film assembly, with result status
+and automaticPreviewPublicationAllowed=false. Full verified film
+remains untouched. Five new genuine ffmpeg/pure tests passed;
+current focused suite: 45 tests. Started from isolated current
+GitHub main SHA 4098505188ed79b92c7997ed5033bdee9f3f7383.
+No advanced compositor changes, new VM, paid inference, or public URL
+API. Details and safety/quality limitations are in docs/SAUCE_BASIC_V1.md.
+
+Not ready to ship: unverified creative-quality correlation across
+independent sites, source 25fps, blank/lazy/scroll-linked failures,
+hostile-site safety and hardened network egress, quotas/storage/
+retention/consent, cost calibration, and meaningful product payoff.
+Fail closed until acceptance evidence exists.
+
+---
+
 ## 2026-11-19 — Sauce Basic: rejected slow first glance, private cinematic-free Short Cut review
 
 Owner feedback: the original 172.85-second Brimble Basic film was boring and discouraging at first glance. Treat that as a creative failure even though source/replay/codec checks passed. Basic now has two separate source-true deliverables: the complete three-chapter full-site sample and an opt-in 20.9-second Short Cut. Do not make the Short Cut the public default without real film quality approval.
