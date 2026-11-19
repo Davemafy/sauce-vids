@@ -6,6 +6,16 @@
 
 
 
+
+## 2026-11-19 — Model-free subject selection in the default no-key URL path
+
+[Cal.com four-shot product-page preview](https://devmcp.davemafy.xyz/sauce-motion-phase2/shot-scorer-20261119/cal.mp4), job `5843cf7c75415ae4aff90904`. In the previous audit the heading planner proposed “Get Rickrolled.” The new path ranks visible source regions by structure, footprint, estimated CSS contrast and text size, skips overlaps, and rechecks viewport bounds after the page settles. The edit starts on the scheduling headline with an inline booking card, then shows the booking pitch, agent-calendar detail and customer proof. The retained takes are real, contiguous browser frames. Page repositioning is omitted. The frame budget is 112 per shot, with bounded eased pushes only where the measured crop has room. Cursor is suppressed in these passive shots. Existing real interaction edits still run separately at their original timing.
+
+The 7.47s master has 448 frames at 1080p60 and passed full FFmpeg decode. Inspected opening, hook crop at 0.40s, and subsequent shots around 2.45, 4.32, and 6.18s. The first draft's wide opening improved after downranking viewport-filling wrappers. Some secondary UI is still peripheral or small, and the preview is silent. Desktop and phone playback and seeking passed. HTTPS returns the validated API preview bytes. The reel is a showcase of actual public page content, without a verified booking.
+
+Linear's first scorer draft opened on real product UI, but later crops were too dark and sparse for review. Grist had too few high-confidence subjects and used the existing showcase fallback. Do not claim support across arbitrary URLs. Automated visual rejection for subject legibility and thin frames remains open. The renderer now enforces the planned frame count for these edits. 62 targeted tests and 14 subtests passed. There were no Gemini or Ollama calls. No production deployment.
+
+
 ## 2026-11-19 — Same tab discovery rule verified across three sites
 
 Sauce identifies an inactive ARIA tab whose existing controlled panel is hidden. The recorder rechecks the target before clicking. It verifies selection and the position of the visible, nonempty controlled panel before making a camera shot. The tab rule has no hostname or label allowlist. It preserves the existing unsafe-label and public request guards, and skips form-associated controls. Same URL-only API flow, zero Gemini calls, no per-page selectors entered by the operator.

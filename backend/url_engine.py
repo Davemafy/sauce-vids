@@ -49,7 +49,10 @@ def direction(report:dict,feedback:list[dict]|None=None):
     local={'mode':'interactive','action_ids':[panel['id']]} if panel else {}
     key=os.getenv('GEMINI_API_KEY','')
     if not key:
-        return normalize(local,report),0,'no-key-fallback'
+        plan=normalize(local,report)
+        if plan['mode']=='showcase' and report.get('beats'):
+            return {**plan,'beats':report['beats']},0,'local-subjects'
+        return plan,0,'no-key-fallback'
     model=os.getenv('SAUCE_DIRECTOR_MODEL','gemini-3.1-flash-lite')
     body={
       "contents":[{"role":"user","parts":[
@@ -126,8 +129,8 @@ def execute(url:str,folder:Path,progress=None):
     (folder/'direction.json').write_text(json.dumps({
        **plan,'ai_calls':calls,'direction_source':source},indent=2))
     stage('capturing')
-    steps=workflow(plan,report)
-    checked=preflight(url,steps)
+    steps=workflow(plan,report) if not plan.get('beats') else []
+    checked=preflight(url,steps) if steps else []
     if len(checked)<len(steps):
         plan=normalize({'mode':'showcase','heading_ids':plan['heading_ids'],
                         'title':plan['title'],'reason':'A selected control changed before recording'},report)
@@ -188,6 +191,7 @@ def execute(url:str,folder:Path,progress=None):
           '--source',str(capture_dir),'--out',str(export),
           '--title',plan['title'],
           '--story',('Actual public UI interaction' if plan['mode']=='interactive'
+                   else 'Public product-page reel' if record.get('subject_shots')
                    else 'Public website preview; private features not demonstrated'),
           '--mode',plan['mode']],cwd=ROOT,env=env,
           stdout=log,stderr=subprocess.STDOUT,check=False,timeout=350)

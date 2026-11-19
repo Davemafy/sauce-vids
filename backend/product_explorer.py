@@ -4,6 +4,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from scripts.capture_safety import validate_public_url,guard_route
 from scripts.session_contract import validate_actions
+from .shot_scorer import DISCOVER_JS, select_beats
 
 SAFE_LABEL=re.compile(r'paste text instead|show example|try (?:a )?sample|demo|preview|show more|read more|learn more|details|see how it works|view example|explore example|open menu|toggle menu|view features|expand|^toggle (?:first|second|both) elements?$|reveal|play video',re.I)
 UNSAFE_LABEL=re.compile(r'delete|remove|purchase|pay|checkout|order|submit|send|register|sign.?up|log.?in|sign.?in|logout|invite|share|publish|subscribe|follow|reset|clear|cancel|upload|download|add to cart|connect|authorize|approve|confirm|book|reserve|refund',re.I)
@@ -33,6 +34,7 @@ const siblings=n.parentElement?[...n.parentElement.children].filter(x=>x.tagName
 parts.unshift(n.tagName.toLowerCase()+':nth-of-type('+(siblings.indexOf(n)+1)+')');
 if(parts.length>20)break
 }return parts.join(' > ').slice(0,295)}
+const discoverSubjects=SUBJECT_DISCOVERY_EXPRESSION;
 const headings=[];
 for(const e of document.querySelectorAll('h1,h2,h3,h4')){
  if(!visible(e)||!text(e))continue;
@@ -74,11 +76,11 @@ for(const e of candidates){
 const root=getComputedStyle(document.documentElement),body=getComputedStyle(document.body);
 const vars={};for(const n of [...root].filter(n=>/^--(primary|accent|background|foreground|brand)/i.test(n)).slice(0,15))vars[n]=root.getPropertyValue(n).trim().slice(0,90);
 return {title:document.title.slice(0,140),url:location.origin+location.pathname,headings,controls,
-height:document.documentElement.scrollHeight,
+height:document.documentElement.scrollHeight,subjects:discoverSubjects(path),
 brand:{theme:document.querySelector('meta[name="theme-color"]')?.content||'',background:body.backgroundColor,vars},
 challenge:!!document.querySelector('#challenge-stage,.cf-turnstile,iframe[src*="captcha"]')};
 }"""
-JS=JS.replace('TAB_TARGET_EXPRESSION',TAB_TARGET_JS).replace('TAB_SELECTOR_EXPRESSION',json.dumps(TAB_SELECTOR))
+JS=JS.replace('SUBJECT_DISCOVERY_EXPRESSION',DISCOVER_JS).replace('TAB_TARGET_EXPRESSION',TAB_TARGET_JS).replace('TAB_SELECTOR_EXPRESSION',json.dumps(TAB_SELECTOR))
 CHROME='/opt/devmcp-browsers/chromium_headless_shell-1254/chrome-headless-shell-linux64/chrome-headless-shell'
 
 def known_dialog_opener(control, origin):
@@ -121,6 +123,7 @@ def inspect(url,private):
     raise RuntimeError('No readable public website')
    report['controls']=[x for x in report['controls'] if allowed(x,report['url'])][:35]
    report['headings']=report['headings'][:25]
+   report['beats']=select_beats(report.pop('subjects'))
    report['source_url']=url
    shot=private/'inspection.jpg';p.screenshot(path=str(shot),type='jpeg',quality=72,animations='disabled')
    report['screenshot']=str(shot)

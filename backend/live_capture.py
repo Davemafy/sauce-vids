@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright
 from scripts.capture_safety import validate_public_url,guard_route
 from scripts.session_contract import safe_url
+from .shot_scorer import crop_for_subject
 from .product_explorer import CHROME,known_dialog_opener,allowed,JS,TAB_TARGET_JS
 
 CURSOR_JS=r"""(() => {
@@ -234,6 +235,43 @@ def capture_slider(page, loc, time_zero):
   setup.dispose()
 
 
+def record_subjects(page, beats, video_begin):
+ """Measure each subject after settling and reserve genuine footage around it."""
+ shots=[]
+ for beat in beats:
+  loc=page.locator(beat['selector'])
+  if loc.count()!=1 or not loc.is_visible():
+   continue
+  loc.evaluate("e => e.scrollIntoView({block:'center',behavior:'instant'})")
+  page.wait_for_timeout(550)
+  region=loc.evaluate("""e => {
+   const b=e.getBoundingClientRect(), h=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);
+   const hit=h&&(e.contains(h)||h.contains(e));
+   if(!hit || e.closest('nav,footer,form,[data-private],[data-secret],[data-sensitive]'))
+    return null;
+   return {x:b.x,y:b.y,width:b.width,height:b.height};
+  }""")
+  if not region:
+   continue
+  width,height=(page.viewport_size[k] for k in ('width','height'))
+  try:
+   crop=crop_for_subject(region,width,height)
+  except ValueError:
+   continue
+  x,y,w,h=crop
+  margin=min((region['x']-x)/w,(x+w-region['x']-region['width'])/w,
+             (region['y']-y)/h,(y+h-region['y']-region['height'])/h)
+  begin=time.monotonic()-video_begin
+  page.wait_for_timeout(2200)
+  box=loc.bounding_box()
+  if box and all(abs(box[k]-region[k])<4 for k in region):
+   shots.append({'start':begin+.16,'frames':112,'crop':crop,
+                 'zoom_delta':max(0,min(.047,margin*1.8)),
+                 'purpose':beat['purpose'],'kind':beat['kind'],'score':beat['score']})
+ if len(shots)<3 or shots[0]['purpose']!='hook':
+  raise RuntimeError('Page no longer exposes three stable product subjects')
+ return shots
+
 def capture(url:str,private:Path,report:dict,plan:dict):
  quality=capture_quality()
  cursor_style=capture_cursor_style()
@@ -246,7 +284,8 @@ def capture(url:str,private:Path,report:dict,plan:dict):
  selected=plan.get('action_ids',[])
  cursorless=(plan.get('mode')=='interactive' and len(selected)==1 and
              actions.get(selected[0],{}).get('kind')=='slider')
- cursor_script=('' if cursorless else ARROW_CURSOR_JS if cursor_style=='arrow' else CURSOR_JS)
+ beats=plan.get('beats',[]) if plan.get('mode')=='showcase' else []
+ cursor_script=('' if cursorless or beats else ARROW_CURSOR_JS if cursor_style=='arrow' else CURSOR_JS)
  events=[];moment=0.0
  with sync_playwright() as pw:
   b=pw.chromium.launch(headless=True,executable_path=CHROME,
@@ -401,7 +440,8 @@ def capture(url:str,private:Path,report:dict,plan:dict):
       # Individual disappearing dynamic controls are not a fatal job error.
       if cursorless:raise
       events.append({'id':ident,'skipped':type(exc).__name__})
-   if not events or all('skipped' in x for x in events):
+   subject_shots=record_subjects(page,beats,video_begin) if beats else []
+   if not subject_shots and (not events or all('skipped' in x for x in events)):
     # Public-site preview when there is no safe meaningful app action.
     positions=[headings[x]['y'] for x in plan.get('heading_ids',[])[:2] if x in headings]
     height=page.evaluate('document.documentElement.scrollHeight')
@@ -427,11 +467,12 @@ def capture(url:str,private:Path,report:dict,plan:dict):
       'sha256':hash_file(output),'duration_wall_s':round(length,3),
       'lead_in_seconds':round(lead_in,3),
       'actions':events,'evidence':evidence,'editorial_events':editorial_events,
+      'subject_shots':subject_shots,
       'source_url':url.split('?')[0],'mode':plan.get('mode','showcase'),
       'capture_quality':quality['quality'],'source_dpr':quality['dpr'],
       'requested_video_size':quality['video_size'],
       'viewport_css_size':quality['viewport'],
-      'cursorless':cursorless,'presentation_cursor':'composited-arrow' if cursorless else cursor_style}
+      'cursorless':cursorless,'presentation_cursor':'composited-arrow' if cursorless else 'hidden' if beats else cursor_style}
    (private/'continuous-capture.json').write_text(json.dumps(receipt,indent=2))
    return receipt
   finally:b.close()

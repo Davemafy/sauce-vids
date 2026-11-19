@@ -11,6 +11,7 @@ from scripts.capture_safety import validate_public_url
 from backend.url2video import validate_direction,workflow_for,direct_once,NeedsKey
 from backend.product_explorer import allowed, normalize, workflow
 from backend.url_engine import direction
+from backend.shot_scorer import crop_for_subject, select_beats
 
 class UrlToVideoTests(unittest.TestCase):
     def test_reject_local_and_sensitive_urls(self):
@@ -92,6 +93,35 @@ class UrlToVideoTests(unittest.TestCase):
                 report = {'url': url, 'headings': [], 'controls': [tab]}
                 plan, calls, source = direction(report)
                 self.assertEqual((plan['action_ids'], calls, source), (['a0'], 0, 'local-tab'))
+
+    def test_subject_reel_needs_a_real_hook_and_three_distinct_regions(self):
+        def candidate(selector, kind, y):
+            return {'selector':selector, 'label':selector, 'kind':kind,
+                    'rect':{'x':90, 'y':y, 'width':700, 'height':240},
+                    'viewport':[1280,720], 'contrast':9, 'font_px':18,
+                    'controls':0, 'times':0, 'word_count':12}
+        hook = candidate('#calendar', 'widget', 220)
+        overlap = candidate('#calendar-copy', 'value', 228)
+        proof = candidate('#proof', 'value', 1480)
+        detail = candidate('#command', 'code', 990)
+        self.assertEqual(select_beats([hook, overlap, proof]), [])
+        self.assertEqual(select_beats([proof, overlap, {**proof, 'kind':'media'}]), [])
+        beats = select_beats([proof, overlap, detail, hook])
+        self.assertEqual([b['selector'] for b in beats], ['#calendar', '#command', '#proof'])
+        self.assertEqual([b['purpose'] for b in beats], ['hook', 'detail', 'payoff'])
+        report = {'url':'https://example.com/', 'controls':[], 'headings':[], 'beats':beats}
+        with patch.dict(os.environ, {'GEMINI_API_KEY':''}):
+            plan, calls, source = direction(report)
+        self.assertEqual((plan['beats'], calls, source), (beats, 0, 'local-subjects'))
+
+    def test_subject_crop_fits_and_rejects_offscreen_regions(self):
+        rect = {'x':690, 'y':420, 'width':330, 'height':210}
+        x,y,w,h = crop_for_subject(rect,1280,720)
+        self.assertEqual(w*9,h*16)
+        self.assertLessEqual(x,rect['x'])
+        self.assertGreaterEqual(y+h,rect['y']+rect['height'])
+        with self.assertRaises(ValueError):
+            crop_for_subject({**rect,'y':-1},1280,720)
 
     def test_missing_key_does_not_generate_fake_direction(self):
         with patch.dict(os.environ,{"GEMINI_API_KEY":""}):

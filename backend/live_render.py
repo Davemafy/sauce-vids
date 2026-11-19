@@ -19,7 +19,7 @@ def file_digest(path):
 
 def probe(src):
  return json.loads(subprocess.check_output(['ffprobe','-v','error',
-   '-show_entries','stream=codec_type,codec_name,width,height,r_frame_rate:format=duration',
+   '-show_entries','stream=codec_type,codec_name,width,height,r_frame_rate,nb_frames:format=duration',
    '-of','json',str(src)],text=True,timeout=20))
 
 def source_video_profile(stream:dict,receipt:dict):
@@ -95,6 +95,29 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
   '-vf',profile['filter'],
   '-an','-c:v','libx264','-preset','medium','-crf','17',
   '-movflags','+faststart','-progress','pipe:1',str(prepared)]
+ subjects=receipt.get('subject_shots',[])
+ if subjects:
+  if mode!='showcase' or cursorless or receipt.get('editorial_events'):
+   raise RuntimeError('Subject cuts must not edit interaction footage')
+  filters=[]
+  for i,shot in enumerate(subjects):
+   start,frames,x,y,w,h=shot['start'],shot['frames'],*shot['crop']
+   if start<0 or start+frames/60>full_duration or frames!=112:
+    raise RuntimeError('Subject footage is outside the source timeline')
+   phase='min(on/111,1)'
+   zoom=f"1+{shot['zoom_delta']:.6f}*(.26+.74*(3*{phase}*{phase}-2*{phase}*{phase}*{phase}))"
+   filters.append(
+    f"[0:v]trim=start={start:.4f},setpts=PTS-STARTPTS,fps=60,trim=end_frame={frames},"
+    f"crop={w}:{h}:{x}:{y},scale=2560:1440:flags=lanczos,"
+    f"zoompan=z='{zoom}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':"
+    f"d=1:s=1920x1080:fps=60,setsar=1,format=yuv420p[s{i}]")
+  filters.append(''.join(f'[s{i}]' for i in range(len(subjects)))+
+                 f'concat=n={len(subjects)}:v=1:a=0[reel]')
+  duration=sum(s['frames'] for s in subjects)/60
+  command=['ffmpeg','-hide_banner','-loglevel','error','-y','-nostdin',
+           '-filter_complex_threads','2','-i',str(src),'-filter_complex',';'.join(filters),
+           '-map','[reel]','-an','-c:v','libx264','-preset','veryfast','-crf','17',
+           '-movflags','+faststart','-progress','pipe:1',str(prepared)]
  total=max(1,int(round(duration*60)))
  worker=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
  if not worker.stdout:raise RuntimeError('Video encoder did not open progress pipe')
@@ -143,6 +166,10 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
  shutil.copyfile(source_dir/'SHOTCANDY-LICENSE.txt',out/'SHOTCANDY-LICENSE.txt')
  composed.replace(master)
  verify_mp4(master,1920,1080,60)
+ if subjects:
+  stream=next(s for s in probe(master)['streams'] if s['codec_type']=='video')
+  if int(stream.get('nb_frames',0))!=total:
+   raise RuntimeError('Encoded subject reel does not match its planned frame count')
  preview=out/'preview.mp4'
  subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-nostdin',
   '-i',str(master),'-map','0:v:0',
@@ -162,6 +189,7 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
  result={
   'render_mode':'continuous-browser-capture','presentation':'floating-browser',
   'verified_camera_shots':metrics['zoom_shots'],
+  'subject_shot_count':len(subjects),
   'verified_glass_shots':metrics['glass_loupe_shots'],'source_url':safe_url(receipt['source_url']),
   'title':title,'description':story,'film_mode':mode,'duration_seconds':round(duration,2),
   'discarded_initial_loading_seconds':round(initial_trim,2),
