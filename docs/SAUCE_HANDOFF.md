@@ -7,6 +7,26 @@
 
 
 
+## 2026-11-19 — Static product story acceptance on four public sites
+
+The diagnostic extends the existing model-free scorer on main at `b5d965c`. It checks access before extracting candidates, ranks product evidence, and produces a three-beat story only when it can ground all three beats in browser evidence. The JSON uses document CSS-pixel rectangles. The PNG overlays those rectangles on the full-page thumbnail and shows source crops at CSS-pixel size. A public control must cause a visible, local DOM change in a disposable, network-blocked Chromium probe before it can supply an interaction beat. Otherwise the selector looks for a distinct product preview.
+
+```bash
+python3 -m backend.story_diagnostic --out /tmp/sauce-contact-sheets \
+  https://cal.com/ https://www.getgrist.com/ https://ghost.org/ https://sentry.io/
+```
+
+| Source | Observed result |
+| --- | --- |
+| Cal.com | Rejected by the story gate. No eligible calendar interaction was verified. The homepage depicts slots and a calendar in animated marketing panels. The observed slot labels were not actionable buttons. The first debug pass selected a conference testimonial and the Rickroll video. Neither appears in the final plan. |
+| Grist | Found the original linked spreadsheet and employee card in the first-party hero video, then the spreadsheet assistant preview. After declining optional cookies in the disposable browser, the grid was unobstructed. Two usable previews, no credible third beat. |
+| Ghost | Three-beat static plan with the publishing editor, newsletter illustration and membership analytics dashboard. The editor appears first. These are original marketing previews and supply no verified click. |
+| Sentry | The live source redirected to `/welcome/` and returned HTTP 200 on Vultr. The invisible reCAPTCHA did not block access. The story was rejected for insufficient product evidence. HTTP 403, 429 and 503 and a browser-challenge title returned `blocked / waf_challenge` in controlled tests. |
+
+Reopened the encoded [prior Cal.com preview](https://devmcp.davemafy.xyz/sauce-motion-phase2/shot-scorer-20261119/cal.mp4). The public 1280×720/30 preview runs 7.47 seconds. Sampled at roughly 0, 2, 4 and 6 seconds. The heading and testimonial dominate, and the booking interface remains too small to explain scheduling. The Screen Studio reference study begins its pushes on recognizable native UI, then holds the result long enough to read. See [Screen Studio camera study](screenstudio-study.md).
+
+The reviewed PNGs and JSON plans are in `sauce-dom-acceptance/review-verified/` on the existing Vultr worker, with the final Cal.com rerun in `sauce-dom-acceptance/review-calendars/`. The focused test suite passed 26 tests and 13 subtests, including a Chromium test for a real in-page state-and-pixel change below the fold. Embedded media still requires a phone-width visual review because the parent DOM cannot measure its text. The diagnostic is callable from the repository and the URL reel keeps its previous behavior pending static acceptance. The four-site gate remains open. No new encoded film or production deployment.
+
 ## 2026-11-19 — Model-free subject selection in the default no-key URL path
 
 [Cal.com four-shot product-page preview](https://devmcp.davemafy.xyz/sauce-motion-phase2/shot-scorer-20261119/cal.mp4), job `5843cf7c75415ae4aff90904`. In the previous audit the heading planner proposed “Get Rickrolled.” The new path ranks visible source regions by structure, footprint, estimated CSS contrast and text size, skips overlaps, and rechecks viewport bounds after the page settles. The edit starts on the scheduling headline with an inline booking card, then shows the booking pitch, agent-calendar detail and customer proof. The retained takes are real, contiguous browser frames. Page repositioning is omitted. The frame budget is 112 per shot, with bounded eased pushes only where the measured crop has room. Cursor is suppressed in these passive shots. Existing real interaction edits still run separately at their original timing.
