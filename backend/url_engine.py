@@ -76,6 +76,23 @@ def direction(report:dict,feedback:list[dict]|None=None):
         # to preview. Zero invented product claims: public showcase fallback.
         return normalize(local,report),1,'provider-unavailable-fallback'
 
+def apply_visible_action_verdict(plan:dict,report:dict,proof:dict,
+                                 *,cinematic_only:bool=False)->dict:
+    """Reject unproved interactive demo claims without inventing product behavior."""
+    if plan.get('mode')!='interactive':
+        return plan
+    if proof.get('decision')=='visible_outcome_candidate':
+        return plan
+    if cinematic_only:
+        raise RuntimeError(
+            'Actual public UI action has no verified visual payoff; '
+            'cinematic capture was stopped before recording')
+    return normalize({'mode':'showcase','heading_ids':plan['heading_ids'],
+                      'title':plan['title'],
+                      'reason':'Chosen action had no verified visible result; '
+                               'public-site showcase only'},report)
+
+
 def captured(folder:Path,url:str,actions:list[dict],*,tag:str='session'):
     output=folder/tag
     flow=folder/(tag+'-workflow.json')
@@ -114,6 +131,29 @@ def execute(url:str,folder:Path,progress=None):
     if len(checked)<len(steps):
         plan=normalize({'mode':'showcase','heading_ids':plan['heading_ids'],
                         'title':plan['title'],'reason':'A selected control changed before recording'},report)
+    # This opt-in probe runs before the expensive capture and only for
+    # a vetted, non-submitting public control. Never a default or premium score.
+    if os.getenv('SAUCE_VERIFY_VISIBLE_ACTION')=='1' and plan['mode']=='interactive':
+        from backend.source_action_preflight import probe_public_action
+        try:
+            proof=probe_public_action(
+                url,report,plan['action_ids'][0],private/'visible-action')
+        except Exception as exc:
+            # A failed independent browser probe is never proof of a product
+            # action. Fail closed to showcase or explicit cinematic-only stop.
+            proof={'schema':'sauce-source-action-preflight-v1',
+                   'decision':'action_not_verified',
+                   'reason':type(exc).__name__,
+                   'human_film_approval':False}
+        (private/'visible-action-receipt.json').write_text(
+            json.dumps(proof,indent=2))
+        plan=apply_visible_action_verdict(
+            plan,report,proof,cinematic_only=os.getenv('SAUCE_CINEMATIC_ONLY')=='1')
+        # Do not leave an earlier "interactive" direction receipt behind if
+        # this real-browser outcome probe downgraded it to a showcase.
+        (folder/'direction.json').write_text(json.dumps({
+            **plan,'ai_calls':calls,'direction_source':source,
+            'visible_action_probe':proof['decision']},indent=2))
     capture_dir=private/'motion'
     planfile=private/'motion-plan.json'
     planfile.write_text(json.dumps(plan,indent=2))
