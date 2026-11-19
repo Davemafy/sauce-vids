@@ -1,0 +1,19 @@
+{
+  "schema": "sauce-live-edit-v1",
+  "source_sha256": "9d5435692b97381efa7a924bf3503bc94ef84b9f22c9aba15e5d536614460ad8",
+  "event": "slider_change",
+  "trim": {
+    "lead_seconds": 1.6,
+    "hold_seconds": 3.55
+  },
+  "camera": {
+    "anchor": "action-and-result",
+    "cursor_scale": 0.85,
+    "keys": [
+      {"at": "clip_start", "offset_seconds": 0, "zoom": 2.38},
+      {"at": "result", "offset_seconds": 0, "zoom": 2.38},
+      {"at": "result", "offset_seconds": 0.55, "zoom": "fit"}
+    ]
+  },
+  "audio": "clean"
+}

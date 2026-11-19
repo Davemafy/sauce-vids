@@ -6,6 +6,9 @@ in a window and may add camera motion after a verified browser event.
 from __future__ import annotations
 import hashlib,json,os,subprocess,sys,math,shutil
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from scripts.live_edit_plan import parse_live_edit
+from scripts.slider_framing import slider_framing
 from scripts.session_contract import safe_url
 from backend.price_narration import render_narration
 
@@ -56,8 +59,16 @@ def source_video_profile(stream:dict,receipt:dict):
          'source_fps':stream.get('r_frame_rate'),'filter':filter_graph}
 
 
-def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", audio="auto"):
+def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", audio="auto", edit_plan=None):
  source_dir=Path(source_dir);out=Path(out)
+ if edit_plan is None:
+  return _render(source_dir,out,title,story,mode,brief,audio,source_dir,None)
+ out.mkdir(parents=True,exist_ok=True)
+ with TemporaryDirectory(prefix='.sauce-edit-',dir=out) as work:
+  return _render(source_dir,out,title,story,mode,brief,audio,Path(work),edit_plan)
+
+
+def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan):
  receipt=json.loads((source_dir/'continuous-capture.json').read_text())
  src=source_dir/'continuous-source.webm'
  if not src.is_file() or file_digest(src)!=receipt['sha256']:
@@ -66,6 +77,11 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", a
  stream=next((s for s in evidence['streams'] if s.get('codec_type')=='video'),None)
  if not stream:raise RuntimeError('No recorded browser video stream')
  profile=source_video_profile(stream,receipt)
+ plan=parse_live_edit(edit_plan,receipt) if edit_plan is not None else None
+ if plan:
+  if mode!='interactive' or receipt.get('subject_shots'):
+   raise ValueError('A live edit requires a single interactive capture')
+  audio=plan.audio
  full_duration=float(evidence['format']['duration'])
  if full_duration<1.7 or full_duration>75:raise RuntimeError('Invalid live source duration')
  # Playwright starts the recorder before the initial page is ready. Remove
@@ -73,7 +89,7 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", a
  trim=max(0,min(full_duration-2.0,float(receipt.get('lead_in_seconds',0))-0.40))
  initial_trim=trim
  cursorless=receipt.get('cursorless') is True
- loupe=cursorless and os.getenv('SAUCE_SLIDER_LOUPE')=='1'
+ loupe=cursorless and not plan and os.getenv('SAUCE_SLIDER_LOUPE')=='1'
  if mode=='interactive' and not cursorless:
   events=receipt.get('editorial_events',[])
   first=next((e for e in events if e.get('kind')=='click' and e.get('semanticGoal')),None)
@@ -84,12 +100,21 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", a
   slider=next(event for event in receipt['editorial_events']
               if event['kind']=='slider_change')
   # Keep enough pre-gesture context and finish on the verified price hold.
-  trim=round(max(trim,slider['start']-(.92 if loupe else 1.60)),3)
-  full_duration=min(full_duration,slider['end']+(2.70 if loupe else 3.55))
+  trim=round(max(trim,slider['start']-(plan.lead if plan else .92 if loupe else 1.60)),3)
+  end=slider['end']+(plan.hold if plan else 2.70 if loupe else 3.55)
+  if plan and end>full_duration+1e-9:
+   raise ValueError('Capture ends before the requested result hold')
+  full_duration=min(full_duration,end)
  duration=full_duration-trim
+ plan_camera={}
+ if plan:
+  event=next(e for e in receipt['editorial_events'] if e['kind']=='slider_change')
+  _,fit,_,_=slider_framing(event,*profile['dimensions'])
+  plan_camera={'keys':plan.camera_timeline(event['t']-trim,duration,fit),
+               'cursor_scale':plan.cursor_scale}
  out.mkdir(parents=True,exist_ok=True)
  master=out/'master-1080p60.mp4'
- prepared=source_dir/'presentation-source.mp4'
+ prepared=work/'presentation-source.mp4'
  # Frame-rate conversion keeps the original browser timing; no freeze-frame
  # montages, transition slides or synthesized screenshots.
  command=['ffmpeg','-hide_banner','-loglevel','error','-y','-nostdin',
@@ -133,8 +158,8 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", a
     print(f'REPLAY {min(count,total)} of {2*total}',flush=True)
  errors=worker.stderr.read() if worker.stderr else ''
  if worker.wait(timeout=190)!=0:raise RuntimeError('Continuous video encoding failed: '+errors[-300:])
- composed=source_dir/'composed-master.mp4'
- manifest=source_dir/'presentation.json'
+ composed=work/'composed-master.mp4'
+ manifest=work/'presentation.json'
  events=[]
  w,h=profile['dimensions']
  sx,sy=1920/w,1080/h
@@ -153,7 +178,7 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", a
     for p in event['pointer_samples']]
   events.append(event)
  manifest.write_text(json.dumps({'source':safe_url(receipt['source_url']),
-  'cursorless':cursorless,'events':events,'capture_rect':{'width':1920,'height':1080},
+  'cursorless':cursorless,'events':events,'edit_camera':plan_camera,'capture_rect':{'width':1920,'height':1080},
   'pointer_samples':next((e['pointer_samples'] for e in events if e['kind']=='slider_change'), [])}))
  command=[sys.executable,str(Path(__file__).resolve().parents[1]/'scripts/render_event_video.py'),
     '--video',str(prepared),'--manifest',str(manifest),'--output',str(composed),
@@ -163,14 +188,14 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", a
  elif cursorless:
   command[-1]='fullscreen'
   command+=['--slider-framing','--recorded-pointer']
- with (source_dir/'presentation.log').open('w') as log:
+ with (work/'presentation.log').open('w') as log:
   subprocess.run(command,check=True,stdout=log,stderr=subprocess.STDOUT,timeout=240)
  print(f'REPLAY {2*total} of {2*total}',flush=True)
- metrics=json.loads((source_dir/'camera-metrics.json').read_text())
+ metrics=json.loads((work/'camera-metrics.json').read_text())
  if loupe and not metrics['glass_loupe_shots']:
   raise RuntimeError('Recorded slider evidence could not produce a glass shot')
  if not cursorless or loupe:
-  shutil.copyfile(source_dir/'SHOTCANDY-LICENSE.txt',out/'SHOTCANDY-LICENSE.txt')
+  shutil.copyfile(work/'SHOTCANDY-LICENSE.txt',out/'SHOTCANDY-LICENSE.txt')
  composed.replace(master)
  verify_mp4(master,1920,1080,60)
  if subjects:
@@ -185,7 +210,7 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", a
   '-pix_fmt','yuv420p','-movflags','+faststart',str(preview)],
   check=True,timeout=110)
  verify_mp4(preview,1280,720,30)
- narration=render_narration(source_dir,events,float(probe(preview)['format']['duration']),brief,audio)
+ narration=render_narration(work,events,float(probe(preview)['format']['duration']),brief,audio)
  if narration:
   clean=out/'preview-clean.mp4'
   preview.replace(clean)
@@ -226,6 +251,10 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", a
    'A continuous Chromium recording is actual UI motion, not a deterministic DOM replay.',
    'Master 60fps resamples the browser recorder frame rate; it does not create new UI frames.',
    'Controls behind authentication and sensitive form submission are not explored.']}
+ if plan:
+  result['edit_plan']={'schema':edit_plan['schema'],
+                       'checksum':hashlib.sha256(json.dumps(edit_plan,sort_keys=True).encode()).hexdigest(),
+                       'resolved_camera':plan_camera}
  (out/'release.json').write_text(json.dumps(result,indent=2))
  return result
 
@@ -239,9 +268,11 @@ if __name__=='__main__':
  p.add_argument('--mode',default='public_showcase')
  p.add_argument('--brief',default='')
  p.add_argument('--audio',choices=('auto','clean','narrated'),default='auto')
+ p.add_argument('--edit-plan',type=Path,help='Versioned JSON bound to the verified capture SHA-256')
  a=p.parse_args()
  try:
-  print(json.dumps(render(a.source,a.out,a.title,a.story,a.mode,brief=a.brief,audio=a.audio)),flush=True)
+  print(json.dumps(render(a.source,a.out,a.title,a.story,a.mode,brief=a.brief,audio=a.audio,
+                          edit_plan=json.loads(a.edit_plan.read_text()) if a.edit_plan else None)),flush=True)
  except subprocess.TimeoutExpired as exc:
   print(f'Render stage exceeded {exc.timeout}s',file=sys.stderr)
   raise SystemExit(124) from exc

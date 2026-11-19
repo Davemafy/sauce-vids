@@ -7,6 +7,21 @@
 
 
 
+## 2026-11-19 — Replay a Resend cut from JSON
+
+The saved-capture renderer accepts `--edit-plan` for one verified slider interaction. The versioned JSON controls the source identity, lead-in, result hold, camera keyframes, cursor scale and audio mode. Keyframes resolve against the recorded result time. The renderer records the compiled plan and its hash in the release receipt. The existing URL job and its default direction were not changed.
+
+```bash
+python3 -m backend.live_render --source /private/capture --mode interactive \
+  --edit-plan tests/fixtures/resend-live-edit-v1.json --out /private/output
+```
+
+The isolated Vultr checkout reused the existing 8.36s 1920×1080 capture at 25 fps (SHA-256 `9d5435692b97381efa7a924bf3503bc94ef84b9f22c9aba15e5d536614460ad8`). Two renders of the [replay fixture](../tests/fixtures/resend-live-edit-v1.json) match the prior 6.97s clean cut byte for byte (209 frames, 1280×720 at 30 fps, SHA-256 `85963550c80cf507ac9053edff50fba6668a9aa8572489c59ec500efb1a9aef1`). The [compact fixture](../tests/fixtures/resend-live-edit-compact-v1.json) changes only the JSON to render a fixed camera and shorter lead-in and payoff. It produces a distinct 4.5s cut (135 frames, SHA-256 `fe59870e6f86252d62e83048ca196c53929b9bdd1a639b8c43a5e0fe5da6fdec`). Both cuts are silent. Worker outputs are `sauce-json-replay/qa/{match,repeat,compact}/preview.mp4`. Tests passed (34 tests, 10 subtests), all three MP4s decoded, and Chromium played and sought both cuts at 1280×720 and 390×844.
+
+Reviewed the encoded opening, slider motion and stable outcome in both cuts. $20 and $35 read on the Pro card. Slivers of neighboring cards and the bright $90 card compete with that card. The compact cut reduces lead-in and camera movement, but leaves that composition problem. The previous cut is a rejected quality example. The compact cut is unapproved. Neither counts as a positive example. No deployment was made.
+
+The existing [reference study](SAUCE_REFS_PRODUCT_DEMO_STUDY.md) describes techniques. An approved recreation dataset still needs paired cases. For each case retain the reference and exact shot timestamps, the technique being tested, the authorized source identity, the input JSON and engine version, the rendered video, and the review decision with timecoded reasons. Count independently reviewed cases across distinct reference techniques. Keep deterministic replay results as engineering evidence for each case.
+
 ## 2026-11-19 — Undistorted Resend pricing revision and automatic narration
 
 The revised 6.97-second review film reuses the prior 8.36-second WebM (`9d543569…ad8`, 1920×1080, 25 fps capture). The camera opens on the slider and Pro price, preserves the recorded drag, then makes a small isotropic push after the verified $35 result. The old glass loupe is opt-in via `SAUCE_SLIDER_LOUPE=1`. Both pricing states and the slider remain readable in the reviewed preview. Adjacent cards are clipped at the periphery. The pricing interaction is a regression case and awaits approval as a film.

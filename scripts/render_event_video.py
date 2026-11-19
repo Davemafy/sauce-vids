@@ -20,6 +20,7 @@ from source_region_mask import dim_outside_region
 from recorded_pointer import pointer_track, project_pointer
 from glass_loupe import apply_loupe,plan_loupe
 from slider_framing import slider_framing
+from live_edit_plan import sample_zoom
 
 cv2.setNumThreads(2)
 
@@ -131,6 +132,7 @@ if args.presentation=="fullscreen":
     SCREEN_W,SCREEN_H=MASTER_W,MASTER_H
     SCREEN_X,SCREEN_Y=0,0
 SLIDER_SHOT = None
+EDIT_CAMERA = MANIFEST.get("edit_camera") or {}
 if args.slider_framing:
     if args.presentation != "fullscreen" or args.glass_loupe or POINTER is None:
         parser.error("Slider framing requires a recorded pointer and fullscreen footage")
@@ -278,7 +280,7 @@ def camera_matrix(t,static=False):
     if SLIDER_SHOT is not None and not static:
         opening, tight, fx, fy = SLIDER_SHOT
         progress = smooth5((t - slider_events[0]["t"]) / .55)
-        zoom = opening + (tight - opening) * progress
+        zoom = sample_zoom(t,EDIT_CAMERA["keys"],smooth5) if EDIT_CAMERA else opening + (tight - opening) * progress
     if args.presentation=="fullscreen":
         # Pixel-perfect isotropic scaling. Preserve source aspect ratio.
         # The target content region moves toward the optical center without
@@ -337,7 +339,7 @@ def apply(source,t,static=False):
         press=max((1.-smooth5((t-down)/.18) for down in POINTER_PRESSES
                    if 0<=t-down<.18),default=0.)
         stage=project_pointer(stage,POINTER,camera_matrix(t,static),t,
-                              scale=.85 if SLIDER_SHOT else 1.6-.18*press)
+                              scale=EDIT_CAMERA.get("cursor_scale",.85) if SLIDER_SHOT else 1.6-.18*press)
     if args.result_focus and RESULT_CUT is not None and not static:
         elapsed_frames = round(t * FPS) - RESULT_CUT.frame
         if elapsed_frames > 0:
