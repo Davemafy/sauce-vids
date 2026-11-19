@@ -22,6 +22,14 @@ Immediate next steps: improve the actual first seconds and eliminate dead holds;
 ---
 
 
+## 2026-11-19 — Arcade Stack by Ramp full narrative arc review (reference only)
+
+Reopened the **original hash-pinned 67.2s/2016-frame/1920×1080/30fps Arcade film** and examined 24 spaced moments plus a dense frame review of 45.6–52.5s. Source SHA256 still `7d22a17f97d3183cae73df90321f7be7943006d9bf7f4ecd7c2a79f15215bbbf`. Confirmed task arc: branded intro → real-looking task prompt → file/choice confirmation → approval → spreadsheet/journal execution → posted status → completed checklist → contextual dashboard → brand outro. **The user-visible quality comes from isolating one consequential UI object per beat and showing a cause→effect story**, not merely from camera zoom.
+
+Selected transferable 6.233s payoff segment: reference frames **1392–1578 / 46.400–52.633s**. Exact major-change incoming frames 1392,1438,1579, with an additional visually observed state replacement at frame **1524 (50.800s)** missed by the threshold detector. Bright-panel raster bounds at 1392: (200,300,1520,480), 1437: (185,295,1550,489); at 1438: (462,387,996,376), 1523: (441,365,1038,396); at 1524: (200,355,1520,370), 1578: (181,351,1558,433) where the last height may include transition bleed. These bounds use `BGR>=243` connected bright components, **NOT** exact DOM boxes, masks or reference keyframes. Horizontally centered panels grow about 2–4% in width through the visible holds. See `docs/SAUCE_ARCADE_ARC_REVIEW_20261119.md` for full methodology, critique and acceptance steps.
+
+**Still rejected as a 1:1 dataset:** the film provides no recoverable proprietary source project and its browser authenticity was not verified; we have NOT tracked exact per-frame masks, pointer and easing, nor rendered a corresponding Sauce A/B film. Do not send to Gemini as a certified example. Next: reconstruct the isolated posting-card beat 1392–1437 in a distinct authorized UI with exact measured motion and frame-by-frame visual review. Preserve the existing film-plan and multi-event EDL renderers, don't merge them for a dataset shortcut. No paid inference, production deployment or private recordings changed.
+
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
 ## 2026-11-19 — Reject approximate reference JSON; exact Arcade frame evidence (not 1:1 yet)
