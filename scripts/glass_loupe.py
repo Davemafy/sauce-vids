@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import math
 from bisect import bisect_right
 
-from recorded_pointer import draw_pointer
+from recorded_pointer import draw_loupe_pointer
 
 import cv2
 import numpy as np
@@ -222,5 +222,5 @@ def apply_loupe(stage, source, transform, shot, time):
     base_y = pointer_y*sy+transform[1,2]
     tip_x = base_x+(center_x+dx*radial_scale-base_x)*strength
     tip_y = base_y+(center_y+dy*radial_scale-base_y)*strength
-    draw_pointer(stage,tip_x,tip_y,scale=1.+strength*(.43-.24*reveal))
+    draw_loupe_pointer(stage,tip_x,tip_y,scale=1.+strength*(.28-.14*reveal))
     return stage
