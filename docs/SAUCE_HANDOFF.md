@@ -3,6 +3,18 @@
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
 
+
+## 2026-11-19 — URL-to-demo coverage on three additional public URLs
+
+Submitted three real jobs to isolated instances of the same Sauce URL API used for the Resend proof. The URL engine and effects code match main at `f03594e`. No site-specific manual directions or AI calls. All three previews reached `needs_review`, were inspected from the encoded output, passed full FFmpeg decode, and played and sought at 1280×720 and 390×844. HTTPS returns byte-identical MP4s.
+
+- [Bootstrap Collapse](https://devmcp.davemafy.xyz/sauce-motion-phase2/url-sites-20261119/bootstrap.mp4) — 7.47s. Sauce opened the second example panel and framed the visible result with one automatic camera push. Dense documentation gives the opening little visual focus. Job `6b41283b23179ad5facdc112`.
+- [Brimble homepage](https://devmcp.davemafy.xyz/sauce-motion-phase2/url-sites-20261119/brimble.mp4) — 9.47s. Source-verified showcase. The scroll moves into “Push to deploy,” with no verified product interaction. Job `8de7ff1554578abe0a698ba4`.
+- [Linear homepage](https://devmcp.davemafy.xyz/sauce-motion-phase2/url-sites-20261119/linear.mp4) — 11.50s. Source-verified showcase. The clip spends too long in the hero and product text is small. Job `b7ef2d198f89718b377456de`.
+
+The Bootstrap example verifies a second interaction pattern beyond Resend's slider. Brimble and Linear demonstrate the current fallback. Public homepage URLs often need deeper product-aware direction or a URL landing on a runnable demo. None of these review artifacts constitutes film approval.
+
+
 ## 2026-11-19 — URL jobs use the cinematic compositor
 
 [Implementation on main](https://github.com/Davemafy/sauce-vids/commit/f314b202f37b36cb37e6c75b311a96a29949b6c9) routes the normal URL job through `scripts/render_event_video.py`. The compositor now supplies the floating browser window for URL films. A real public range drag can invoke the established glass optics and rounded cursor when the browser confirms a changed range and a nearby visible numeric result. A verified expanded panel can trigger a camera push. The showcase remains available when the page offers no qualifying interaction. Eligible range takes use local direction and zero inference calls.
