@@ -2,6 +2,18 @@
 
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
+
+## 2026-11-19 — URL jobs use the cinematic compositor
+
+[Implementation on main](https://github.com/Davemafy/sauce-vids/commit/f314b202f37b36cb37e6c75b311a96a29949b6c9) routes the normal URL job through `scripts/render_event_video.py`. The compositor now supplies the floating browser window for URL films. A real public range drag can invoke the established glass optics and rounded cursor when the browser confirms a changed range and a nearby visible numeric result. A verified expanded panel can trigger a camera push. The showcase remains available when the page offers no qualifying interaction. Eligible range takes use local direction and zero inference calls.
+
+**Verified job.** Submitted [Resend pricing](https://resend.com/pricing) through `POST /v1/jobs` on the existing Vultr worker using an isolated Sauce API instance. Job `c01817e5007497a9ffdfe822` reached `needs_review`, and the authenticated preview route returned bytes identical to the on-disk preview. The real range moves to 100,000 emails and reveals $35/mo. The renderer used 26 recorded pointer samples, one glass shot and no additional camera push. The 1920×1080 DPR 2 capture is 25 fps. The 327-frame 1080p60 H.264 master is 5.45 seconds and passed full decode. Master SHA-256 `4b739b8e269f001540e41b2cda3c71f2f213940c5bad44564493d378e23c4b2a`. Preview SHA-256 `2e6466a6b3c8ba196b07342e83ca711a4781c501715a515ab495734cccbee190`. [Review the generated MP4](https://chatgpt.com/library?file_id=libfile_50da2306d8b08191bf78215371a12288&account_id=personal).
+
+**Visual review.** Checked encoded opening, glass entry, drag, release and final hold at approximately 0.00, 1.17, 1.63, 2.23, 3.47 and 5.30 seconds against the reference and earlier rounded-cursor shot. The final framing holds both price cards. The arrow stays crisp with the refraction concentrated at the glass edge. The drag can sit briefly ahead of the discrete thumb steps, and the neutral matte replaces the landscape from the reference. This proof is silent. The preview played and sought without overflow at 1280×720 and 390×844. A separate Bootstrap capture verified one real panel-reveal camera shot. A Resend showcase control run confirmed the framed fallback.
+
+**Regression and rollout.** 58 targeted tests and 12 subtests passed across capture, URL direction, camera, glass and job persistence. The live service still runs its locally modified `/opt/sauce-vids` tree. Its API passes a `duration_seconds` argument absent from main, so replacing that tree would regress live behavior. Reconcile that contract in a staged release before switching the service. This review build leaves production and the public launch approval gate intact. The examples establish the effect and fallback paths on two sites. Automatic direction and legibility across a wider set of URLs remain open.
+
+
 ## 2026-11-18 — Phase 2 action-first film QA, source-verified group framing, bounded rejection
 
 **Verified source implementation:** main commit [`465e1882f60dff9200e835637c4565a7d198924c`](https://github.com/Davemafy/sauce-vids/commit/465e1882f60dff9200e835637c4565a7d198924c); kept prior main and all dirty production worktrees untouched. Full frame-by-frame A/B, exact film evidence, preflight rejections and creative defects: [SAUCE_QUALITY_AUDIT_20261118.md](SAUCE_QUALITY_AUDIT_20261118.md).
