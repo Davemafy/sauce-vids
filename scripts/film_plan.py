@@ -134,7 +134,7 @@ class FilmPlan:
 
 
 def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_duration,plan_path):
-    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","camera","audio"),"film plan")
+    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","camera","audio","composition"),"film plan")
     if data.get("schema")!=SCHEMA:
         raise ValueError("Unsupported Sauce film-plan schema")
     expected=data.get("sourceSha256")

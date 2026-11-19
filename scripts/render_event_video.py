@@ -116,6 +116,7 @@ if FPS not in (24,25,30,50,60):
 DURATION=min(float(MANIFEST.get("duration") or probe["format"]["duration"]),
              float(probe["format"]["duration"]))
 FILM_PLAN=None
+ISOLATION=None
 if FILM_PLAN_DATA is not None:
     from film_plan import load_film_plan
     FILM_PLAN=load_film_plan(FILM_PLAN_DATA, MANIFEST,SRC,MANIFEST_PATH,(INPUT_W,INPUT_H),
@@ -123,6 +124,11 @@ if FILM_PLAN_DATA is not None:
     if args.seconds is not None and not .5<=args.seconds<=FILM_PLAN.duration:
         parser.error("Review duration must be within the source-verified plan")
     args.seconds=args.seconds or FILM_PLAN.duration
+    from ui_isolation_layers import load_isolation_composition
+    ISOLATION=load_isolation_composition(FILM_PLAN_DATA.get("composition"),MANIFEST,
+                    SRC,(INPUT_W,INPUT_H),DURATION)
+    if ISOLATION is not None and FILM_PLAN.presentation!="fullscreen":
+        raise ValueError("JSON UI isolation requires fullscreen composition")
     if FILM_PLAN.audio_file and args.music:
         parser.error("Film-plan audio and CLI music cannot be mixed implicitly")
 
@@ -331,6 +337,11 @@ def camera_matrix(t,static=False):
     return np.array([[sx,0.,dx],[0.,sy,dy]],dtype=np.float64)
 
 def compose_window(source,t,static=False):
+    if ISOLATION is not None:
+        from ui_isolation_layers import render_isolated_stage
+        isolated=render_isolated_stage(ISOLATION,t,(SCREEN_W,SCREEN_H))
+        if isolated is not None:
+            return isolated
     mat=camera_matrix(t,static=static)
     content=cv2.warpAffine(source,mat,(SCREEN_W,SCREEN_H),
            flags=cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
@@ -363,7 +374,7 @@ def compose_window(source,t,static=False):
 
 def apply(source,t,static=False):
     stage=compose_window(source,t,static)
-    if POINTER is not None and (FILM_PLAN is None or t >= float(POINTER[0,0])):
+    if POINTER is not None and (ISOLATION is None or not ISOLATION.active(t)) and (FILM_PLAN is None or t >= float(POINTER[0,0])):
         press=max((1.-smooth5((t-down)/.18) for down in POINTER_PRESSES
                    if 0<=t-down<.18),default=0.)
         stage=project_pointer(stage,POINTER,camera_matrix(t,static),t,
@@ -514,6 +525,15 @@ def render(output,seconds=None,static=False):
             "cameraKeyframes":len(FILM_PLAN.camera_keys),
             "audioFileIncluded":bool(FILM_PLAN.audio_file),
             "creativeApproval":False}
+        if ISOLATION is not None:
+            record["film_plan"]["isolation"]={
+                "mode":"isolated-ui","startAt":ISOLATION.start_at,
+                "sourceFreeze":True,
+                "layers":[{"id":layer.id,"sourceAt":layer.source_at,
+                           "anchor":layer.anchor,"boundsPx":layer.source_bounds,
+                           "sourceFrameIndex":layer.source_frame_index,
+                           "cropPixelsSha256":layer.source_crop_sha256}
+                          for layer in ISOLATION.layers]}
     output.with_suffix(".json").write_text(json.dumps(record,indent=2))
     print("RENDER_RECEIPT",json.dumps(record),flush=True)
 

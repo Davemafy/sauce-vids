@@ -1,0 +1,80 @@
+{
+  "schema": "sauce-film-plan-v1",
+  "sourceSha256": "7d20dd35923409ee10f79428e2be7ea210d173c4a8fa86a872c6326306595072",
+  "manifestSha256": "793aff4390bed548818814c6907f77a51f23d674b619f492815e47d830d6fd64",
+  "durationSeconds": 6.9,
+  "presentation": "fullscreen",
+  "cursor": "recorded",
+  "audio": {
+    "mode": "clean"
+  },
+  "camera": [
+    {
+      "at": 0,
+      "anchor": "event:0:target",
+      "zoom": 1.58
+    },
+    {
+      "at": 3.44,
+      "anchor": "event:0:target",
+      "zoom": 1.58
+    },
+    {
+      "at": 6.9,
+      "startAt": 3.44,
+      "anchor": "event:0:group",
+      "zoom": 1.58
+    }
+  ],
+  "composition": {
+    "mode": "isolated-ui",
+    "startAt": 3.84,
+    "background": [
+      237,
+      236,
+      233
+    ],
+    "layers": [
+      {
+        "id": "slider",
+        "anchor": "event:0:target",
+        "sourceAt": 3.6,
+        "startAt": 3.84,
+        "endAt": 6.9,
+        "position": [
+          0.5,
+          0.24
+        ],
+        "enterFrom": [
+          0.5,
+          0.2
+        ],
+        "enterSeconds": 0.52,
+        "widthFraction": 0.65,
+        "paddingPx": 40,
+        "radiusPx": 12,
+        "zIndex": 0
+      },
+      {
+        "id": "price",
+        "anchor": "event:0:result",
+        "sourceAt": 3.6,
+        "startAt": 4.12,
+        "endAt": 6.9,
+        "position": [
+          0.5,
+          0.64
+        ],
+        "enterFrom": [
+          0.5,
+          0.68
+        ],
+        "enterSeconds": 0.62,
+        "widthFraction": 0.45,
+        "paddingPx": 80,
+        "radiusPx": 16,
+        "zIndex": 1
+      }
+    ]
+  }
+}

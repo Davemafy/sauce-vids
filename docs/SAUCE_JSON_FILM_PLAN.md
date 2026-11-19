@@ -68,9 +68,45 @@ python scripts/render_event_video.py \
 
 The optional duration must be inside the authorized source and plan. The same genuine captured source can be rendered repeatedly with revised JSON, **without recapture or editing the renderer**. Output receipts include source hash, plan hash, frame count, actual FPS and explicit `creativeApproval:false`.
 
+## JSON-driven source-true separated UI layers (experimental)
+
+The optional `composition` object gives the existing renderer a **neutral stage containing independent real UI crop layers** after a verified browser result. A layer is sampled as a still from the original hash-pinned source video, using its separate manifest's `event:N:target` or `event:N:result` bounding box, with bounded surrounding source padding. No generative fill, fake DOM, retyped product text, or synthesized state. The original browser recording and one recorded cursor are retained before the isolated-stage cut; after the cut the cursor is intentionally suppressed because a frozen crop must not pretend to be live interactive footage.
+
+Sample: [`examples/sauce-isolated-ui-price.json`](../examples/sauce-isolated-ui-price.json) (Resend, private authorized source not included in Git). The module is `scripts/ui_isolation_layers.py` and the existing `scripts/render_event_video.py` composes the output without a new web/video framework.
+
+```json
+"composition": {
+  "mode": "isolated-ui",
+  "startAt": 3.84,
+  "background": [237, 236, 233],
+  "layers": [
+    {
+      "id": "slider", "anchor": "event:0:target",
+      "sourceAt": 3.60, "startAt": 3.84, "endAt": 6.90,
+      "position": [0.50, 0.24], "widthFraction": 0.65,
+      "paddingPx": 40, "enterSeconds": 0.52, "zIndex": 0
+    },
+    {
+      "id": "price", "anchor": "event:0:result",
+      "sourceAt": 3.60, "startAt": 4.12, "endAt": 6.90,
+      "position": [0.50, 0.64], "widthFraction": 0.45,
+      "paddingPx": 80, "enterSeconds": 0.62, "zIndex": 1
+    }
+  ]
+}
+```
+
+This is an excerpt and needs the top-level source/media/manifest hashes, camera plan, pointer and audio settings shown in the example.
+
+**Boundaries:** this first primitive handles source-true **frozen element cutouts**, not video-tracked moving elements. JSON controls placement, independent entry timing, layering, easing, width, matte shape and shadow. All visual product pixels are copied from the original recorded frame. The snapshot time cannot be later than the layer's entrance or earlier than the actual observed result. Only evidence-backed event rectangles can be cropped. `position` is normalized to the 16:9 stage, not a DOM locator or generated art. The engine refuses overflow and unsafe missing proofs.
+
+**Critical visual defect found in actual decoded MP4:** the remembered Resend `resultRect` represents the changed price area, not the full Pro card. Enlarging that rectangle yields a **partial/cropped card**; slider cutout captures some adjacent lettering. It is NOT a visually accepted Arcade-style shot. The proper general solution is to store **complete source DOM element bounds, screenshot/matte and a same-state clean background plate** in the capture manifest; JSON then references those independently compositable, provenance-pinned assets. Cropping around arbitrary tiny text boxes is not an adequate long-term extraction method. Don't turn a clean technical effect into a low-quality default.
+
+Private first proof `studio/.tmp/layer-proof/isolated-ui.mp4`: 6.9s 414 frames 1920×1080/60 H264, full FFmpeg decode passed, total 19.34s rendering, no audio. The input is the **60fps resampled presentation**, whose actual browser source was ~25fps; this does not establish native 60fps capture. Contact sheet reviewed at ~0.4/1.8/3.1/3.85/4.15/4.5/5.2/6.3 seconds; the cutout/clip defects remain and the film is rejected for sale.
+
 ## What v1 does NOT claim
 
-It does not generate polished creative decisions on its own, perform unsafe browser actions, synthesize motion between distinct real UI states, replace the existing advanced scene/3D renderer, produce arbitrary layered typography, provide an interactive animation editor or promise any given JSON is cinematic. Advanced compositing must be added as **versioned reusable engine primitives** (masks, depth planes, transforms, accessible title/caption layers, reversible time warps, audio tracks), with independent source-truth proofs and tests—not through per-website Python hacks.
+It supports static UI isolation as a bounded experimental primitive, but still does not generate polished creative decisions on its own, perform unsafe browser actions, synthesize motion between distinct real UI states, replace the existing advanced scene/3D renderer, produce arbitrary layered typography, provide an interactive animation editor or promise any given JSON is cinematic. Advanced compositing must be added as **versioned reusable engine primitives** (masks, depth planes, transforms, accessible title/caption layers, reversible time warps, audio tracks), with independent source-truth proofs and tests—not through per-website Python hacks.
 
 ## Honest evidence on original product sample
 
