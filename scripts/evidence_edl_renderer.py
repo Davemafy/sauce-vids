@@ -78,6 +78,7 @@ class Shot:
     def length(self):return self.end-self.start
 
 def build(manifest,edit,source_size,source_frames):
+    opening_study=edit.get("openingStudy") is True
     if (manifest.get('cursorless') is not True or
         not isinstance(manifest.get('source_kind'),str) or
         not manifest['source_kind'].strip()):
@@ -85,7 +86,7 @@ def build(manifest,edit,source_size,source_frames):
         # required. No brand-specific screenshot, mockup or recreated pointer.
         raise ValueError('Need a verified real product recording and real pointer samples')
     stream=edit.get('shots')
-    if not isinstance(stream,list) or not 3<=len(stream)<=12:
+    if not isinstance(stream,list) or not (1<=len(stream)<=2 if opening_study else 3<=len(stream)<=12):
         raise ValueError('Invalid shot count')
     if len([e for e in manifest['events'] if e.get('kind')=='state_change' and e.get('evidence')])<3:
         raise ValueError('Missing multiple verified product outcomes')
@@ -108,8 +109,41 @@ def build(manifest,edit,source_size,source_frames):
             x,y=bad
             if max(a,x)<=min(b-1,y):raise ValueError('EDL contains known corrupt raw browser frames')
         shots.append(Shot(str(it['label']),a,b,keys,out));out+=b-a
-    if out>30*60 or out<7*60:raise ValueError('Unexpected film duration')
+    if not (3*60<=out<=5*60 if opening_study else 7*60<=out<=30*60):raise ValueError('Unexpected film duration')
     return shots,out
+
+def summary_safe_camera(manifest, shot, matrix, source_size, out_size, padding=.06):
+    """Fit DOM-measured summary cards, with no invented pixels or UI overlays.
+
+    Opt-in crop guard for scenes deliberately anchored to a recorded multi-card
+    summary. Scaling down is the only allowed repair; no artificial magnification.
+    """
+    anchors=[k['anchor'] for k in shot.keys
+             if k['anchor'].startswith(('summary:', 'overview:'))]
+    if not anchors:
+        return matrix
+    if len(set(anchors)) != 1:
+        raise ValueError('Ambiguous summary anchors in protected shot')
+    _, index=anchors[0].split(':')
+    states=[e for e in manifest['events'] if e.get('kind')=='state_change']
+    cards=states[int(index)].get('summaryRects', [])
+    if len(cards)<2:
+        raise ValueError('Protected shot requires measured summary cards')
+    sw,sh=source_size
+    for b in cards:
+        if any(not math.isfinite(float(b[k])) for k in ('x','y','width','height')):
+            raise ValueError('Nonfinite summary rectangle')
+        if b['width']<=0 or b['height']<=0 or b['x']<0 or b['y']<0 or b['x']+b['width']>sw or b['y']+b['height']>sh:
+            raise ValueError('Summary card outside actual source')
+    left=min(b['x'] for b in cards); right=max(b['x']+b['width'] for b in cards)
+    top=min(b['y'] for b in cards); bottom=max(b['y']+b['height'] for b in cards)
+    ow,oh=out_size
+    max_scale=min(ow*(1-2*padding)/(right-left),oh*(1-2*padding)/(bottom-top))
+    old=float(matrix[0,0]); scale=min(old,max_scale)
+    # Re-center only the protected measured group. A 6% safety margin is
+    # preserved even when the original authored shot crops its rightmost card.
+    cx=(left+right)/2; cy=(top+bottom)/2
+    return np.array([[scale,0,ow/2-cx*scale],[0,scale,oh/2-cy*scale]],np.float64)
 
 def camera(manifest,shot,f,source_size,out_size):
     keys=shot.keys
@@ -144,7 +178,8 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
            size=(1920,1080),limit=None,quality_gate=False,bounded_repair=False,
            motion_shutter=False,floating_stage=False,premium_cursor=False,
            click_water_ripple=False,stage_scale=.79,
-           source_verified_whip=False,continuity_receipt:Path|None=None):
+           source_verified_whip=False,continuity_receipt:Path|None=None,
+           protect_summary_group=False):
     manifest=json.loads(manifest_path.read_text())
     edit=json.loads(edit_path.read_text())
     probe=json.loads(subprocess.check_output([
@@ -185,6 +220,8 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
         from source_verified_whip import whip_phase, camera_whip_dx, film_shutter_whip
     def visual_camera(m,shot,f,source_size,out_size):
         mat=camera(m,shot,f,source_size,out_size)
+        if protect_summary_group:
+            mat=summary_safe_camera(m,shot,mat,source_size,out_size)
         if source_verified_whip:
             phase=whip_phase(
                 f,shot.length(),incoming=shot.out_start>0,
@@ -318,13 +355,14 @@ def render(movie:Path,manifest_path:Path,edit_path:Path,output:Path,
       'cursorVisibility':cursor_visibility,
       'clickWaterRipple':bool(click_water_ripple),
       'sourceVerifiedWhip':bool(source_verified_whip),
+      'protectSummaryGroup':bool(protect_summary_group),
       'renderSeconds':round(time.monotonic()-start,2),
       'introIsActualRecordedOutcome':bool(
           shots[0].start > max((math.floor((float(e['t'])+float(manifest.get('lead_s',0)))*60)
                                for e in manifest['events'] if e.get('kind')=='state_change'),
                               default=0)),
       'editHasNonchronologicalProofTeaser':bool(
-          shots[0].start>shots[1].start),
+          len(shots)>1 and shots[0].start>shots[1].start),
       'shotMap':compile_timeline(shots),
       'qualityGate':{'applied':bool(quality_gate or bounded_repair),
                      'objectiveFindings':quality_findings,
@@ -358,6 +396,8 @@ def main():
                         help='Require hash-matched real source instability proof')
     parser.add_argument('--source-verified-whip',action='store_true',
                         help='Short single-source directional cut, never ghosted UI')
+    parser.add_argument('--protect-summary-group',action='store_true',
+                        help='Fit all recorded summary cards in opt-in summary shots')
     parser.add_argument('--camera-shutter',action='store_true',
                         help='Opt-in 3-sample camera-motion exposure; holds stay sharp')
     parser.add_argument('--quality-gate',action='store_true',
@@ -371,6 +411,7 @@ def main():
            floating_stage=a.floating_stage,premium_cursor=a.premium_cursor,
            click_water_ripple=a.click_water_ripple,stage_scale=a.stage_scale,
            source_verified_whip=a.source_verified_whip,
-           continuity_receipt=a.continuity_receipt)
+           continuity_receipt=a.continuity_receipt,
+           protect_summary_group=a.protect_summary_group)
 
 if __name__=='__main__':main()

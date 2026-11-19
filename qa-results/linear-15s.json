@@ -1,0 +1,31 @@
+{
+  "schema": "sauce-film-quality-v1",
+  "film": "/var/lib/sauce-steward/qa-logs/market-film-20261118/linear-refs-final-1080p60.mp4",
+  "film_sha256": "ed53e8ff8a1120eae23e86f0bb01f6db8f6437ed6d132bd12266e838256e831b",
+  "duration": 15.266667,
+  "video_dimensions": [
+    1920,
+    1080
+  ],
+  "sampled_frames": 150,
+  "sample_fps": 10,
+  "findings": [
+    {
+      "code": "LOW_VISUAL_DETAIL",
+      "detail": {
+        "fraction": 0.807
+      }
+    },
+    {
+      "code": "UNVERIFIED_SOURCE_CLAIM",
+      "detail": {
+        "required": [
+          "source_path",
+          "source_sha256",
+          "event_manifest_sha256"
+        ]
+      }
+    }
+  ],
+  "verdict": "REJECT"
+}

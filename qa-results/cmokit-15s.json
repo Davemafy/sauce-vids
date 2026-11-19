@@ -1,0 +1,37 @@
+{
+  "schema": "sauce-film-quality-v1",
+  "film": "/var/www/sauce-film-review/cmokit-900-20261118/master-1080p60.mp4",
+  "film_sha256": "36ff7f461fb0970b4d50a5a52acfdce1e490e3528357ba892777e7215df00c9d",
+  "duration": 15.0,
+  "video_dimensions": [
+    1920,
+    1080
+  ],
+  "sampled_frames": 150,
+  "sample_fps": 10,
+  "findings": [
+    {
+      "code": "STATIC_OPENING_2S",
+      "detail": {
+        "p80_frame_delta": 0.318
+      }
+    },
+    {
+      "code": "REPEATED_OR_STATIC_FRAMES",
+      "detail": {
+        "fraction": 0.691
+      }
+    },
+    {
+      "code": "UNVERIFIED_SOURCE_CLAIM",
+      "detail": {
+        "required": [
+          "source_path",
+          "source_sha256",
+          "event_manifest_sha256"
+        ]
+      }
+    }
+  ],
+  "verdict": "REJECT"
+}
