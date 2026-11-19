@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"scripts"))
 from basic_tour_autodirect import (
-    critique,motion_probe,repair_once,MAX_ATTEMPTS,
+    critique,motion_probe,repair_once,run,MAX_ATTEMPTS,
 )
 
 
@@ -83,6 +83,47 @@ class AutomaticBasicCriticTests(unittest.TestCase):
             self.assertLessEqual(repaired["durationSeconds"],edl["budgetSeconds"])
             self.assertEqual(MAX_ATTEMPTS,2)
             self.assertEqual(edl["shots"][0]["kind"],"establish")
+
+    def test_all_low_confidence_sources_return_rejection_json_not_crash(self):
+        # Existing 1080p fixture creates correctly hashed original receipts.
+        sys.path.insert(0,str(Path(__file__).resolve().parent))
+        from test_basic_tour_shortcut import fixture_scene
+        with TemporaryDirectory() as tmp:
+            folder=fixture_scene(Path(tmp)/"source","src",pattern="testsrc2")
+            import json
+            receipt_file=folder/"receipt.json"
+            receipt=json.loads(receipt_file.read_text())
+            receipt["issues"]=["incomplete_visible_images"]
+            receipt_file.write_text(json.dumps(receipt))
+            out=Path(tmp)/"automatic"
+            result=run([folder],out,max_seconds=15)
+            self.assertEqual(result["status"],"rejected_no_saleable_preview")
+            self.assertFalse(result["acceptedByAutomaticChecks"])
+            self.assertEqual(result["attempts"],[])
+            self.assertEqual(result["rejectionReasons"],
+                             ["all_recorded_pages_low_confidence"])
+            self.assertTrue((out/"autodirect-result.json").exists())
+            self.assertIsNone(result["selectedCandidate"])
+
+    def test_too_little_source_footage_returns_readable_rejection(self):
+        sys.path.insert(0,str(Path(__file__).resolve().parent))
+        from test_basic_tour_shortcut import fixture_scene
+        with TemporaryDirectory() as tmp:
+            folder=fixture_scene(Path(tmp)/"source","src",pattern="testsrc2")
+            import json
+            receipt_file=folder/"receipt.json"
+            receipt=json.loads(receipt_file.read_text())
+            receipt["hold_samples"]=[{
+                "scroll_y":0,"duration_ms":1300,"issues":[]
+            }]
+            receipt_file.write_text(json.dumps(receipt))
+            out=Path(tmp)/"automatic"
+            result=run([folder],out,max_seconds=15)
+            self.assertEqual(result["status"],"rejected_no_saleable_preview")
+            self.assertIn("cannot_plan_source_true_preview",
+                          result["rejectionReasons"][0])
+            self.assertTrue((out/"autodirect-result.json").exists())
+            self.assertEqual(list(out.glob("**/*.mp4")),[])
 
     def test_repair_refuses_to_invent_motion_when_source_is_static(self):
         with TemporaryDirectory() as tmp:

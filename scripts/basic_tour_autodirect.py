@@ -167,14 +167,46 @@ def repair_once(original:dict,scenes:list[dict],findings:dict)->dict:
     return edl
 
 
+def _reject_before_render(output:Path,sources:list[Path],reason:str)->dict:
+    """Never crash because the source contains too little real film.
+
+    Preserve a machine-readable refusal for the private job controller.
+    Only tampering/unreadable files remain hard errors; unfilmable or
+    low-confidence sources produce stable verdicts.
+    """
+    result={
+        "schema":"sauce.basic.autodirect.v1",
+        "status":"rejected_no_saleable_preview",
+        "acceptedByAutomaticChecks":False,
+        "creativeQualityVerified":False,
+        "reviewedSources":[str(p) for p in sources],
+        "attempts":[],
+        "selectedCandidate":None,
+        "maxAttempts":MAX_ATTEMPTS,
+        "rejectionReasons":[reason],
+        "notes":["No fabricated or substituted product content",
+                 "Full site recording and skip manifest remain available",
+                 "No automatic publication of a failed preview"],
+    }
+    (output/"autodirect-result.json").write_text(json.dumps(result,indent=2))
+    return result
+
+
 def run(sources:list[Path],output:Path,*,max_seconds:float=30)->dict:
     if not 1<=len(sources)<=8:
         raise ValueError("Invalid sources")
     scenes=[load_scene(p) for p in sources]
     output.mkdir(parents=True,exist_ok=True)
+    if all(scene["receipt"].get("issues") for scene in scenes):
+        return _reject_before_render(output,sources,
+            "all_recorded_pages_low_confidence")
     attempts=[]
-    edl=choose_shots(scenes,duration_limit=max_seconds,
-                     hook_strategy="strongest_hero")
+    try:
+        edl=choose_shots(scenes,duration_limit=max_seconds,
+                         hook_strategy="strongest_hero")
+    except ValueError as exc:
+        return _reject_before_render(output,sources,
+             "cannot_plan_source_true_preview:"+str(exc)[:180])
     for attempt in range(MAX_ATTEMPTS):
         name=f"attempt-{attempt+1}"
         folder=output/name

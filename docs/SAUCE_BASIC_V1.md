@@ -2,6 +2,22 @@
 
 ## Automatic quality gate and bounded self-repair — November 19, 2026
 
+**Independent-site failure-path correction:** a real Ghost homepage
+source flagged incomplete visible images, and an initial one-page
+automatic preview request crashed while finding too few valid source
+beats. The director now writes a structured reject JSON BEFORE
+encoding if all source pages are low-confidence or if a credible cut
+cannot be planned. Re-running Ghost yields
+rejected_no_saleable_preview with all_recorded_pages_low_confidence
+and no false successful video. Resend (previous 41.9s browser stall
+and runtime drift) receives the same explicit rejection. This
+genuinely exercises unattended bad-source handling across independent
+sites; it is NOT evidence of successful completed preview quality.
+Two new regression tests verify structured rejection and no fabricated
+footage when a verified source is too short.
+
+
+
 **Why:** the owner rejected the manually polished Brimble opening as
 boring and unscalable. Sauce Basic cannot depend on ChatGPT or an
 operator handpicking the hook, scrubbing frames, editing scene order,

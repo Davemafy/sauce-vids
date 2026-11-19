@@ -2,6 +2,19 @@
 
 ## 2026-11-19 — Sauce Basic self-directed render rejection and bounded source-true repair
 
+**After independent-site QA:** the initial Ghost one-page auto-direct
+command crashed when its incomplete-image source offered insufficient
+verified shot beats. Corrected to return a stable
+rejected_no_saleable_preview JSON with reasons and no selected video
+if all source clips are low-confidence or if too little usable footage
+exists. Actual Ghost incomplete-image and Resend capture-stall
+sources now reject early with all_recorded_pages_low_confidence
+rather than consuming a render or relying on a human. Two new
+regression tests protect this path. All independent media remain
+private, and user-facing arbitrary URL ingestion remains disabled.
+
+
+
 The owner pointed out that human-curated Short Cuts cannot scale to
 production. Added deterministic automatic film-level critique and
 bounded repair to the private Basic workflow.
