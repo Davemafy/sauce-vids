@@ -96,6 +96,54 @@ def apply_visible_action_verdict(plan:dict,report:dict,proof:dict,
                                'public-site showcase only'},report)
 
 
+def require_cinematic_story_proof(plan:dict,report:dict,proof:dict)->dict:
+    """Pre-render safety gate: a visible outcome is not yet film approval.
+
+    Explicit cinematic mode may not silently fall back to screenshots,
+    public marketing sections, or changes occupying only a few pixels.
+    """
+    from urllib.parse import urlsplit
+    if plan.get('mode')!='interactive' or len(plan.get('action_ids',[]))!=1:
+        raise RuntimeError('Cinematic film rejected: no single real product interaction')
+    if (not isinstance(proof,dict) or
+        proof.get('schema')!='sauce-source-action-preflight-v1' or
+        proof.get('decision')!='visible_outcome_candidate'):
+        raise RuntimeError('Cinematic film rejected: no verified public product payoff')
+    if (proof.get('source_control_id')!=plan['action_ids'][0] or
+        proof.get('control_kind') not in ('button','tab')):
+        raise RuntimeError('Cinematic film rejected: selected action not independently verified')
+    a,b=urlsplit(report.get('url','')),urlsplit(proof.get('source_url',''))
+    if not (a.scheme=='https' and (a.scheme,a.netloc.lower(),a.path.rstrip('/')) ==
+            (b.scheme,b.netloc.lower(),b.path.rstrip('/'))):
+        raise RuntimeError('Cinematic film rejected: source action proof URL mismatch')
+    for key in ('before_sha256','steady_sha256','after_sha256'):
+        value=proof.get(key)
+        if not (isinstance(value,str) and len(value)==64 and
+                all(ch in '0123456789abcdef' for ch in value)):
+            raise RuntimeError('Cinematic film rejected: missing authentic browser proof hashes')
+    viewport=proof.get('viewport_shift_px')
+    if (type(viewport) not in (int,float) or
+        not 0<=viewport<=4):
+        raise RuntimeError('Cinematic film rejected: product action changed the browser viewport')
+    from scripts.story_viability_preflight import (
+        MIN_CHANGED_FRAME_FRACTION,MIN_CHANGED_RESULT_FRACTION,
+        MIN_RESULT_FRAME_FRACTION)
+    change=proof.get('change_above_baseline')
+    if type(change) not in (int,float) or not MIN_CHANGED_FRAME_FRACTION<=change<=1:
+        raise RuntimeError('Cinematic film rejected: visible product payoff too small')
+    area=proof.get('result_area_fraction')
+    local=proof.get('changed_result_fraction')
+    if (type(area) not in (int,float) or
+        type(local) not in (int,float) or
+        not MIN_RESULT_FRAME_FRACTION<=area<=1 or
+        not MIN_CHANGED_RESULT_FRACTION<=local<=1 or
+        not isinstance(proof.get('result_rect'),dict)):
+        raise RuntimeError('Cinematic film rejected: no substantial DOM-verified result region')
+    if proof.get('human_film_approval') is not False:
+        raise RuntimeError('Cinematic film rejected: action preflight cannot sign off aesthetics')
+    return plan
+
+
 def captured(folder:Path,url:str,actions:list[dict],*,tag:str='session'):
     output=folder/tag
     flow=folder/(tag+'-workflow.json')
@@ -128,15 +176,19 @@ def execute(url:str,folder:Path,progress=None):
     plan,calls,source=direction(report,previous_feedback(folder.parent))
     (folder/'direction.json').write_text(json.dumps({
        **plan,'ai_calls':calls,'direction_source':source},indent=2))
-    stage('capturing')
+    cinematic_only=os.getenv('SAUCE_CINEMATIC_ONLY')=='1'
+    if cinematic_only and plan['mode']!='interactive':
+        raise RuntimeError('Cinematic film rejected: marketing showcase is not real product demo')
     steps=workflow(plan,report) if not plan.get('beats') else []
     checked=preflight(url,steps) if steps else []
     if len(checked)<len(steps):
+        if cinematic_only:
+            raise RuntimeError('Cinematic film rejected: safe source control failed selector preflight')
         plan=normalize({'mode':'showcase','heading_ids':plan['heading_ids'],
                         'title':plan['title'],'reason':'A selected control changed before recording'},report)
     # This opt-in probe runs before the expensive capture and only for
     # a vetted, non-submitting public control. Never a default or premium score.
-    if os.getenv('SAUCE_VERIFY_VISIBLE_ACTION')=='1' and plan['mode']=='interactive':
+    if (os.getenv('SAUCE_VERIFY_VISIBLE_ACTION')=='1' or cinematic_only) and plan['mode']=='interactive':
         from backend.source_action_preflight import probe_public_action
         try:
             proof=probe_public_action(
@@ -151,12 +203,15 @@ def execute(url:str,folder:Path,progress=None):
         (private/'visible-action-receipt.json').write_text(
             json.dumps(proof,indent=2))
         plan=apply_visible_action_verdict(
-            plan,report,proof,cinematic_only=os.getenv('SAUCE_CINEMATIC_ONLY')=='1')
+            plan,report,proof,cinematic_only=cinematic_only)
+        if cinematic_only:
+            require_cinematic_story_proof(plan,report,proof)
         # Do not leave an earlier "interactive" direction receipt behind if
         # this real-browser outcome probe downgraded it to a showcase.
         (folder/'direction.json').write_text(json.dumps({
             **plan,'ai_calls':calls,'direction_source':source,
             'visible_action_probe':proof['decision']},indent=2))
+    stage('capturing')
     capture_dir=private/'motion'
     planfile=private/'motion-plan.json'
     planfile.write_text(json.dumps(plan,indent=2))
@@ -174,6 +229,8 @@ def execute(url:str,folder:Path,progress=None):
     try:
         run_capture()
     except (RuntimeError,subprocess.TimeoutExpired):
+        if cinematic_only:
+            raise RuntimeError('Cinematic film rejected: authentic browser capture failed')
         # The only fallback is still a real continuous recording, not snapshots.
         plan=normalize({'mode':'showcase','heading_ids':plan['heading_ids'],
           'title':plan['title'],'reason':'Interactive control unavailable'},report)
@@ -183,6 +240,8 @@ def execute(url:str,folder:Path,progress=None):
     if not record.get('continuous_recording'):
         raise RuntimeError('No continuous motion stream captured')
     if not any(a.get('kind') in ('link','button','slider','tab') for a in record.get('actions',[])):
+        if cinematic_only:
+            raise RuntimeError('Cinematic film rejected: source recording lost actual product action')
         plan['mode']='showcase'
     stage('rendering')
     export=folder/'export'

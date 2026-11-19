@@ -84,6 +84,75 @@ def _fingerprint(state: dict) -> dict:
     }
 
 
+def viewport_shift_px(before_scroll:dict,after_scroll:dict,
+                      before_box:dict,after_box:dict)->float:
+    """Fail closed if the camera moved, rather than scoring page travel as payoff.
+
+    Supports window scrolling and a selected control in a nested scroller.
+    A disappearing target may be legitimate (e.g. after state change), but
+    cannot serve as independent proof of an unchanged viewport.
+    """
+    if any(not isinstance(x,dict) for x in
+           (before_scroll,after_scroll,before_box,after_box)):
+        raise ValueError('Cannot prove stable action viewport')
+    try:
+        diffs=[abs(float(before_scroll[a])-float(after_scroll[a]))
+               for a in ('x','y')]
+        diffs.extend(abs(float(before_box[a])-float(after_box[a]))
+                     for a in ('x','y'))
+    except (KeyError,ValueError,TypeError) as exc:
+        raise ValueError('Missing measured source viewport geometry') from exc
+    if not all(np.isfinite(d) for d in diffs):
+        raise ValueError('Nonfinite measured viewport shift')
+    return max(diffs)
+
+
+def measured_result_region(before:np.ndarray,after:np.ndarray,
+                           box:dict|None)->dict:
+    """Measure actual new DOM-owned result, not full-screen modal backdrop.
+
+    The supplied rectangle must be obtained from a visible real browser node
+    AFTER the action. The metric alone is not an aesthetic endorsement.
+    """
+    if not isinstance(box,dict):
+        return {'result_area_fraction':0.0,'changed_result_fraction':0.0,
+                'result_rect':None}
+    if before.shape!=after.shape or before.ndim!=3:
+        raise ValueError('Result region source frame shapes do not match')
+    H,W=before.shape[:2]
+    try:
+        x,y,w,h=[float(box[k]) for k in ('x','y','width','height')]
+    except (KeyError,ValueError,TypeError) as exc:
+        raise ValueError('Invalid browser result rectangle') from exc
+    if (not np.isfinite([x,y,w,h]).all()
+        or min(w,h)<8 or x<0 or y<0 or x+w>W+1 or y+h>H+1):
+        raise ValueError('Result box was not fully visible in browser source')
+    a=max(0,int(np.floor(x)));b=max(a+1,min(W,int(np.ceil(x+w))))
+    c=max(0,int(np.floor(y)));d=max(c+1,min(H,int(np.ceil(y+h))))
+    changed=image_change(before[c:d,a:b,:],after[c:d,a:b,:])
+    return {'result_area_fraction':round(float((w*h)/(W*H)),5),
+            'changed_result_fraction':round(changed,5),
+            'result_rect':{k:round(float(box[k]),2) for k in
+                           ('x','y','width','height')}}
+
+
+def visible_result_box(page,control):
+    """Read a genuine visible result container, never guess a pretty crop."""
+    selectors=['[role="dialog"]','dialog[open]','[role="tabpanel"]']
+    aria=page.locator(control['selector']).get_attribute('aria-controls')
+    if aria and all(v.isalnum() or v in ('-','_') for v in aria):
+        selectors.append('[id="'+aria+'"]')
+    for css in selectors:
+        matches=page.locator(css)
+        for i in range(min(8,matches.count())):
+            node=matches.nth(i)
+            if node.is_visible():
+                box=node.bounding_box()
+                if box and box['width']>=48 and box['height']>=36:
+                    return box
+    return None
+
+
 def probe_public_action(url: str, report: dict, control_id: str,
                         private_dir: Path, *, browser_executable: str | None = None) -> dict:
     """Trigger one preapproved, non-submitting action in a disposable browser.
@@ -135,6 +204,13 @@ def probe_public_action(url: str, report: dict, control_id: str,
             locator=page.locator(c['selector'])
             if locator.count()!=1 or not locator.is_visible():
                 raise ValueError('Originally selected public control no longer exists')
+            # FIRST bring the actual source control into the recorded
+            # viewport. Otherwise playwright.click() scrolls to it and the
+            # pixel-delta score wrongly calls that travel a product payoff.
+            locator.scroll_into_view_if_needed(timeout=4200)
+            page.wait_for_timeout(450)
+            before_box=locator.bounding_box()
+            before_scroll=page.evaluate('({x:scrollX,y:scrollY})')
             before_state=_fingerprint(page.evaluate(FINGERPRINT_JS))
             before=page.screenshot(type='png',animations='disabled')
             page.wait_for_timeout(360)
@@ -143,6 +219,8 @@ def probe_public_action(url: str, report: dict, control_id: str,
             page.wait_for_timeout(750)
             validate_public_url(page.url)
             after_state=_fingerprint(page.evaluate(FINGERPRINT_JS))
+            after_box=locator.bounding_box()
+            after_scroll=page.evaluate('({x:scrollX,y:scrollY})')
             after=page.screenshot(type='png',animations='disabled')
             (private_dir/'before.png').write_bytes(before)
             (private_dir/'steady.png').write_bytes(stable)
@@ -150,6 +228,22 @@ def probe_public_action(url: str, report: dict, control_id: str,
             arr=lambda blob:cv2.imdecode(np.frombuffer(blob,np.uint8),cv2.IMREAD_COLOR)
             proof=classify_visible_outcome(
                 arr(before),arr(stable),arr(after),before_state,after_state)
+            # If clicking changes the viewport geometry, these pixels are
+            # ambiguous. Never launder scroll or large layout motion into an
+            # independently proven UI-value claim.
+            try:
+                shift=viewport_shift_px(before_scroll,after_scroll,
+                                        before_box,after_box)
+            except ValueError:
+                shift=float('inf')
+            if shift>4:
+                proof['decision']='viewport_shift_ambiguous'
+                proof['reason']='Scroll/layout shift confounded visible product change'
+            proof['viewport_shift_px']=round(shift,3) if np.isfinite(shift) else None
+            # A full-screen gray modal backdrop is not 80% more useful
+            # product content. Score only a browser-observed result container.
+            proof.update(measured_result_region(arr(before),arr(after),
+                                                 visible_result_box(page,c)))
             proof.update({
                 'source_url':str(report.get('url',url)),
                 'source_control_id':control_id,
