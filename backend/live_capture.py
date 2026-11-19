@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright
 from scripts.capture_safety import validate_public_url,guard_route
+from scripts.session_contract import safe_url
 from .product_explorer import CHROME,allowed,JS
 
 CURSOR_JS=r"""(() => {
@@ -144,15 +145,108 @@ def capture_quality():
          'viewport':{'width':width,'height':height},
          'video_size':{'width':width,'height':height}}
 
+def capture_slider(page, loc, time_zero):
+ """Record a real drag and verify one dependent visible value group."""
+ if loc.count()!=1 or not loc.is_enabled():
+  print('Slider locator unavailable',loc.count(),flush=True)
+  return None
+ setup=loc.evaluate_handle(r"""e => {
+  if (!e.matches('input[type=range]') ||
+      e.closest('form,[data-private],[data-secret],[data-sensitive]') ||
+      getComputedStyle(e).direction !== 'ltr') return null;
+  const group=e.closest('[role=group][aria-label]');
+  const hidden=getComputedStyle(e).clipPath!=='none';
+  const track=(group||e).getBoundingClientRect();
+  const thumb=(hidden?e.parentElement:e).getBoundingClientRect();
+  const min=Number(e.min||0), max=Number(e.max||100), value=Number(e.value);
+  if (!(min<max) || track.left<0||track.right>innerWidth||
+      track.top<0||track.bottom>innerHeight||track.width<120||track.width<2*track.height) return null;
+  const left=track.left+1, right=track.right-1, y=thumb.top+thumb.height/2;
+  const x=hidden?thumb.left+thumb.width/2:
+      track.left+8+(track.width-16)*(value-min)/(max-min);
+  if (!(left<=x&&x<=right&&track.top<=y&&y<=track.bottom)) return null;
+  if (!(document.elementFromPoint(x,y)?.closest('[role=group]')===group&&group ||
+        document.elementFromPoint(x,y)===e)) return null;
+  const width=right-left, step=Math.abs(Number(e.step))/(max-min)||.01;
+  const distance=Math.max(width*.245, width*step*1.2);
+  const end=x+distance<=right?x+distance:Math.max(left,x-distance);
+  let scope=group||e;
+  for(let i=0;i<3&&scope.parentElement;i++)scope=scope.parentElement;
+  const candidates=[];
+  for(const node of scope.querySelectorAll('*')){
+   if(node.childElementCount||node.closest('form,[data-private],[data-secret],[data-sensitive]'))continue;
+   const r=node.getBoundingClientRect(), text=node.innerText?.trim();
+   if(!text||text.length>70||!/\d/.test(text)||r.width<6||r.height<10||
+      r.top<track.top+22||r.bottom>Math.min(innerHeight,track.bottom+360)||
+      r.left<0||r.right>innerWidth||node.checkVisibility?.({opacityProperty:true,visibilityProperty:true})===false)continue;
+   candidates.push({node,text});
+   if(candidates.length>=100)break;
+  }
+  if(!candidates.length)return null;
+  return {e,value,x,end,y,track:track.toJSON(),candidates};
+ }""")
+ try:
+  geometry=setup.evaluate('s => s && ({x:s.x,y:s.y,end:s.end,track:s.track})')
+  if geometry is None:
+   print('Slider geometry or candidate result unavailable',flush=True)
+   return None
+  x,y=geometry['x'],geometry['y']
+  page.mouse.move(x,y)
+  page.wait_for_timeout(120)
+  start=time.monotonic()-time_zero
+  points=[{'t':start,'x':x,'y':y}]
+  page.mouse.down()
+  try:
+   page.wait_for_timeout(380)
+   for i in range(1,25):
+    u=i/24
+    px=x+(geometry['end']-x)*u*u*(3-2*u)
+    page.mouse.move(px,y)
+    points.append({'t':time.monotonic()-time_zero,'x':px,'y':y})
+    page.wait_for_timeout(32)
+  finally:
+   page.mouse.up()
+  released=time.monotonic()-time_zero
+  points.append({'t':released,'x':geometry['end'],'y':y})
+  page.wait_for_timeout(280)
+  result=setup.evaluate(r"""s => {
+    if(!s.e.isConnected || Number(s.e.value)===s.value)return null;
+    const rects=s.candidates.filter(({node,text})=>node.isConnected&&
+      node.innerText?.trim()!==text&&/\d/.test(node.innerText)&&
+      node.checkVisibility?.({opacityProperty:true,visibilityProperty:true})!==false)
+      .map(({node})=>node.getBoundingClientRect())
+      .filter(r=>r.width>6&&r.height>10&&r.left>=0&&r.right<=innerWidth&&
+            r.top>=s.track.top&&r.bottom<=innerHeight&&r.width<innerWidth*.48);
+    if(!rects.length)return null;
+    const x=Math.min(...rects.map(r=>r.left)),y=Math.min(...rects.map(r=>r.top));
+    return {x,y,width:Math.max(...rects.map(r=>r.right))-x,
+                 height:Math.max(...rects.map(r=>r.bottom))-y};
+  }""")
+  if result is None:
+   print('Slider drag did not verify dependent text',flush=True)
+   return None
+  track=geometry['track']
+  return {'kind':'slider_change','start':start,'t':released,'end':released,
+          'evidence':'Range changed with a visible dependent numeric result',
+          'targetRect':{k:track[k] for k in ('x','y','width','height')},
+          'resultRect':result,'pointer_samples':points}
+ finally:
+  setup.dispose()
+
+
 def capture(url:str,private:Path,report:dict,plan:dict):
  quality=capture_quality()
  cursor_style=capture_cursor_style()
- cursor_script=ARROW_CURSOR_JS if cursor_style=='arrow' else CURSOR_JS
+
  ensure_video_helper()
  validate_public_url(url)
  private=Path(private);private.mkdir(parents=True,exist_ok=True)
  actions={c['id']:c for c in report.get('controls',[])}
  headings={h['id']:h for h in report.get('headings',[])}
+ selected=plan.get('action_ids',[])
+ cursorless=(plan.get('mode')=='interactive' and len(selected)==1 and
+             actions.get(selected[0],{}).get('kind')=='slider')
+ cursor_script=('' if cursorless else ARROW_CURSOR_JS if cursor_style=='arrow' else CURSOR_JS)
  events=[];moment=0.0
  with sync_playwright() as pw:
   b=pw.chromium.launch(headless=True,executable_path=CHROME,
@@ -163,14 +257,14 @@ def capture(url:str,private:Path,report:dict,plan:dict):
     device_scale_factor=quality['dpr'],record_video_dir=str(folder),
     record_video_size=quality['video_size'],service_workers='block')
    context.route('**/*',guard_route)
-   context.add_init_script(cursor_script)
+   if cursor_script:context.add_init_script(cursor_script)
    video_begin=time.monotonic()
    page=context.new_page()
    response=page.goto(url,wait_until='domcontentloaded',timeout=30000)
    if response and response.status>=400:raise RuntimeError('Source page returned HTTP '+str(response.status))
    validate_public_url(page.url)
    page.wait_for_timeout(600)
-   page.evaluate(cursor_script)
+   if cursor_script:page.evaluate(cursor_script)
    video=page.video
    if video is None:raise RuntimeError('Browser video recording unavailable')
    start=time.monotonic()
@@ -178,6 +272,7 @@ def capture(url:str,private:Path,report:dict,plan:dict):
    page.mouse.move(930,530)
    page.wait_for_timeout(500)
    evidence=[]
+   editorial_events=[]
    def mark(label):
     # Records nonsecret public evidence only; values, HAR, content excluded.
     page.screenshot(path=str(private/('mark-'+str(len(evidence))+'.jpg')),
@@ -192,6 +287,16 @@ def capture(url:str,private:Path,report:dict,plan:dict):
      selector=c['selector']
      loc=page.locator(selector)
      try:
+      if c['kind']=='slider':
+       before=page.url
+       slider=capture_slider(page,loc,video_begin)
+       if not slider or urlsplit(page.url)[:3]!=urlsplit(before)[:3]:
+        raise RuntimeError('No visible dependent result from public slider')
+       editorial_events.append(slider)
+       mark('action-'+ident)
+       events.append({'id':ident,'label':c['text'],'kind':'slider',
+                      'from':safe_url(before),'to':safe_url(page.url)})
+       continue
       if loc.count()!=1 or not loc.is_visible():continue
       box=loc.bounding_box()
       if not box:continue
@@ -206,13 +311,32 @@ def capture(url:str,private:Path,report:dict,plan:dict):
       if not box:continue
       pointer_to(page,box['x']+box['width']*.5,box['y']+box['height']*.5)
       page.wait_for_timeout(300)
+      # Trust visible ARIA panel geometry only after an observed state change.
+      controls=(loc.get_attribute('aria-controls') or '').split()
+      was_collapsed=loc.get_attribute('aria-expanded')=='false'
+      click_time=time.monotonic()-video_begin
       loc.click(timeout=3500)
       page.wait_for_timeout(950)
       if urlsplit(page.url).netloc.lower()!=urlsplit(url).netloc.lower():
        raise RuntimeError('Unsafe navigation outside original product')
       mark('action-'+ident)
       events.append({'id':ident,'label':c['text'],'kind':c['kind'],
-                     'from':before.split('?')[0],'to':page.url.split('?')[0]})
+                     'from':safe_url(before),'to':safe_url(page.url)})
+      if was_collapsed and len(controls)==1 and page.url==before:
+       panel=page.evaluate('''id => {
+        const node=document.getElementById(id);
+        if (!node || node.closest('[data-private],[data-secret],[data-sensitive]')) return null;
+        const rect=node.getBoundingClientRect(), css=getComputedStyle(node);
+        if (css.display==='none'||css.visibility!=='visible'||Number(css.opacity)<=.04||
+            rect.width<16||rect.height<16||rect.left<0||rect.top<0||
+            rect.right>innerWidth||rect.bottom>innerHeight) return null;
+        return {x:rect.x,y:rect.y,width:rect.width,height:rect.height};
+       }''',controls[0])
+       if panel and loc.get_attribute('aria-expanded')=='true':
+        editorial_events.extend([
+         {'kind':'click','t':click_time,'label':c['text'],'semanticGoal':'Inspect expanded public panel'},
+         {'kind':'state_change','t':time.monotonic()-video_begin,
+          'evidence':'Collapsed control expanded with a visible ARIA panel','resultRect':panel}])
       # Demonstrate text-entry mode without sending/submitting anything.
       # Restrict to an explicit observed paste-text action and a single
       # publicly visible textarea; never fill private or password fields.
@@ -234,6 +358,7 @@ def capture(url:str,private:Path,report:dict,plan:dict):
                         'label':'Benign text fixture typed; no submission'})
      except Exception as exc:
       # Individual disappearing dynamic controls are not a fatal job error.
+      if cursorless:raise
       events.append({'id':ident,'skipped':type(exc).__name__})
    if not events or all('skipped' in x for x in events):
     # Public-site preview when there is no safe meaningful app action.
@@ -248,7 +373,10 @@ def capture(url:str,private:Path,report:dict,plan:dict):
      pointer_to(page,900-i*240,340+i*75)
      page.wait_for_timeout(360)
      mark('read-'+str(i))
-   page.wait_for_timeout(800)
+   if editorial_events:
+    page.wait_for_timeout(1950 if cursorless else 1400)
+    editorial_events.append({'kind':'interaction_complete','t':time.monotonic()-video_begin})
+   page.wait_for_timeout(1000)
    length=time.monotonic()-start
    context.close()
    source=Path(video.path())
@@ -257,12 +385,12 @@ def capture(url:str,private:Path,report:dict,plan:dict):
    receipt={'continuous_recording':True,'video':output.name,
       'sha256':hash_file(output),'duration_wall_s':round(length,3),
       'lead_in_seconds':round(lead_in,3),
-      'actions':events,'evidence':evidence,
+      'actions':events,'evidence':evidence,'editorial_events':editorial_events,
       'source_url':url.split('?')[0],'mode':plan.get('mode','showcase'),
       'capture_quality':quality['quality'],'source_dpr':quality['dpr'],
       'requested_video_size':quality['video_size'],
       'viewport_css_size':quality['viewport'],
-      'presentation_cursor':cursor_style}
+      'cursorless':cursorless,'presentation_cursor':'composited-arrow' if cursorless else cursor_style}
    (private/'continuous-capture.json').write_text(json.dumps(receipt,indent=2))
    return receipt
   finally:b.close()

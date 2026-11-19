@@ -9,6 +9,8 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from scripts.capture_safety import validate_public_url
 from backend.url2video import validate_direction,workflow_for,direct_once,NeedsKey
+from backend.product_explorer import allowed, normalize, workflow
+from backend.url_engine import direction
 
 class UrlToVideoTests(unittest.TestCase):
     def test_reject_local_and_sensitive_urls(self):
@@ -48,6 +50,24 @@ class UrlToVideoTests(unittest.TestCase):
         self.assertTrue({a["action"] for a in steps}.issubset({"scroll","hover"}))
         self.assertTrue(all(a.get("expect_selector")==a.get("selector")
                             for a in steps if a["action"]=="hover"))
+
+    def test_public_slider_uses_one_recorded_drag_path(self):
+        url = 'https://resend.com/pricing'
+        slider = {'id': 'a0', 'text': 'Value Selector', 'kind': 'slider',
+                  'selector': 'input[type=range]'}
+        button = {'id': 'a1', 'text': 'Show example', 'kind': 'button',
+                  'selector': 'button', 'controlled_panel': True}
+        self.assertFalse(allowed({**slider, 'text': 'Pay with calculator'}, url))
+        self.assertTrue(allowed(slider, url))
+        report = {'title': 'Pricing', 'url': url, 'headings': [],
+                  'controls': [button, slider]}
+        with patch.dict(os.environ, {'GEMINI_API_KEY': ''}):
+            plan, calls, _ = direction(report)
+        self.assertEqual(calls, 0)
+        self.assertEqual(plan['action_ids'], ['a0'])
+        self.assertEqual([step['action'] for step in workflow(plan, report)], ['hover'])
+        self.assertEqual(normalize({'mode': 'interactive', 'action_ids': ['a1', 'a0']},
+                                   report)['action_ids'], ['a0'])
 
     def test_missing_key_does_not_generate_fake_direction(self):
         with patch.dict(os.environ,{"GEMINI_API_KEY":""}):

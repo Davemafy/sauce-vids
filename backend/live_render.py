@@ -1,11 +1,10 @@
 """Postproduce continuous public-browser footage without inventing a replay.
 
-Camera motion is the actual Chromium browser motion. This intentionally does
-not masquerade as the deterministic replay compositor: source, duration,
-motion and SHA are recorded in the release ledger.
+Source is continuous Chromium footage. The presentation compositor wraps it
+in a window and may add camera motion after a verified browser event.
 """
 from __future__ import annotations
-import hashlib,json,subprocess,sys,math
+import hashlib,json,subprocess,sys,math,shutil
 from pathlib import Path
 from scripts.session_contract import safe_url
 
@@ -71,16 +70,24 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
  # Playwright starts the recorder before the initial page is ready. Remove
  # that dead-air loading time, retaining a short establishing lead-in.
  trim=max(0,min(full_duration-2.0,float(receipt.get('lead_in_seconds',0))-0.40))
+ cursorless=receipt.get('cursorless') is True
+ if cursorless:
+  slider=next(event for event in receipt['editorial_events']
+              if event['kind']=='slider_change')
+  # Keep enough pre-gesture context and finish on the verified price hold.
+  trim=round(max(trim,slider['start']-.92),3)
+  full_duration=min(full_duration,slider['end']+2.70)
  duration=full_duration-trim
  out.mkdir(parents=True,exist_ok=True)
  master=out/'master-1080p60.mp4'
+ prepared=source_dir/'presentation-source.mp4'
  # Frame-rate conversion keeps the original browser timing; no freeze-frame
  # montages, transition slides or synthesized screenshots.
  command=['ffmpeg','-hide_banner','-loglevel','error','-y','-nostdin',
-  '-ss',str(round(trim,3)),'-i',str(src),'-map','0:v:0',
+  '-ss',str(round(trim,3)),'-i',str(src),'-t',str(round(duration,3)),'-map','0:v:0',
   '-vf',profile['filter'],
   '-an','-c:v','libx264','-preset','medium','-crf','17',
-  '-movflags','+faststart','-progress','pipe:1',str(master)]
+  '-movflags','+faststart','-progress','pipe:1',str(prepared)]
  total=max(1,int(round(duration*60)))
  worker=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
  if not worker.stdout:raise RuntimeError('Video encoder did not open progress pipe')
@@ -91,9 +98,43 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
    except ValueError:continue
    if count>last:
     last=count
-    print(f'REPLAY {min(count,total)} of {total}',flush=True)
+    print(f'REPLAY {min(count,total)} of {2*total}',flush=True)
  errors=worker.stderr.read() if worker.stderr else ''
  if worker.wait(timeout=190)!=0:raise RuntimeError('Continuous video encoding failed: '+errors[-300:])
+ composed=source_dir/'composed-master.mp4'
+ manifest=source_dir/'presentation.json'
+ events=[]
+ w,h=profile['dimensions']
+ sx,sy=1920/w,1080/h
+ for raw in receipt.get('editorial_events',[]):
+  event={**raw}
+  for key in ('t','start','end'):
+   if key in event:
+    event[key]=max(0.,event[key]-trim)
+  for key in ('resultRect','targetRect'):
+   if key in event:
+    event[key]={k:v*(sx if k in ('x','width') else sy)
+                for k,v in event[key].items()}
+  if 'pointer_samples' in event:
+   event['pointer_samples']=[
+    {'t':p['t']-trim,'x':p['x']*sx,'y':p['y']*sy}
+    for p in event['pointer_samples']]
+  events.append(event)
+ manifest.write_text(json.dumps({'source':safe_url(receipt['source_url']),
+  'cursorless':cursorless,'events':events,'capture_rect':{'width':1920,'height':1080}}))
+ command=[sys.executable,str(Path(__file__).resolve().parents[1]/'scripts/render_event_video.py'),
+    '--video',str(prepared),'--manifest',str(manifest),'--output',str(composed),
+    '--camera-profile','action-first','--presentation','window']
+ if cursorless:
+  command+=['--glass-loupe']
+ with (source_dir/'presentation.log').open('w') as log:
+  subprocess.run(command,check=True,stdout=log,stderr=subprocess.STDOUT,timeout=240)
+ print(f'REPLAY {2*total} of {2*total}',flush=True)
+ metrics=json.loads((source_dir/'camera-metrics.json').read_text())
+ if cursorless and not metrics['glass_loupe_shots']:
+  raise RuntimeError('Recorded slider evidence could not produce a glass shot')
+ shutil.copyfile(source_dir/'SHOTCANDY-LICENSE.txt',out/'SHOTCANDY-LICENSE.txt')
+ composed.replace(master)
  verify_mp4(master,1920,1080,60)
  preview=out/'preview.mp4'
  subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-nostdin',
@@ -112,7 +153,9 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str):
  build_web_player(Path(__file__).parents[1]/'docs/sauce-premium-player-template.html',
                    out,title,story,duration)
  result={
-  'render_mode':'continuous-browser-capture','source_url':safe_url(receipt['source_url']),
+  'render_mode':'continuous-browser-capture','presentation':'floating-browser',
+  'verified_camera_shots':metrics['zoom_shots'],
+  'verified_glass_shots':metrics['glass_loupe_shots'],'source_url':safe_url(receipt['source_url']),
   'title':title,'description':story,'film_mode':mode,'duration_seconds':round(duration,2),
   'discarded_initial_loading_seconds':round(trim,2),
   'source_sha256':receipt['sha256'],

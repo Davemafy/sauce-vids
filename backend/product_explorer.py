@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 from scripts.capture_safety import validate_public_url,guard_route
 from scripts.session_contract import validate_actions
 
-SAFE_LABEL=re.compile(r'paste text instead|show example|try (?:a )?sample|demo|preview|show more|read more|learn more|details|see how it works|view example|explore example|open menu|toggle menu|view features|expand|reveal|play video',re.I)
+SAFE_LABEL=re.compile(r'paste text instead|show example|try (?:a )?sample|demo|preview|show more|read more|learn more|details|see how it works|view example|explore example|open menu|toggle menu|view features|expand|^toggle (?:first|second|both) elements?$|reveal|play video',re.I)
 UNSAFE_LABEL=re.compile(r'delete|remove|purchase|pay|checkout|order|submit|send|register|sign.?up|log.?in|sign.?in|logout|invite|share|publish|subscribe|follow|reset|clear|cancel|upload|download|add to cart|connect|authorize|approve|confirm|book|reserve|refund',re.I)
 UNSAFE_PATH=re.compile(r'/(api|auth|signin|signup|login|logout|register|account|checkout|payment|billing|purchase|unsubscribe|delete|submit|admin|invite|callback|token|session)(/|$)',re.I)
 JS=r"""() => {
@@ -26,11 +26,26 @@ for(const e of document.querySelectorAll('h1,h2,h3,h4')){
  if(headings.length>=30)break;
 }
 const controls=[];
-for(const e of document.querySelectorAll('a[href],button,[role="button"],summary')){
+for(const e of document.querySelectorAll('input[type="range"]:enabled')){
+ if(e.closest('form,[data-private],[data-secret],[data-sensitive]'))continue;
+ const group=e.closest('[role="group"][aria-label]');
+ const label=text(e)||text(group||e);
+ if(!label||!/\b(value selector|volume|calculator|estimator|range|slider)\b/i.test(label))continue;
+ const track=group||e;
+ if(!visible(track)||track.getBoundingClientRect().width<120)continue;
+ controls.push({id:'a'+controls.length,text:label,kind:'slider',selector:path(e)});
+ if(controls.length>=4)break;
+}
+
+const candidates = [...document.querySelectorAll('a[href],button,[role="button"],summary')];
+const priority = e => e.matches('button[aria-controls][aria-expanded="false"],[role="button"][aria-controls][aria-expanded="false"]') ? 0 : e.closest('main') ? 1 : 2;
+candidates.sort((a,b)=>priority(a)-priority(b));
+for(const e of candidates){
  if(!visible(e)||!text(e)||e.closest('[data-private],[data-secret],[data-sensitive]'))continue;
  const tag=e.tagName.toLowerCase(),kind=tag==='a'?'link':'button';
  const href=kind==='link'?e.href:null;
- controls.push({id:'a'+controls.length,text:text(e),tag,kind,href,selector:path(e),button_type:tag==='button'?e.type||'':'',y:Math.round(e.getBoundingClientRect().top+scrollY)});
+ const controlled_panel=e.hasAttribute('aria-controls')&&e.getAttribute('aria-expanded')==='false';
+ controls.push({id:'a'+controls.length,text:text(e),tag,kind,href,controlled_panel,selector:path(e),button_type:tag==='button'?e.type||'':'',y:Math.round(e.getBoundingClientRect().top+scrollY)});
  if(controls.length>=80)break;
 }
 const root=getComputedStyle(document.documentElement),body=getComputedStyle(document.body);
@@ -45,6 +60,7 @@ CHROME='/opt/devmcp-browsers/chromium_headless_shell-1254/chrome-headless-shell-
 def allowed(c,origin):
  label=c['text']
  if UNSAFE_LABEL.search(label):return False
+ if c['kind']=='slider':return bool(re.search(r'\b(value selector|volume|calculator|estimator|range|slider)\b',label,re.I))
  if c['kind']=='button':return c.get('button_type')!='submit' and bool(SAFE_LABEL.search(label))
  try:
   u=urlsplit(c['href']);base=urlsplit(origin)
@@ -85,6 +101,10 @@ def normalize(plan,report):
  proposed=plan.get('action_ids',[])
  if not isinstance(proposed,list):proposed=[]
  chosen=list(dict.fromkeys(x for x in proposed if isinstance(x,str) and x in controls))[:2]
+ # A glass shot uses a dedicated cursorless take with one real drag.
+ slider=next((x for x in chosen if any(c['id']==x and c['kind']=='slider'
+                                      for c in report['controls'])),None)
+ if slider:chosen=[slider]
  proposed_h=plan.get('heading_ids',[])
  if not isinstance(proposed_h,list):proposed_h=[]
  h=list(dict.fromkeys(x for x in proposed_h if isinstance(x,str) and x in headings))[:2]
@@ -99,7 +119,11 @@ def workflow(plan,report):
  if plan['mode']=='interactive':
   lookup={x['id']:x for x in report['controls']}
   for id in plan['action_ids']:
-   sel=lookup[id]['selector']
+   control=lookup[id]
+   sel=control['selector']
+   if control['kind']=='slider':
+    actions.append({'action':'hover','selector':sel,'expect_selector':sel,'settle_ms':300})
+    continue
    actions.extend([{'action':'hover','selector':sel,'expect_selector':sel,'settle_ms':300},
                    {'action':'click','selector':sel,'settle_ms':800}])
  else:

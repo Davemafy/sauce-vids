@@ -35,9 +35,15 @@ choose 1-2 meaningful heading IDs. Do not invent a click outcome.
 """
 
 def direction(report:dict,feedback:list[dict]|None=None):
+    slider=next((c for c in report['controls'] if c['kind']=='slider'),None)
+    if slider:
+        return normalize({'mode':'interactive','action_ids':[slider['id']]},report),0,'local-slider'
+    panel=next((c for c in report['controls']
+                if c['kind']=='button' and c.get('controlled_panel')),None)
+    local={'mode':'interactive','action_ids':[panel['id']]} if panel else {}
     key=os.getenv('GEMINI_API_KEY','')
     if not key:
-        return normalize({},report),0,'no-key-fallback'
+        return normalize(local,report),0,'no-key-fallback'
     model=os.getenv('SAUCE_DIRECTOR_MODEL','gemini-3.1-flash-lite')
     body={
       "contents":[{"role":"user","parts":[
@@ -62,7 +68,7 @@ def direction(report:dict,feedback:list[dict]|None=None):
     except (HTTPError,URLError,TimeoutError,IndexError,KeyError,ValueError,TypeError):
         # Provider outage must not make an otherwise accessible URL impossible
         # to preview. Zero invented product claims: public showcase fallback.
-        return normalize({},report),1,'provider-unavailable-fallback'
+        return normalize(local,report),1,'provider-unavailable-fallback'
 
 def captured(folder:Path,url:str,actions:list[dict],*,tag:str='session'):
     output=folder/tag
@@ -106,8 +112,10 @@ def execute(url:str,folder:Path,progress=None):
     planfile=private/'motion-plan.json'
     planfile.write_text(json.dumps(plan,indent=2))
     env=dict(os.environ,SAUCE_SAFE_PUBLIC_ONLY='1')
+    env.setdefault('SAUCE_CAPTURE_CURSOR','arrow')
+    env.setdefault('SAUCE_CAPTURE_QUALITY','high')
     def run_capture():
-        with (private/'motion-capture.log').open('w') as log:
+        with (private/'motion-capture.log').open('a') as log:
             result=subprocess.run([sys.executable,'-m','backend.live_capture',
               '--url',url,'--out',str(capture_dir),
               '--inspection',str(private/'inspection.json'),
@@ -125,7 +133,7 @@ def execute(url:str,folder:Path,progress=None):
     record=json.loads((capture_dir/'continuous-capture.json').read_text())
     if not record.get('continuous_recording'):
         raise RuntimeError('No continuous motion stream captured')
-    if not any(a.get('kind') in ('link','button') for a in record.get('actions',[])):
+    if not any(a.get('kind') in ('link','button','slider') for a in record.get('actions',[])):
         plan['mode']='showcase'
     stage('rendering')
     export=folder/'export'
