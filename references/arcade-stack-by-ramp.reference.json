@@ -1,0 +1,158 @@
+{
+  "schema": "sauce-reference-grammar-v1",
+  "id": "arcade-stack-by-ramp-20261119",
+  "label": "Task-first UI story with a clear finish",
+  "source": {
+    "publicUrl": "https://cdn.arcade.software/mp4s/K1Mzh18aG5dgLR54rxAN_JRh26WeXAOyQSmeqJD8f.mp4",
+    "attribution": "Stack by Ramp — publicly shared Arcade example",
+    "sha256": "7d22a17f97d3183cae73df90321f7be7943006d9bf7f4ecd7c2a79f15215bbbf",
+    "durationSeconds": 67.2,
+    "frameRate": 30,
+    "size": [
+      1920,
+      1080
+    ],
+    "mediaRights": "analysis-only",
+    "directCaptureClaim": false
+  },
+  "review": {
+    "method": "Human visual review of actual extracted film frames; timestamps are sampled observations, not detected cut boundaries.",
+    "sampledSeconds": [
+      0.6,
+      3.5,
+      7.8,
+      12,
+      16.5,
+      21.5,
+      26,
+      30.5,
+      36,
+      41.5,
+      47,
+      51.5,
+      56.5,
+      61,
+      65.5
+    ],
+    "cutTimesMeasured": false,
+    "easingCurvesMeasured": false,
+    "exactPixelRecreationPermitted": false
+  },
+  "observedFrames": [
+    {
+      "seconds": 0.6,
+      "subject": "Single oversized product name on restrained branded stage",
+      "editorialFunction": "recognition"
+    },
+    {
+      "seconds": 3.5,
+      "subject": "Whole workspace with task prompt and active accent",
+      "editorialFunction": "orientation"
+    },
+    {
+      "seconds": 12,
+      "subject": "A single task prompt and system response dominate",
+      "editorialFunction": "user_intent"
+    },
+    {
+      "seconds": 16.5,
+      "subject": "Large isolated clarification with two choices",
+      "editorialFunction": "decision"
+    },
+    {
+      "seconds": 21.5,
+      "subject": "Task setup or approval panel with prominent action",
+      "editorialFunction": "authorization"
+    },
+    {
+      "seconds": 26,
+      "subject": "Instructions panel showing execution scope",
+      "editorialFunction": "plan"
+    },
+    {
+      "seconds": 30.5,
+      "subject": "Status lines with result-oriented progress",
+      "editorialFunction": "execution"
+    },
+    {
+      "seconds": 36,
+      "subject": "Realistic spreadsheet-style working view",
+      "editorialFunction": "work_evidence"
+    },
+    {
+      "seconds": 41.5,
+      "subject": "Journal-entry details and processing state",
+      "editorialFunction": "work_evidence"
+    },
+    {
+      "seconds": 47,
+      "subject": "Focused posting control",
+      "editorialFunction": "commit"
+    },
+    {
+      "seconds": 51.5,
+      "subject": "Compact confirmed completion with secondary actions",
+      "editorialFunction": "verified_payoff"
+    },
+    {
+      "seconds": 56.5,
+      "subject": "Wider workspace context with multiple connected modules",
+      "editorialFunction": "context_return"
+    },
+    {
+      "seconds": 65.5,
+      "subject": "Brand-only outro",
+      "editorialFunction": "closure"
+    }
+  ],
+  "grammar": {
+    "narrativeArc": [
+      "show product context",
+      "state task",
+      "show decision only if recorded",
+      "show execution only if recorded",
+      "hold verified result",
+      "return to context"
+    ],
+    "focalHierarchy": "One readable primary interface object per beat; background context is subordinate.",
+    "framing": "Wide for orientation, tight for consequential choice or result, medium/wide after completion.",
+    "pacing": "Shorten context beats; give consequential controls and the confirmed outcome a readable hold.",
+    "transitionLogic": "Change focal scale only when story subject or verified state changes; avoid arbitrary cuts.",
+    "cursorPolicy": "Only one real source-timed cursor; do not draw a fake path or animate static cutouts as active.",
+    "stageStyle": "Quiet neutral support stage; capture native product colors rather than copying reference brand styling.",
+    "finalState": "A visible resolved state, not a generic feature montage."
+  },
+  "transfer": {
+    "intendedFor": [
+      "task_to_result",
+      "approval_workflow",
+      "form_to_outcome",
+      "multi_step_product_ui"
+    ],
+    "usableWith": [
+      "sauce-film-plan-v1",
+      "verified browser event sidecar",
+      "source-true UI component crops"
+    ],
+    "omitWhenUnverified": [
+      "decision",
+      "authorization",
+      "execution",
+      "verified_payoff"
+    ],
+    "neverTransfer": [
+      "reference product names, copy, or logos",
+      "reference screenshots or video pixels",
+      "reference UI feature claims",
+      "exact reference timestamps as product event times",
+      "unmeasured proprietary easing curves"
+    ],
+    "validationPriorities": [
+      "evidence before result",
+      "readable action/result at 390px",
+      "no clipped source components",
+      "meaningful change visible",
+      "no silent fake tool execution"
+    ]
+  }
+}

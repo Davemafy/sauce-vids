@@ -2,6 +2,18 @@
 
 **Reviewed:** 2026-11-17. This is a checkpoint, not an assertion that the service or GitHub CI is always healthy. Check `origin/main` and current public output before acting. More recent commits and live evidence supersede these notes.
 
+
+## 2026-11-19 — Reference motion grammar → source-verified Gemini director packet (offline pilot)
+
+Implemented a **non-rendering, no-inference, opt-in director research primitive** on current GitHub main. The actual publicly shared Arcade *Stack by Ramp* film was reopened and sampled at 15 specific frames from 0.6–65.5s. Verified file SHA256: \`7d22a17f97d3183cae73df90321f7be7943006d9bf7f4ecd7c2a79f15215bbbf\`; 1920x1080 H264/30fps, 67.2s. The new analysis-only \`references/arcade-stack-by-ramp.reference.json\` captures observed editorial beats (recognition → workspace → task → decision/approval → work → confirmation → context/outro), transferable framing hierarchy and hard restrictions. Sampling gives actual representative frames; exact cut times and easing curves were **not** measured. No source video frames, audio, logos or proprietary script are committed.
+
+\`scripts/reference_director_packet.py\` validates the style recipe and constructs a **local** compact \`sauce-director-packet-v1\` from customer brief and source-verified event geometry/time. It outputs only measured target/result/component rectangles, allowed anchored event IDs, hashes, actual declared source duration and transferable film grammar—no reference film pixels/URLs/identifying names, arbitrary capture text or reference product claims. It refuses missing evidence, impossible geometry, invalid timestamp, unknown reference rights, or film duration beyond the sidecar's source duration. The model may suggest an independently validated \`sauce-film-plan-v1\`, not invent user actions or treat a reference action as product evidence. No Gemini model was called; the production endpoint is **not wired**.
+
+**Actual isolated transfer proof:** the newly verified Resend 1920x1080 public browser capture (\`902805cf5c146f995ef2ade1b3076a1841deaf62c3adf105a749aa8595b4c9da\`, 7.68s/25fps) was paired with the Arcade recipe and a 6.5s customer-like brief. The local 2,946-byte director packet admitted only recorded slider event 0, its result at 3.6832s and allowed target/result/component/group anchors. Private packet: \`sauce-refs-director/.tmp-refs/resend-style-packet.json\`. It was **not** sent outside the Vultr worker and was **not** rendered by Gemini. Local deterministic tests: **272 passed, 10 skipped, 10 subtests passed** across Phase 2, URL/live-edit and capture geometry; reference packet's own 13 tests pass.
+
+Next quality gates: convert 2–3 further reference families with actual frame observations; add a schema-compatible Gemini adapter only with explicit model usage/privacy authorization and cost limits; run a constrained production-plan generation + strict runtime validation + real render with decoded full-size/mobile frame review; reject bad cuts and prove a second-product transfer. This milestone is neither a polished output nor evidence of user-paid demand. No production deployment, paid inference or infrastructure change.
+
+
 ## 2026-11-19 — Complete source-true component capture for JSON UI layers
 
 **Problem verified in actual film:** Earlier separated Resend UI was clipped because its resultRect described only changed price text, while the real Pro card was 299x658px and crossed the bottom of the initial 1080px viewport. Adding arbitrary padding cannot recover missing authentic pixels.
