@@ -1,0 +1,51 @@
+{
+  "name": "resend-pricing-live-15s",
+  "url": "https://resend.com/pricing",
+  "controlSelector": "[data-base-ui-slider-control]",
+  "rangeSelector": "input[type=range]",
+  "rawSeconds": 16,
+  "initialFraction": 0.125,
+  "initialValue": 0.125,
+  "initialExpected": [
+    "$20 / mo",
+    "$90 / mo"
+  ],
+  "actions": [
+    {
+      "label": "Pro 50k to 100k",
+      "approachStart": 1.35,
+      "approachDuration": 1.2,
+      "from": 0.125,
+      "dragStart": 3,
+      "dragDuration": 0.95,
+      "to": 0.25,
+      "expectedValue": 0.25,
+      "expectedPrice": "$35 / mo"
+    },
+    {
+      "label": "Scale 100k to 200k",
+      "approachStart": 6.2,
+      "approachDuration": 0.48,
+      "from": 0.25,
+      "dragStart": 6.85,
+      "dragDuration": 0.85,
+      "to": 0.375,
+      "expectedValue": 0.375,
+      "expectedPrice": "$160 / mo"
+    },
+    {
+      "label": "Scale 200k to 500k",
+      "approachStart": 9.2,
+      "approachDuration": 0.48,
+      "from": 0.375,
+      "dragStart": 9.85,
+      "dragDuration": 0.88,
+      "to": 0.5,
+      "expectedValue": 0.5,
+      "expectedPrice": "$350 / mo"
+    }
+  ],
+  "parkAt": 12.3,
+  "parkDuration": 1,
+  "completionAt": 14.65
+}
