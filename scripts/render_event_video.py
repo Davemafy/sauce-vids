@@ -514,6 +514,13 @@ def diagnostics():
                           for i in range(frames)])
         if not np.isfinite(quads).all():raise ValueError("Nonfinite studio stage geometry")
         speeds=np.linalg.norm(np.diff(quads,axis=0),axis=2)
+        # The step between the frame before and at an *explicit source-aligned
+        # editorial cut* is not a physical camera velocity. Do not treat it as
+        # interpolation, or relax velocity bounds on any non-cut frames.
+        hard_cut_frames=STUDIO_STAGE.source_aligned_cuts(FPS,TRIM_FRAMES)
+        for frame_index in hard_cut_frames:
+            edge=frame_index-1
+            if 0<=edge<len(speeds):speeds[edge,:]=0
         max60=float(speeds.max(initial=0))*FPS/60
         metrics["studioStage"]={
             "enabled":True,
@@ -522,7 +529,8 @@ def diagnostics():
             "finalPayoffVisibleFraction":round(STUDIO_STAGE.visibility(FILM_PLAN.duration),4),
             "finalContextVisibleFraction":round(STUDIO_STAGE.context_visibility(FILM_PLAN.duration),4),
             "payoffMode":STUDIO_STAGE.payoff_mode,
-            "cameraKeys":len(STUDIO_STAGE.camera)}
+            "cameraKeys":len(STUDIO_STAGE.camera),
+            "hardCutSourceFrames":list(hard_cut_frames)}
         if POINTER is not None:
             # Verify actual recorded cursor tip is visible during the
             # source-backed hero event, not merely drawn off-screen.
@@ -623,6 +631,7 @@ def render(output,seconds=None,static=False):
             record["film_plan"]["studioStage"]={
                 "enabled":True, "onset":STUDIO_STAGE.onset,
                 "cameraKeys":len(STUDIO_STAGE.camera),
+                "hardCutSourceFrames":list(STUDIO_STAGE.source_aligned_cuts(FPS,TRIM_FRAMES)),
                 "lightEventIndex":STUDIO_STAGE.light_event,
                 "payoffVisibility":STUDIO_STAGE.visibility(FILM_PLAN.duration),
                 "contextVisibility":STUDIO_STAGE.context_visibility(FILM_PLAN.duration),

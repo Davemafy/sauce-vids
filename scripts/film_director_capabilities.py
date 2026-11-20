@@ -87,9 +87,30 @@ def build_contract(source,manifest,brief):
                 continue
             fields[kind]={key:b[key] for key in ("x","y","width","height")}
         if "target" in fields and ("result" in fields or "component" in fields):
+            # Present director-safe SOURCE FRAME INDICES, not guessed times.
+            # Reuse the same strict appearance detector as the real renderer.
+            onset=e["t"]
+            method="verified-event-time"
+            if "result" in fields:
+                try:
+                    from spatial_studio_stage import detect_appearance_onset
+                    evidence=detect_appearance_onset(source,tuple(size),e,fps)
+                    onset=float(evidence["time"])
+                    method=evidence["method"]
+                except (ValueError,KeyError,RuntimeError,ImportError):
+                    # Source-proof analysis is optional, never an invitation to
+                    # claim a speculative earlier result or publish credentials.
+                    onset=e["t"]
+            action_frame=int(math.ceil(e["start"]*fps-1e-8))
+            result_frame=int(math.ceil(onset*fps-1e-8))
+            candidate_cuts={
+               "action":{"nativeFrame":action_frame,"atSeconds":round(action_frame/fps,6),
+                         "notBeforeActualPress":True},
+               "result":{"nativeFrame":result_frame,"atSeconds":round(result_frame/fps,6),
+                         "onsetMethod":method,"notBeforeActualResult":True}}
             events.append({"index":i,"kind":str(e.get("kind","event"))[:40],
                 "sourceTime":{"start":e["start"],"end":e["end"],"confirmedResultAt":e["t"]},
-                "verifiedGeometry":fields})
+                "verifiedGeometry":fields,"candidateCuts":candidate_cuts})
     if not events:raise ValueError("No verified target and product result for director")
     schema=json.loads(SCHEMA_PATH.read_text())
     pointer=source_pointer_capabilities(raw,size)
@@ -109,7 +130,9 @@ def build_contract(source,manifest,brief):
             "studioStage":"opt-in source-derived perspective stage with source-only UI "
               "pixels, material grain, true recorded pointer, bounded depth, perspective camera, "
               "verified event lighting or sustained source-pixel appearance trigger, source-derived "
-              "shadow/reflection, overview/detail payoff clipping guard",
+              "shadow/reflection, native-frame source-true editorial camera hard cuts (camera cut=true, "
+              "startAt=at, at aligned to source FPS, maximum 3, >=0.35s apart), "
+              "overview/detail payoff clipping guard",
             "glassLoupe":"optional event-driven optical magnifier; do not use merely for decoration",
             "composition":"optional frozen genuine-UI pixel isolation, not live DOM layering"
         },
@@ -120,9 +143,20 @@ def build_contract(source,manifest,brief):
             "durationSeconds":"Do not exceed actualCapture.durationSeconds",
             "camera":"Omit when studioStage.camera takes over. Otherwise supply validated 2D keys.",
             "studioStage":"Choose only if the creative direction benefits. "
+                "IMPORTANT CAMERA COORDINATE SEMANTICS: center=[x,y] means the "
+                "normalized OUTPUT PLACEMENT OF THE ENTIRE SOURCE WINDOW, NOT "
+                "the place in the source UI the camera should look at. For "
+                "source-verified interactions, use focus='event:N:target' for "
+                "the click and focus='event:N:result' for the payoff; the "
+                "engine computes projection from the exact measured bounds. "
+                "Never use center=[.2,.3] to mean 'look at top left of app'. "
                 "Use studioStage.lighting.eventIndex and an appropriate verified payoff. "
-                "Set trigger='appearance' only for a plausible visual color change; the engine "
-                "detects actual source-frame evidence or falls back to recorded confirmation.",
+                "Set trigger='appearance' only for a plausible visual color change. "
+                "For decisive action-to-result shot transitions, camera keys may use cut=true "
+                "ONLY at native frame aligned times with startAt=at. Candidate click/result "
+                "native-frame cut timestamps are supplied per genuine verified event. "
+                "Protect action target, preserve legible final payoff and do not require "
+                "hard cuts where an authentic slow hold is more cinematic.",
             "cursor":"For studioStage and flat camera choose ONLY the modes listed "
                      "in actualCapture.pointerProvenance.allowedCursorModesForStudio; "
                      "never invent cursor motion. The legacy glassLoupe may use "

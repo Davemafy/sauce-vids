@@ -415,6 +415,10 @@
                   "minimum": 0.1,
                   "maximum": 0.9
                 }
+              },
+              "cut": {
+                "type": "boolean",
+                "description": "Explicit native-frame editorial camera cut. When true, startAt=at. Never changes genuine source pixels."
               }
             }
           }

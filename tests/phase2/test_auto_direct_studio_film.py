@@ -184,3 +184,91 @@ def test_stage_cursor_is_only_removed_with_verified_missing_source_track(source_
     retained,unused=normalize_generated_studio_plan(p,manifest=m)
     assert retained["cursor"]=="recorded"
     assert not unused["changes"]
+
+
+def test_model_packet_contains_frame_exact_research_provenance(source_pair):
+    from film_director_capabilities import build_contract
+    src,manifest=source_pair
+    packet=build_contract(src,manifest,"Direct a real feature film")
+    event=packet["actualCapture"]["verifiedEvents"][0]
+    assert event["candidateCuts"]["action"]=={
+        "nativeFrame":15,"atSeconds":.6,"notBeforeActualPress":True}
+    assert event["candidateCuts"]["result"]["nativeFrame"]==26
+    assert event["candidateCuts"]["result"]["atSeconds"]==1.04
+    assert event["candidateCuts"]["result"]["onsetMethod"]=="sustained-pixel-evidence"
+    assert packet["actualCapture"]["nativeFps"]==25
+    assert "cut" in packet["outputSchema"]["properties"]["studioStage"]["properties"]["camera"]["items"]["properties"]
+    assert "Future mock UI" not in json.dumps(packet)
+
+
+def test_reference_paths_and_provenance_checked_before_model_use(source_pair,tmp_path):
+    src,manifest=source_pair
+    plan=valid_plan(src,manifest)
+    oversized=tmp_path/"not-mp4.txt"
+    oversized.write_text("not reference")
+    def model(*args,**kwargs):
+        raise AssertionError("No model/network call with invalid reference")
+    def validator(*args):raise AssertionError("No validation needed")
+    with pytest.raises(ValueError,match="Invalid private research reference"):
+        run_unattended(src,manifest,"Beautiful source true product film",tmp_path/"new",
+            model="gemini-3-flash-preview",key="dummy",max_attempts=1,
+            model_call=model,validator=validator,render=False,
+            reference_paths=[oversized])
+    assert not (tmp_path/"new").exists()
+
+
+def test_overview_scale_fit_preserves_every_non_final_creative_camera_key(source_pair,tmp_path):
+    from studio_plan_bounded_repair import normalize_generated_studio_plan
+    from spatial_studio_stage import load_studio_stage
+    src,manifest=source_pair
+    m=json.loads(manifest.read_text())
+    plan={
+        "schema":"sauce-film-plan-v1",
+        "sourceSha256":hashlib.sha256(src.read_bytes()).hexdigest(),
+        "manifestSha256":hashlib.sha256(manifest.read_bytes()).hexdigest(),
+        "durationSeconds":2.0,"presentation":"fullscreen","cursor":"none",
+        "studioStage":{
+           "camera":[
+               {"at":0,"scale":.73,"center":[.5,.5]},
+               {"at":.85,"scale":.95,"focus":"event:0:target"},
+               {"at":1.3,"startAt":1.3,"scale":.85,"focus":"event:0:result"},
+               {"at":2.0,"scale":1.12,"center":[.5,.5]}],
+           "lighting":{"eventIndex":0,"trigger":"verified"},
+           "payoff":{"region":"event:0:result","mode":"overview",
+                     "minVisible":.70,"minContextVisible":.85}
+        }}
+    original=json.loads(json.dumps(plan))
+    corrected,receipt=normalize_generated_studio_plan(
+        plan,manifest=m,source_path=src,source_size=(320,180),
+        fps=25,output_size=(640,360))
+    changed=[item for item in receipt["changes"] if item["field"].endswith(".scale")]
+    assert len(changed)<=1
+    assert corrected["studioStage"]["camera"][:-1]==original["studioStage"]["camera"][:-1]
+    assert corrected["studioStage"]["camera"][-1]["at"]==2.0
+    assert corrected["sourceSha256"]==original["sourceSha256"]
+    assert corrected["manifestSha256"]==original["manifestSha256"]
+    assert corrected["studioStage"]["camera"][-1]["scale"]<=original["studioStage"]["camera"][-1]["scale"]
+    assert corrected["studioStage"]["camera"][-1]["scale"]>=original["studioStage"]["camera"][-1]["scale"]-.22-.0001
+    assert plan==original
+
+
+def test_redundant_default_center_and_default_quintic_only_are_mechanical(source_pair):
+    from studio_plan_bounded_repair import normalize_generated_studio_plan
+    src,manifest=source_pair
+    p={"presentation":"window","studioStage":{"camera":[
+        {"at":0,"scale":.8,"center":[.5,.5]},
+        {"at":2.0,"scale":.85,"center":[.5,.5],
+         "focus":"event:0:result","easing":"quintic"}],
+        "lighting":{"eventIndex":0}}}
+    old=json.loads(json.dumps(p))
+    fixed,receipt=normalize_generated_studio_plan(p)
+    assert old==p
+    assert fixed["presentation"]=="fullscreen"
+    assert fixed["studioStage"]["camera"][1].get("center") is None
+    assert fixed["studioStage"]["camera"][1].get("easing") is None
+    assert len(receipt["changes"])==3
+    # Unsupported easing must stay in JSON and be rejected by strict validator.
+    odd=json.loads(json.dumps(p))
+    odd["studioStage"]["camera"][1]["easing"]="linear"
+    unchanged,r=normalize_generated_studio_plan(odd)
+    assert unchanged["studioStage"]["camera"][1]["easing"]=="linear"

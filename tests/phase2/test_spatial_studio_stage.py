@@ -271,3 +271,81 @@ def test_studio_stage_owns_camera_without_dummy_flat_camera(capture):
     assert len(result.camera_keys)==2
     assert all(k.zoom==1 for k in result.camera_keys)
     assert result.camera_keys[-1].at==2.4
+
+
+def test_source_aligned_hard_cuts_use_actual_frames_and_real_events(capture):
+    _,src,m=capture
+    cfg=plan()
+    cfg["camera"]=[
+        {"at":0,"scale":.78,"center":[.5,.5],"yaw":-4},
+        {"at":.60,"startAt":.60,"scale":1.10,
+         "focus":"event:0:target","cut":True},
+        {"at":1.04,"startAt":1.04,"scale":.81,
+         "focus":"event:0:result","cut":True},
+        {"at":2.4,"startAt":1.4,"scale":.78,
+         "center":[.5,.5]}]
+    st=load(cfg,m,src)
+    assert st.source_aligned_cuts(25)==(15,26)
+    before=st.quad(.56)
+    after=st.quad(.60)
+    assert np.max(np.linalg.norm(before-after,axis=1))>20
+    # The cut changes CAMERA only; never the actual pixel source.
+    cap=cv2.VideoCapture(str(src))
+    cap.set(cv2.CAP_PROP_POS_FRAMES,26)
+    ok,frame=cap.read();cap.release()
+    assert ok
+    original=frame.copy()
+    rendered=render_studio_stage(st,frame,1.04)
+    assert np.array_equal(frame,original)
+    assert rendered.shape==(360,640,3)
+
+
+def test_hard_cut_must_be_source_frame_aligned_and_after_proven_result(capture):
+    _,src,m=capture
+    cfg=plan()
+    cfg["camera"]=[
+        {"at":0,"scale":.78,"center":[.5,.5]},
+        {"at":.60,"startAt":.60,"scale":1.0,"focus":"event:0:target","cut":True},
+        {"at":1.04,"startAt":1.04,"scale":.79,"focus":"event:0:result","cut":True},
+        {"at":2.4,"scale":.78,"center":[.5,.5]}]
+    assert len(load(cfg,m,src).source_aligned_cuts(25))==2
+    bad=json.loads(json.dumps(cfg))
+    bad["camera"][2]["at"]=1.03
+    bad["camera"][2]["startAt"]=1.03
+    with pytest.raises(ValueError,match="native source frame"):
+        load(bad,m,src)
+    bad=json.loads(json.dumps(cfg))
+    bad["camera"][2]["at"]=1.00
+    bad["camera"][2]["startAt"]=1.00
+    with pytest.raises(ValueError,match="source-visible"):
+        load(bad,m,src)
+    bad=json.loads(json.dumps(cfg))
+    bad["camera"][1]["startAt"]=.58
+    with pytest.raises(ValueError,match="start exactly"):
+        load(bad,m,src)
+    bad=json.loads(json.dumps(cfg))
+    bad["camera"][1]["cut"]="yes"
+    with pytest.raises(ValueError,match="explicit boolean"):
+        load(bad,m,src)
+
+
+def test_hard_cut_rejects_false_final_frame_and_clipped_real_action(capture):
+    _,src,m=capture
+    cfg=plan()
+    cfg["camera"][-1]["cut"]=True
+    cfg["camera"][-1]["startAt"]=2.4
+    with pytest.raises(ValueError,match="exclusive final frame"):
+        load(cfg,m,src)
+
+
+def test_hard_cut_does_not_weaken_existing_smooth_motion_constraints(capture):
+    _,src,m=capture
+    cfg=plan()
+    cfg["camera"][1]["cut"]=True
+    cfg["camera"][1]["at"]=.88  # exact native frame 22 / 25
+    cfg["camera"][1]["startAt"]=.88
+    # No 'cut' flag on later smooth keys: their regular velocity remains
+    # subject to the studio's 60fps-equivalent camera motion gate.
+    st=load(cfg,m,src)
+    assert st.camera[1].cut
+    assert not st.camera[2].cut

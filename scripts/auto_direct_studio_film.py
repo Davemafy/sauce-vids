@@ -51,7 +51,7 @@ def safe_model_name(value):
     return value
 
 
-def _model_request(source,packet,model,key,feedback=None):
+def _model_request(source,packet,model,key,feedback=None,*,reference_paths=()):
     """One network call. Never persist the API key, raw data or headers."""
     source=Path(source)
     if source.stat().st_size>MAX_SOURCE_BYTES:
@@ -67,7 +67,12 @@ def _model_request(source,packet,model,key,feedback=None):
         "interaction must be clear, and the final verified product result must "
         "remain legible. Your output will be independently validated and rendered "
         "without any human fixes. Production quality requires strong first-second "
-        "composition, ambitious but useful spatial staging, and readable payoff.\n"
+        "composition, ambitious but useful spatial staging, and readable payoff. "
+        "For an action closeup choose the source-verified event target anchor; "
+        "the camera center only places the WHOLE app window in the output and "
+        "is not a website focus coordinate. "
+        "If a reference suggests a decisive editorial cut, use only native-source-frame "
+        "times and do not show verified results before they genuinely appear.\n"
         "REAL VERIFIED SOURCE + EXACT EXECUTABLE CONTRACT:\n"+
         json.dumps(packet,ensure_ascii=False,separators=(",",":"))
     )
@@ -78,11 +83,34 @@ def _model_request(source,packet,model,key,feedback=None):
             "errors. No imaginary capabilities or arbitrary textual excuses:\n"+
             feedback[:2600]
         )
+    references=[]
+    for name in reference_paths:
+        path=Path(name)
+        if not path.is_file() or path.suffix.lower()!=".mp4" or path.stat().st_size>12*1024*1024:
+            raise ValueError("Private study reference must be an existing MP4 <=12 MiB")
+        references.append(path)
+    if len(references)>2:
+        raise ValueError("At most two licensed/private motion-study references")
+    if references:
+        prompt+=(
+            "\nVISUAL REFERENCE STUDIES: After the genuine source video, you will "
+            "receive one or two separate **external motion-design** reference "
+            "clips in order. Study their compositional rhythm, filmic lighting, "
+            "close-up legibility and editorial cuts. These are NOT genuine states "
+            "of the source website, NOT 1:1 executable reference JSON and NOT "
+            "automatically approved gold data. Do not copy literal UI pixels, "
+            "text, logos, colors or hard-coded reference camera coordinates. "
+            "Translate abstract principles to the actual source evidence. "
+            "Give the REAL website a compelling action and readable payoff."
+        )
     parts=[
         {"text":prompt},
         {"inline_data":{"mime_type":"video/mp4",
                         "data":base64.b64encode(source.read_bytes()).decode("ascii")}}
     ]
+    parts.extend({"inline_data":{"mime_type":"video/mp4",
+                        "data":base64.b64encode(path.read_bytes()).decode("ascii")}}
+                 for path in references)
     payload={"contents":[{"role":"user","parts":parts}],
              "generationConfig":{"temperature":TEMPERATURE,
                                  "responseMimeType":"application/json",
@@ -97,7 +125,8 @@ def _model_request(source,packet,model,key,feedback=None):
                 candidate.get("content",{}).get("parts",[]))
     return raw,{"model":model,"finishReason":candidate.get("finishReason"),
                 "usageMetadata":body.get("usageMetadata",{}),
-                "sourceSha256":packet["actualCapture"]["sourceSha256"]}
+                "sourceSha256":packet["actualCapture"]["sourceSha256"],
+                "referenceStudySha256":[sha(x) for x in references]}
 
 
 def _validate(source,manifest,plan,output_dir,timeout=120):
@@ -117,7 +146,7 @@ def _validate(source,manifest,plan,output_dir,timeout=120):
 
 def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMPTS,
                    model_call=_model_request,validator=_validate,
-                   render=True):
+                   render=True,reference_paths=()):
     """Run an evidence-first film job; returns private receipts and stage status.
 
     Output is fail-closed: cannot render until an actual renderer --validate-only
@@ -132,6 +161,12 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
         raise RuntimeError("Gemini credential unavailable; no invented fallback output")
     if source.stat().st_size>MAX_SOURCE_BYTES:
         raise ValueError("Source exceeds bounded model-video size")
+    if len(reference_paths)>2:
+        raise ValueError("At most two externally sourced private study clips")
+    refs=[Path(p).resolve() for p in reference_paths]
+    for ref in refs:
+        if not ref.is_file() or ref.suffix.lower()!=".mp4" or ref.stat().st_size>12*1024*1024:
+            raise ValueError("Invalid private research reference MP4")
     packet=build_contract(source,manifest,brief)
     if packet["actualCapture"]["durationSeconds"]>MAX_SOURCE_SECONDS:
         raise ValueError("A 30s max original source is required for bounded model direction")
@@ -144,7 +179,8 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
     (out/"source-packet.json").write_text(json.dumps(packet,indent=2)+"\n")
     result={"schema":"sauce-auto-director-receipt-v1",
             "sourceSha256":sha(source),"manifestSha256":sha(manifest),
-            "model":model,"creativeApproved":False,"attempts":[],
+            "model":model,"referenceStudySha256":[sha(p) for p in refs],
+            "referenceStatus":"research_only_not_gold","creativeApproved":False,"attempts":[],
             "outcome":"failed","rendered":False,
             "why":"pending first source-verified direction"}
     feedback=None
@@ -153,7 +189,11 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
         result["attempts"].append(record)
         try:
             began=time.monotonic()
-            raw,usage=model_call(source,packet,model,key,feedback)
+            if refs and model_call is _model_request:
+                raw,usage=model_call(source,packet,model,key,feedback,
+                                     reference_paths=tuple(refs))
+            else:
+                raw,usage=model_call(source,packet,model,key,feedback)
             record.update(usage)
             record["modelSeconds"]=round(time.monotonic()-began,2)
             raw_path=out/f"model-{i}-raw.txt"
@@ -167,7 +207,9 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
             original=out/f"model-{i}-original.json"
             original.write_text(json.dumps(plan,indent=2)+"\n")
             amended,repair=normalize_generated_studio_plan(
-                plan,manifest=json.loads(manifest.read_text()))
+                plan,manifest=json.loads(manifest.read_text()),
+                source_path=source,source_size=tuple(packet["actualCapture"]["resolution"]),
+                fps=packet["actualCapture"]["nativeFps"])
             normalized=out/f"model-{i}-normalized.json"
             normalized.write_text(json.dumps(amended,indent=2)+"\n")
             (out/f"model-{i}-mechanical-repair.json").write_text(
@@ -238,10 +280,13 @@ def main():
     p.add_argument("--out",type=Path,required=True)
     p.add_argument("--model",default=os.environ.get("SAUCE_DIRECTOR_MODEL","gemini-3-flash-preview"))
     p.add_argument("--max-attempts",type=int,default=2)
+    p.add_argument("--reference-video",type=Path,action="append",default=[],
+                   help="Optional research-only owned/licensed UI-motion reference MP4, max 2")
     a=p.parse_args()
     key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     r=run_unattended(a.source,a.manifest,a.brief,a.out,
-          model=a.model,key=key,max_attempts=a.max_attempts)
+          model=a.model,key=key,max_attempts=a.max_attempts,
+          reference_paths=a.reference_video)
     print(json.dumps({"outcome":r["outcome"],"rendered":r["rendered"],
         "attempts":len(r["attempts"]),"creativeApproved":False,
         "receipt":str(a.out/"unattended-receipt.json")}))

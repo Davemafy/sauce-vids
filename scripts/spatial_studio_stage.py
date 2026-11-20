@@ -53,6 +53,7 @@ class Key:
     center_x:float
     center_y:float
     focus:str
+    cut:bool=False
 
 
 def _event(manifest,index,duration):
@@ -166,7 +167,12 @@ class StudioStage:
         prev=self.camera[0]
         for key in self.camera[1:]:
             if t<key.at:
-                p=_eased((t-key.start_at)/(key.at-key.start_at)) if t>=key.start_at else 0.
+                # Intentional hard cut holds the previous *real source* camera
+                # pose until the exact source-frame boundary, then jumps. This
+                # never changes the browser state or invents intermediate UI.
+                p=(0. if key.cut else
+                   _eased((t-key.start_at)/(key.at-key.start_at))
+                   if t>=key.start_at else 0.)
                 break
             prev=key
         else:
@@ -174,6 +180,11 @@ class StudioStage:
         return tuple(a+(b-a)*p for a,b in zip(
             (prev.scale,prev.yaw,prev.pitch,prev.center_x,prev.center_y),
             (key.scale,key.yaw,key.pitch,key.center_x,key.center_y)))
+
+    def source_aligned_cuts(self,fps,trim_frames=0):
+        # Only emitted cuts strictly inside the encoded range are measured.
+        return tuple(int(round(k.at*fps))-trim_frames for k in self.camera
+                     if k.cut and int(round(k.at*fps))>trim_frames)
 
     def quad(self,t):
         scale,yaw,pitch,cx,cy=self.pose(t)
@@ -259,13 +270,29 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
         raise ValueError("Studio camera requires 2..24 keys")
     parsed=[]
     for k in keys:
-        _fields(k,("at","startAt","scale","yaw","pitch","center","focus"),"studioStage.camera")
+        _fields(k,("at","startAt","scale","yaw","pitch","center","focus","cut"),"studioStage.camera")
         at=_number(k.get("at"),"studioStage.camera.at",0,duration)
         if parsed and at<=parsed[-1].at:
             raise ValueError("Studio camera keys must increase in time")
         start=_number(k.get("startAt",parsed[-1].at if parsed else 0),"studioStage.camera.startAt",0,at)
         if parsed and start<parsed[-1].at:
             raise ValueError("Studio camera transitions cannot overlap preceding keys")
+        cut=k.get("cut",False)
+        if type(cut) is not bool:
+            raise ValueError("Studio cut must be an explicit boolean")
+        if cut:
+            if not parsed:
+                raise ValueError("Studio cannot cut on the first camera key")
+            if abs(start-at)>1e-6:
+                raise ValueError("Studio hard cut must start exactly at its destination key time")
+            if abs(at*fps-round(at*fps))>1e-4:
+                raise ValueError("Studio hard cut must align with a native source frame")
+            if round(at*fps)>=round(duration*fps):
+                raise ValueError("Studio hard cut at the exclusive final frame is not rendered")
+            if sum(key.cut for key in parsed)>=3:
+                raise ValueError("Studio allows at most 3 intentional editorial cuts")
+            if any(key.cut and at-key.at<.35 for key in parsed):
+                raise ValueError("Studio hard cuts must be at least 0.35 seconds apart")
         scale=_number(k.get("scale"),"studioStage.camera.scale",.55,1.55)
         yaw=_number(k.get("yaw",0),"studioStage.camera.yaw",-16,16)
         pitch=_number(k.get("pitch",0),"studioStage.camera.pitch",-12,12)
@@ -294,7 +321,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
             fy=(box[1]+box[3]*.5)/source_size[1]
             cx=.5+(0.5-fx)*scale
             cy=.5+(0.5-fy)*scale*(output_size[0]/output_size[1])*(source_size[1]/source_size[0])
-        parsed.append(Key(at,start,scale,yaw,pitch,cx,cy,focus))
+        parsed.append(Key(at,start,scale,yaw,pitch,cx,cy,focus,cut))
     if parsed[0].at!=0 or abs(parsed[-1].at-duration)>.0001:
         raise ValueError("Studio camera must cover whole film exactly")
     payoff=data.get("payoff",{})
@@ -322,7 +349,12 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
     target_visible=obj.region_visibility(ev["start"],_bounds(ev,"targetRect",source_size))
     if target_visible<.80:
         raise ValueError(
-            f"Studio framing hides genuine action target: {target_visible:.3f} visible")
+            f"Studio framing hides genuine action target: {target_visible:.3f} visible. "
+            f"At source t={ev['start']:.4f}s, camera must place the REAL event "
+            f"target on-screen. Camera.center locates the entire window in "
+            f"OUTPUT space; it does not aim at part of the website. Prefer "
+            f"focus='event:{index}:target' in the key active at the click. "
+            f"Do not invent source coordinates or move the verified event.")
     if actual+0.001<visible:
         raise ValueError(f"Final studio payoff would be clipped: {actual:.3f} visible < {visible:.3f}")
     if mode=="overview" and obj.context_visibility(duration)+.001<context:
