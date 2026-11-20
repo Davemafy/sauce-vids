@@ -24,6 +24,26 @@ def _hash(p):
     return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
 
+def source_pointer_capabilities(raw,size):
+    """Conservative pointer facts with no guessed or invented motion."""
+    samples=raw.get("pointer_samples")
+    ordered=False
+    if isinstance(samples,list) and len(samples)>=2:
+        try:
+            seq=[(float(p["t"]),float(p["x"]),float(p["y"])) for p in samples]
+            ordered=(all(math.isfinite(v) for p in seq for v in p) and
+                     all(0<=p[1]<size[0] and 0<=p[2]<size[1] for p in seq) and
+                     all(b[0]>a[0] for a,b in zip(seq,seq[1:])))
+        except (KeyError,ValueError,TypeError):
+            ordered=False
+    event_samples=any(isinstance(e,dict) and
+              isinstance(e.get("pointer_samples"),list) and len(e["pointer_samples"])>=2
+              for e in raw.get("events",[]))
+    return {"recordedPointerTrackAvailable":bool(ordered),
+            "eventLocalPointerSamplesPresent":bool(event_samples),
+            "allowedCursorModesForStudio":["none","recorded"] if ordered else ["none"]}
+
+
 def build_contract(source,manifest,brief):
     source=Path(source);manifest=Path(manifest)
     if not source.is_file() or not manifest.is_file():
@@ -72,12 +92,14 @@ def build_contract(source,manifest,brief):
                 "verifiedGeometry":fields})
     if not events:raise ValueError("No verified target and product result for director")
     schema=json.loads(SCHEMA_PATH.read_text())
+    pointer=source_pointer_capabilities(raw,size)
     return {
         "schema":"sauce-director-available-capabilities-v1",
         "brief":brief.strip(),
         "actualCapture":{"sourceSha256":_hash(source),"manifestSha256":_hash(manifest),
            "resolution":size,"nativeFps":fps,"durationSeconds":duration,
-           "sourceCursorless":True,"verifiedEvents":events},
+           "sourceCursorless":True,"verifiedEvents":events,
+           "pointerProvenance":pointer},
         "creativeInstruction":"Direct a compelling, source-true cinematic UI film. "
            "You may choose any exposed effect and design original camera/keyframe timings. "
            "Prior references are stylistic only; never copy old product states. "
@@ -101,6 +123,10 @@ def build_contract(source,manifest,brief):
                 "Use studioStage.lighting.eventIndex and an appropriate verified payoff. "
                 "Set trigger='appearance' only for a plausible visual color change; the engine "
                 "detects actual source-frame evidence or falls back to recorded confirmation.",
+            "cursor":"For studioStage and flat camera choose ONLY the modes listed "
+                     "in actualCapture.pointerProvenance.allowedCursorModesForStudio; "
+                     "never invent cursor motion. The legacy glassLoupe may use "
+                     "separate verified event-local pointer samples when present.",
             "sourceTruth":"Never add fabricated buttons, text, results, future-state motion, "
                 "unverified click targets, or invented pointer samples.",
             "narrative":"Show action, observed change and a legible final payoff."
