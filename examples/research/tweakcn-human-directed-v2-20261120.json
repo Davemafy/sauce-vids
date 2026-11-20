@@ -1,0 +1,76 @@
+{
+  "schema": "sauce-film-plan-v1",
+  "sourceSha256": "60bf8361269138f66af844d21c3ab86c12e2c3a3f1bebce7bb701c3ea1a77605",
+  "manifestSha256": "2253970fdd383a17bf7eedc1c0c4a59d143c49708010ae94d630fc9fe1e78ee0",
+  "durationSeconds": 5.44,
+  "presentation": "fullscreen",
+  "cursor": "recorded",
+  "audio": {
+    "mode": "file",
+    "file": "sound-v2.wav"
+  },
+  "camera": [
+    {
+      "at": 0,
+      "anchor": "wide",
+      "zoom": 1.08
+    },
+    {
+      "at": 0.75,
+      "anchor": "wide",
+      "zoom": 1.11,
+      "easing": "quintic"
+    },
+    {
+      "at": 1.94,
+      "anchor": "wide",
+      "zoom": 1.11,
+      "easing": "quintic"
+    },
+    {
+      "at": 2.92,
+      "startAt": 1.9584,
+      "anchor": "event:0:result",
+      "zoom": 1.2,
+      "easing": "quintic"
+    },
+    {
+      "at": 5.44,
+      "anchor": "event:0:result",
+      "zoom": 1.2,
+      "easing": "quintic"
+    }
+  ],
+  "composition": {
+    "mode": "isolated-ui",
+    "startAt": 2.96,
+    "background": [
+      235,
+      234,
+      232
+    ],
+    "layers": [
+      {
+        "id": "neo-brutalism-preview",
+        "anchor": "event:0:result",
+        "sourceAt": 2.7,
+        "startAt": 2.96,
+        "endAt": 5.44,
+        "position": [
+          0.5,
+          0.5
+        ],
+        "enterFrom": [
+          0.5,
+          0.5
+        ],
+        "enterSeconds": 0,
+        "widthFraction": 0.85,
+        "holdScaleEnd": 1.015,
+        "paddingPx": 0,
+        "radiusPx": 14,
+        "zIndex": 0
+      }
+    ]
+  }
+}
