@@ -18,7 +18,7 @@ For a **new chat or recovered worker**, use `docs/SAUCE_NEW_CHAT.md` as the shor
 Use this decision order for scope and tradeoffs:
 1. **Make the output worth paying for.** Fix known film-level defects before new dashboards, agent frameworks, or generalized infrastructure. Review the *encoded* landscape film against references; preserve real source pixels, readable action/results, purposeful camera and cursor motion. Three distinct source-true demos must earn quality approval before public launch.
 2. **Make one paid pilot possible with minimal manual work.** After visual approval, prioritize bounded, reliable capture → return → preview/download → explicit review, a clear offer, and a simple legitimate way to accept one payment. Do not build a full billing platform or open self-service access speculatively. Obtain owner consent for real purchases, communication and paid infrastructure.
-3. **Protect runway.** Keep single-worker production until longer real-film capacity, limits and storage are measured. Prefer small, reversible, dependency-light changes and existing Vultr capacity. A 4 GiB Sauce-only host is plausible for one short render, **not** verified for all current shared-VPS services. No deletion, migration, new VM or inference spend without authorization.
+3. **Protect runway.** Keep single-worker production until longer real-film capacity, limits and storage are measured. Prefer small, reversible, dependency-light changes and existing Vultr capacity. A 4 GiB Sauce-only host is plausible for one short render, **not** verified for all current shared-VPS services. No deletion, migration or new VM without authorization. Experimental inference is authorized under the 2026-11-20 owner decision below; log all usage.
 4. **Measure actual customer value separately from technical success.** Verified source clips, human-approved films, qualified buyer conversations, genuine payment and repeat purchases are distinct counts. Green CI, a 60fps encoded stream, localhost load tests and internal test jobs never count as revenue or creative acceptance.
 
 **Immediate creative P0:** inspect and fix the Brimble modal occlusion and clipped result payoff in the real MP4; compare against reference and re-render. Then address native source sharpness, cursor semantics and compelling editorial holds for URL-produced films. Avoid speculative feature expansion until the saleable film gate is satisfied.
@@ -33,9 +33,17 @@ Use this decision order for scope and tradeoffs:
 - Preserve source continuity, audio synchronization, privacy, accessible UI and responsive playback.
 - Do not claim "shipped" unless the exact deployed URL and video have actually been opened and verified.
 - Never commit credentials, HAR, private capture sessions, source screenshots, unlicensed assets, or generated videos that are meant to remain private.
-- No paid inference, purchases, sign-ins, or submission without authorization.
+- Paid model inference for Sauce experiments is authorized under the owner decision below. Purchases, sign-ins, external submissions, and new infrastructure still need separate authorization.
 - **Reference provenance gate:** A rejected, approximate or `research_only` creative study is diagnostic evidence, **never an approved few-shot reference**. Do not select it for Gemini production or treat an old failure prompt as a quality target. Require the separately verified 1:1 render-match and source-truth admission gates. Preserve failed studies for regression analysis; never ingest whole research directories or unlabelled logs into the active director. 
 
+
+## Experimental inference — explicit owner authorization (2026-11-20)
+
+The owner has explicitly lifted the prior **no paid inference** restriction for Sauce research and experimentation. Agents may use existing configured inference credentials, stronger creative-director models, and repeated model experiments **without seeking approval for each call or treating the old inference restriction as a blocker**. There is no owner-imposed model-tier or fixed experimental token budget in this authorization. This supersedes the older inference restriction for Sauce R&D only.
+
+Use inference to create genuinely excellent, source-true cinematic footage, not to inflate test counts. Prefer the owner's creative direction: a concise, ambitious **client-style brief + real target product footage + excellent prior reference films with their verified executable JSON + the engine contract**. Give the model creative freedom, then render, critique the actual MP4 against the references, and revise. Keep mechanical source-time and event-validity constraints enforced by the engine, not buried in huge creative prompts. Do not treat invalid or research-only reference JSON as successful training examples.
+
+Keep an auditable log of provider, model, request counts, tokens, available pricing/charges, exact artifacts and visual outcomes. No silent unbounded automatic retry loop, exposed secrets, invented interactions, or unapproved publication. This authorization does **not** grant permission for unrelated purchases, new VMs, destructive changes, sign-ins, external submissions or public deployment.
 
 ## Acceptance and handoff
 
