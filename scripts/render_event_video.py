@@ -70,6 +70,8 @@ else:
     FILM_PLAN_DATA=None
 if args.validate_only and FILM_PLAN_DATA is None:
     parser.error("--validate-only requires --film-plan")
+if FILM_PLAN_DATA is not None and FILM_PLAN_DATA.get("audio",{}).get("mode")=="eventFoley" and args.music:
+    parser.error("Verified event Foley cannot implicitly mix with supplied music")
 if args.stage_image and (args.presentation!="window" or not args.stage_image.is_file()):
     parser.error("--stage-image requires an existing image and window presentation")
 if args.anchored_result_cut and (args.presentation!="fullscreen" or args.glass_loupe):
@@ -119,6 +121,7 @@ FILM_PLAN=None
 LOUPE_STYLE=LoupeStyle()
 WINDOW_SCALE=None
 ISOLATION=None
+STUDIO_STAGE=None
 if FILM_PLAN_DATA is not None:
     from film_plan import load_film_plan, load_window
     FILM_PLAN=load_film_plan(FILM_PLAN_DATA, MANIFEST,SRC,MANIFEST_PATH,(INPUT_W,INPUT_H),
@@ -136,6 +139,12 @@ if FILM_PLAN_DATA is not None:
                     SRC,(INPUT_W,INPUT_H),DURATION)
     if ISOLATION is not None and FILM_PLAN.presentation!="fullscreen":
         raise ValueError("JSON UI isolation requires fullscreen composition")
+    if "studioStage" in FILM_PLAN_DATA:
+        from spatial_studio_stage import load_studio_stage
+        STUDIO_STAGE=load_studio_stage(
+            FILM_PLAN_DATA["studioStage"],MANIFEST,SRC,(INPUT_W,INPUT_H),
+            (1920,1080),FILM_PLAN.duration,FPS)
+
     if FILM_PLAN.audio_file and args.music:
         parser.error("Film-plan audio and CLI music cannot be mixed implicitly")
 
@@ -220,6 +229,34 @@ if not isinstance(GUIDED_CLICK,dict) or not all(
     GUIDED_SHOT=None
 WORKDIR=(args.output.resolve().parent if args.output else ROOT)
 WORKDIR.mkdir(parents=True,exist_ok=True)
+FILM_FOLEY=None
+FOLEY_RECEIPT=None
+if FILM_PLAN_DATA is not None and FILM_PLAN_DATA.get("audio",{}).get("mode")=="eventFoley":
+    from foley_mixer import render_foley_plan, RATE
+    sound=FILM_PLAN_DATA["audio"]
+    event=MANIFEST["events"][sound["eventIndex"]]
+    at=event["start"]
+    changed=(STUDIO_STAGE.onset["time"]
+             if STUDIO_STAGE is not None and STUDIO_STAGE.light_event==sound["eventIndex"]
+             else event["t"])
+    def cue(name,seconds,gain):
+        sample=int(round(seconds*RATE))
+        return {"sound":name,"outputSample":sample,
+                "outputMs":sample/48.,"gain":gain}
+    audio_plan={"schema":"sauce-foley-plan-v1","sampleRate":RATE,
+                "durationMs":int(round(FILM_PLAN.duration*1000)),
+                "masterGain":sound.get("masterGain",.55),"musicGain":0,
+                "muted":False,"duckIntervals":[],
+                "cues":[cue("click_crisp",at,sound.get("clickGain",.47)),
+                        cue("whoosh_soft",changed,sound.get("motionGain",.3))]}
+    if not args.validate_only:
+        FILM_FOLEY=WORKDIR/"source-verified-event-foley.wav"
+        FOLEY_RECEIPT=render_foley_plan(audio_plan,FILM_FOLEY,
+                                target_duration_ms=FILM_PLAN.duration*1000)
+        (WORKDIR/"source-verified-foley-receipt.json").write_text(
+             json.dumps({"eventIndex":sound["eventIndex"],
+                         "pressAt":at,"visibleResultAt":changed,
+                         **FOLEY_RECEIPT},indent=2))
 (WORKDIR/"camera-plan.json").write_text(json.dumps(
  {"source":str(MANIFEST_PATH),"algorithm":"event-driven camera planner, no authored cues",
   "profile":("verified-workflow-editorial" if WORKFLOW_SHOT else
@@ -385,6 +422,19 @@ def compose_window(source,t,static=False):
     return stage
 
 def apply(source,t,static=False):
+    if STUDIO_STAGE is not None:
+        from spatial_studio_stage import render_studio_stage
+        # The only pointer is drawn on the REAL source frame *before* 3D
+        # reprojection. An affine screen-pointer pass would misalign its tip.
+        if POINTER is not None and t >= float(POINTER[0,0]):
+            from recorded_pointer import draw_pointer
+            real=source.copy()
+            px=float(np.interp(t,POINTER[:,0],POINTER[:,1]))
+            py=float(np.interp(t,POINTER[:,0],POINTER[:,2]))
+            draw_pointer(real,px,py,scale=.73)
+        else:
+            real=source
+        return render_studio_stage(STUDIO_STAGE,real,t)
     stage=compose_window(source,t,static)
     if POINTER is not None and (ISOLATION is None or not ISOLATION.active(t)) and (FILM_PLAN is None or t >= float(POINTER[0,0])):
         press=max((1.-smooth5((t-down)/.18) for down in POINTER_PRESSES
@@ -457,6 +507,35 @@ def diagnostics():
                         "hard cut" if RESULT_CUT else "C2 quintic"),
     }
     if not np.isfinite(rows).all():raise RuntimeError("Nonfinite camera matrix")
+    if STUDIO_STAGE is not None:
+        # Perspective-stage motion is validated independently of the ordinary
+        # (unused) 2D camera. No silent fast pans or invalid director plans.
+        quads=np.asarray([STUDIO_STAGE.quad((TRIM_FRAMES+i)/FPS)
+                          for i in range(frames)])
+        if not np.isfinite(quads).all():raise ValueError("Nonfinite studio stage geometry")
+        speeds=np.linalg.norm(np.diff(quads,axis=0),axis=2)
+        max60=float(speeds.max(initial=0))*FPS/60
+        metrics["studioStage"]={
+            "enabled":True,
+            "lightOnset":STUDIO_STAGE.onset,
+            "maxQuadMotionPer60fpsFramePx":round(max60,4),
+            "finalPayoffVisibleFraction":round(STUDIO_STAGE.visibility(FILM_PLAN.duration),4),
+            "finalContextVisibleFraction":round(STUDIO_STAGE.context_visibility(FILM_PLAN.duration),4),
+            "payoffMode":STUDIO_STAGE.payoff_mode,
+            "cameraKeys":len(STUDIO_STAGE.camera)}
+        if POINTER is not None:
+            # Verify actual recorded cursor tip is visible during the
+            # source-backed hero event, not merely drawn off-screen.
+            e=MANIFEST["events"][STUDIO_STAGE.light_event]
+            at=e["start"]
+            px=float(np.interp(at,POINTER[:,0],POINTER[:,1]))
+            py=float(np.interp(at,POINTER[:,0],POINTER[:,2]))
+            visible_tip=STUDIO_STAGE.point_visible(at,px,py)
+            metrics["studioStage"]["recordedClickPointerVisible"]=visible_tip
+            if not visible_tip:
+                raise ValueError("Studio camera hides the real recorded cursor at the verified action")
+        if max60>45:
+            raise ValueError("Studio camera is too abrupt; revise JSON camera keys")
     if FILM_PLAN is not None:
         # Validate motion in 60fps-equivalent units, even for 24/25/30fps sources.
         speed60=metrics["max_translation_per_frame_px"] * FPS/60
@@ -482,8 +561,10 @@ def render(output,seconds=None,static=False):
        "-f","rawvideo","-pix_fmt","bgr24",
        "-video_size",f"{MASTER_W}x{MASTER_H}",
        "-framerate",str(FPS),"-i","pipe:0"]
-    if FILM_PLAN is not None and FILM_PLAN.audio_file is not None:
-        cmd+=["-i",str(FILM_PLAN.audio_file),"-map","0:v:0","-map","1:a:0",
+    audio_source=(FILM_FOLEY if FILM_FOLEY is not None else
+                  FILM_PLAN.audio_file if FILM_PLAN is not None else None)
+    if audio_source is not None:
+        cmd+=["-i",str(audio_source),"-map","0:v:0","-map","1:a:0",
               "-c:a","aac","-ar","48000","-b:a","128k"]
     elif MUSIC.exists():
         cmd+=["-stream_loop","-1","-i",str(MUSIC),
@@ -536,7 +617,17 @@ def render(output,seconds=None,static=False):
             "manifestSha256":FILM_PLAN.manifest_sha256,
             "cameraKeyframes":len(FILM_PLAN.camera_keys),
             "audioFileIncluded":bool(FILM_PLAN.audio_file),
+            "eventFoley":FOLEY_RECEIPT,
             "creativeApproval":False}
+        if STUDIO_STAGE is not None:
+            record["film_plan"]["studioStage"]={
+                "enabled":True, "onset":STUDIO_STAGE.onset,
+                "cameraKeys":len(STUDIO_STAGE.camera),
+                "lightEventIndex":STUDIO_STAGE.light_event,
+                "payoffVisibility":STUDIO_STAGE.visibility(FILM_PLAN.duration),
+                "contextVisibility":STUDIO_STAGE.context_visibility(FILM_PLAN.duration),
+                "payoffMode":STUDIO_STAGE.payoff_mode,
+                "sourcePixelsOnly":True}
         if ISOLATION is not None:
             record["film_plan"]["isolation"]={
                 "mode":"isolated-ui","startAt":ISOLATION.start_at,

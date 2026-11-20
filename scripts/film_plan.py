@@ -152,7 +152,7 @@ def load_window(data, plan_path):
 
 
 def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_duration,plan_path):
-    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","camera","audio","composition","window","glassLoupe"),"film plan")
+    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","camera","audio","composition","window","glassLoupe","studioStage"),"film plan")
     if data.get("schema")!=SCHEMA:
         raise ValueError("Unsupported Sauce film-plan schema")
     expected=data.get("sourceSha256")
@@ -184,16 +184,21 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
         raise ValueError("Window and glass loupe controls require window presentation")
     if "glassLoupe" in data and data["cursor"] != "recorded":
         raise ValueError("Glass loupe requires the recorded cursor")
+    if "studioStage" in data and (data["presentation"]!="fullscreen" or
+                                 any(key in data for key in ("glassLoupe","window","composition"))):
+        raise ValueError("studioStage is exclusive to fullscreen, without other stage effects")
     if data["cursor"]=="recorded" and "glassLoupe" not in data:
         from recorded_pointer import pointer_track
         if pointer_track(manifest,sw,sh) is None:
             raise ValueError("Recorded cursor requires a valid, source-timed track")
     audio=data.get("audio",{"mode":"clean"})
-    _obj(audio,("mode","file"),"audio")
-    if audio.get("mode") not in ("clean","file"):
+    _obj(audio,("mode","file","eventIndex","clickGain","motionGain","masterGain"),"audio")
+    if audio.get("mode") not in ("clean","file","eventFoley"):
         raise ValueError("Unsupported audio mode")
     audio_file=None
     if audio["mode"]=="file":
+        if set(audio)-{"mode","file"}:
+            raise ValueError("File audio cannot include event Foley controls")
         relative=audio.get("file")
         if not isinstance(relative,str) or not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
             raise ValueError("Audio file must be local to the plan")
@@ -201,11 +206,31 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
         audio_file=(home/relative).resolve()
         if not audio_file.is_relative_to(home) or not audio_file.is_file() or audio_file.suffix.lower() not in (".wav",".m4a",".mp3"):
             raise ValueError("Audio media missing or outside the plan directory")
-    elif "file" in audio:
-        raise ValueError("Clean audio mode cannot reference media")
+    elif audio["mode"]=="eventFoley":
+        if "file" in audio:
+            raise ValueError("Event Foley is synthesized from real actions, not paths")
+        ix=audio.get("eventIndex")
+        if type(ix) is not int or ix<0 or ix>=len(manifest.get("events",[])):
+            raise ValueError("Event Foley needs a genuine event index")
+        e=manifest["events"][ix]
+        if not isinstance(e.get("evidence"),str) or not e["evidence"].strip():
+            raise ValueError("Event Foley requires verified outcome evidence")
+        for key in ("start","t"):
+            _float(e.get(key),f"Foley event.{key}",0,duration)
+        if e["start"]>e["t"]:
+            raise ValueError("Foley cannot predate real action")
+        for key in ("clickGain","motionGain","masterGain"):
+            _float(audio.get(key,.5),f"audio.{key}",0,1)
+    elif "file" in audio or set(audio)-{"mode"}:
+        raise ValueError("Clean audio mode cannot reference event or media options")
     timeline=data.get("camera")
+    # studioStage owns physical camera motion. Do not force the director to
+    # generate a second, inert 2D camera path merely for schema compliance.
+    if timeline is None and "studioStage" in data:
+        timeline=[{"at":0,"anchor":"wide","zoom":1},
+                  {"at":duration,"anchor":"wide","zoom":1}]
     if not isinstance(timeline,list) or not 2<=len(timeline)<=MAX_KEYFRAMES:
-        raise ValueError("Camera must contain 2..32 keyframes")
+        raise ValueError("Camera must contain 2..32 keyframes unless studioStage owns the camera")
     keys=[]
     m=dict(manifest,_source_duration=source_duration)
     for item in timeline:

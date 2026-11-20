@@ -11,8 +11,7 @@
     "manifestSha256",
     "durationSeconds",
     "presentation",
-    "cursor",
-    "camera"
+    "cursor"
   ],
   "properties": {
     "schema": {
@@ -66,6 +65,38 @@
             "file": {
               "type": "string",
               "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "eventIndex"
+          ],
+          "properties": {
+            "mode": {
+              "const": "eventFoley"
+            },
+            "eventIndex": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "clickGain": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "motionGain": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "masterGain": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
             }
           }
         }
@@ -328,6 +359,165 @@
           }
         }
       }
+    },
+    "studioStage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "camera",
+        "lighting"
+      ],
+      "properties": {
+        "camera": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "at",
+              "scale"
+            ],
+            "properties": {
+              "at": {
+                "type": "number",
+                "minimum": 0
+              },
+              "startAt": {
+                "type": "number",
+                "minimum": 0
+              },
+              "scale": {
+                "type": "number",
+                "minimum": 0.55,
+                "maximum": 1.55
+              },
+              "yaw": {
+                "type": "number",
+                "minimum": -16,
+                "maximum": 16
+              },
+              "pitch": {
+                "type": "number",
+                "minimum": -12,
+                "maximum": 12
+              },
+              "focus": {
+                "type": "string"
+              },
+              "center": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "number",
+                  "minimum": 0.1,
+                  "maximum": 0.9
+                }
+              }
+            }
+          }
+        },
+        "lighting": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventIndex"
+          ],
+          "properties": {
+            "eventIndex": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "intensity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1.2
+            },
+            "transitionSeconds": {
+              "type": "number",
+              "minimum": 0.08,
+              "maximum": 1.5
+            },
+            "trigger": {
+              "enum": [
+                "verified",
+                "appearance"
+              ]
+            }
+          }
+        },
+        "material": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "color": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              }
+            },
+            "grain": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "depthPx": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 24
+        },
+        "reflection": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.18
+        },
+        "payoff": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "region": {
+              "type": "string",
+              "pattern": "^event:[0-9]+:(result|component)$"
+            },
+            "minVisible": {
+              "type": "number",
+              "minimum": 0.6,
+              "maximum": 1
+            },
+            "mode": {
+              "enum": [
+                "overview",
+                "detail"
+              ]
+            },
+            "minContextVisible": {
+              "type": "number",
+              "minimum": 0.65,
+              "maximum": 1
+            }
+          }
+        }
+      }
     }
-  }
+  },
+  "anyOf": [
+    {
+      "required": [
+        "camera"
+      ]
+    },
+    {
+      "required": [
+        "studioStage"
+      ]
+    }
+  ]
 }
