@@ -34,6 +34,8 @@ Use this decision order for scope and tradeoffs:
 - Do not claim "shipped" unless the exact deployed URL and video have actually been opened and verified.
 - Never commit credentials, HAR, private capture sessions, source screenshots, unlicensed assets, or generated videos that are meant to remain private.
 - No paid inference, purchases, sign-ins, or submission without authorization.
+- **Reference provenance gate:** A rejected, approximate or `research_only` creative study is diagnostic evidence, **never an approved few-shot reference**. Do not select it for Gemini production or treat an old failure prompt as a quality target. Require the separately verified 1:1 render-match and source-truth admission gates. Preserve failed studies for regression analysis; never ingest whole research directories or unlabelled logs into the active director. 
+
 
 ## Acceptance and handoff
 
