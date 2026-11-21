@@ -116,6 +116,13 @@ def build_contract(source,manifest,brief):
             if isinstance(observed,str) and re.fullmatch(
                     r"\$[0-9][0-9,]*(?:\.[0-9]{2})? / mo",observed):
                 summary["verifiedObservedPublicPrice"]=observed
+            # A public, source-authenticated reversible ARIA-tab action can
+            # be named to the creative director only after the original
+            # browser capture + native result-pixel adapter admitted it.
+            action=e.get("observedPublicAction")
+            if (e.get("kind")=="tab_switch" and isinstance(action,str) and
+                    re.fullmatch(r"[A-Za-z][A-Za-z0-9 \-_]{0,41}",action)):
+                summary["verifiedObservedPublicAction"]=action
             events.append(summary)
     if not events:raise ValueError("No verified target and product result for director")
     schema=json.loads(SCHEMA_PATH.read_text())

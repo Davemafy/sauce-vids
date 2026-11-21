@@ -72,6 +72,16 @@ def normalize_generated_studio_plan(raw, *, manifest=None, source_path=None,
             corrected["cursor"]="none"
             repairs.append({"field":"cursor","from":"recorded","to":"none",
                  "reason":"No genuine global pointer track; cannot render fictional cursor"})
+    # A complete 3-action genuine cursor recording may induce Gemini to
+    # request target AND verified-result hard cuts (six total). The existing
+    # source-verified 3-cut studio limit is non-negotiable. Only a complete
+    # one-to-one native-frame 3x ACTION→RESULT pattern may mechanically drop
+    # redundant action target keys, preserving original RESULT cuts exactly.
+    if (manifest is not None and source_path is not None and fps is not None
+            and isinstance(corrected.get("studioStage"),dict)):
+        from source_action_cut_budget import fit_verified_result_cut_budget
+        corrected,compiled=fit_verified_result_cut_budget(corrected,manifest,fps,source_size=source_size)
+        repairs.extend(compiled)
     # For a smooth camera transition toward a VERIFIED real result,
     # Gemini may leave startAt implicit (= prior key), one original source
     # frame BEFORE that result is visibly present. The unchanged renderer
