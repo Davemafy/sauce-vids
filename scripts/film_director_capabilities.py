@@ -154,6 +154,59 @@ def build_contract(source,manifest,brief):
             "boundedMotion":{"liftPx":[0,160],"scale":[1,1.18],
                              "shadowStrength":[0,.6]},
             "requiresRealSource":True})
+    # Multi-layer mode requires a single, source-frame-synchronous actual
+    # Chromium clean plate with every independently moving original UI
+    # element removed. Never advertise group syntax from a descriptive
+    # sidecar without reconstructing and passing renderer provenance gates.
+    verified_group=None
+    candidate_group=raw.get("domPlanes")
+    if (isinstance(candidate_group,list) and 2<=len(candidate_group)<=3 and
+        all(isinstance(p,dict) and p.get("captureMethod")==
+            "playwright-visible-then-multiple-DOM-elements-hidden-and-restored"
+            for p in candidate_group)):
+        paired=candidate_group[0].get("firstPairedFrame")
+        for ev in events:
+            if (type(paired) is not int or paired<0 or
+                paired/fps>duration-1.60 or
+                ev["sourceTime"]["confirmedResultAt"]+.12>paired/fps):
+                continue
+            first=math.ceil(max(paired/fps,
+                         ev["sourceTime"]["confirmedResultAt"]+.12)*fps-1e-8)/fps
+            end=math.floor((duration-.01)*fps)/fps
+            peak=math.ceil((first+.55)*fps-1e-8)/fps
+            if peak-first<.35 or end-peak<.9:continue
+            configs=[{"id":rec.get("id"),"eventIndex":ev["index"],
+                      "startAt":first,"peakAt":peak,"endAt":end,
+                      "liftPx":0,"scale":1} for rec in candidate_group]
+            try:
+                from live_dom_multi_plane import load_live_dom_planes
+                group=load_live_dom_planes(
+                    configs,raw,source,manifest,
+                    source_size=tuple(size),fps=int(fps),duration=duration)
+            except (ValueError,KeyError,RuntimeError,subprocess.SubprocessError):
+                continue
+            verified_group={
+                "ids":[m.id for m in group.members],
+                "measuredNativeSourceRects":[list(m.rect) for m in group.members],
+                "verifiedEventIndex":ev["index"],
+                "firstPairedNativeFrame":group.first_frame,
+                "earliestMotionAtSeconds":first,
+                "latestMotionEndSeconds":end,
+                "cleanPlateSha256":group.plate_sha256,
+                "sourceSha256":group.source_sha256,
+                "mustSelectAllIds":True,
+                "nativeFps":fps,
+                "boundedMotion":{"liftPx":[0,160],
+                    "driftXPx":[-120,120],
+                    "scale":[1,1.18],"scaleWithSourceTrueHeroCenter":[1,1.55],
+                    "heroCenterNormalized":[.14,.86],
+                    "shadowStrength":[0,.6]},
+                "sourceTrueScreenAnchoredHeroAvailable":True,
+                "independentStartPeakEndTimes":True,
+                "realOpaqueElementSurfaces":True,
+                "verifiedSynchronizedSameBrowserFrames":True
+            }
+            break
     pointer=source_pointer_capabilities(raw,size)
     return {
         "schema":"sauce-director-available-capabilities-v1",
@@ -162,7 +215,8 @@ def build_contract(source,manifest,brief):
            "resolution":size,"nativeFps":fps,"durationSeconds":duration,
            "sourceCursorless":True,"verifiedEvents":events,
            "pointerProvenance":pointer,
-           "verifiedLiveDomPlanes":verified_layers},
+           "verifiedLiveDomPlanes":verified_layers,
+           "verifiedLiveDomPlaneGroup":verified_group},
         "creativeInstruction":"Direct a compelling, source-true cinematic UI film. "
            "You may choose any exposed effect and design original camera/keyframe timings. "
            "Prior references are stylistic only; never copy old product states. "
@@ -183,7 +237,23 @@ def build_contract(source,manifest,brief):
                           "verifiedLiveDomPlanes exist; activate strictly after the proven "
                           "result and first paired frame, lift 0..160px, scale<=1.18 and "
                           "return to the original interface without fake pixels."}
-               if verified_layers else {})
+               if verified_layers else {}),
+            **({"domPlanes":"OPTIONAL: jointly animate exactly two or three independently "
+                    "captured genuine UI elements, all source-natively tied to one "
+                    "simultaneously DOM-hidden actual Chromium background plate. "
+                    "Only IDs in actualCapture.verifiedLiveDomPlaneGroup are valid. "
+                    "Use studioStage and independent native-frame-aligned startAt, "
+                    "peakAt and endAt per element. Optionally add normalized "
+                    "heroCenter=[x,y] to each REAL layer for genuine screen-anchored "
+                    "foreground features: their original video pixels stay sharp "
+                    "and independent while the application camera recedes; "
+                    "heroCenter accepts only [.14,.86], and only then does "
+                    "source-backed scale allow up to 1.55x. The foreground must "
+                    "always remain fully in frame and distinct from other cards. "
+                    "The film MUST preserve real "
+                    "result colors, original type and context. No fabricated "
+                    "UI, recycled clean plate from another frame, or fake transitions."}
+                if verified_group is not None else {})
         },
         "modelOutputInstructions":{
             "return":"One JSON object conforming exactly to included JSON Schema",
@@ -206,12 +276,28 @@ def build_contract(source,manifest,brief):
                 "native-frame cut timestamps are supplied per genuine verified event. "
                 "Protect action target, preserve legible final payoff and do not require "
                 "hard cuts where an authentic slow hold is more cinematic.",
+            "domPlanes":"Only when actualCapture.verifiedLiveDomPlaneGroup exists; "
+                "SOURCE-TRUE HERO GRAMMAR: After verified result, optionally "
+                "detach each genuine DOM card and hold it at heroCenter [x,y] "
+                "while its browser source recedes in studioStage.camera. "
+                "Each card must stay fully readable, with original text, "
+                "charts and source palette unchanged. Lift different cards "
+                "on separate beats, then return them to native positions. "
+                "must select ALL IDs, with source-FPS-aligned times. Choose independent "
+                "rhythm with separately staggered readable lifts if it improves "
+                "real product comprehension. Keep dominant UI legible and avoid "
+                "turning meaningful actions into miniature screen shots.",
             "domPlane":"Only if a verified source-paired DOM plane exists and "
                 "your film benefits from a genuine independent element. "
                 "Set id from actualCapture.verifiedLiveDomPlanes, eventIndex "
                 "from evidence, frame-aligned startAt/peakAt/endAt. "
                 "Requires studioStage; never invent a plate, card, content or "
                 "fake underlay. A readable 0.5s hold and late return work well.",
+            "audio":"Use source-backed eventFoley on a genuine verified click "
+                "when the requested product demo is audible. mode=clean means "
+                "the FINAL VIDEO HAS NO AUDIO, not a quietly polished soundtrack; "
+                "the encoded film supervisor will reject a missing audio stream. "
+                "Never invent sounds for unrecorded interactions or add music.",
             "cursor":"For studioStage and flat camera choose ONLY the modes listed "
                      "in actualCapture.pointerProvenance.allowedCursorModesForStudio; "
                      "never invent cursor motion. The legacy glassLoupe may use "

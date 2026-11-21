@@ -123,6 +123,7 @@ WINDOW_SCALE=None
 ISOLATION=None
 STUDIO_STAGE=None
 DOM_PLANE=None
+DOM_PLANE_GROUP=None
 if FILM_PLAN_DATA is not None:
     from film_plan import load_film_plan, load_window
     FILM_PLAN=load_film_plan(FILM_PLAN_DATA, MANIFEST,SRC,MANIFEST_PATH,(INPUT_W,INPUT_H),
@@ -146,6 +147,17 @@ if FILM_PLAN_DATA is not None:
             FILM_PLAN_DATA["studioStage"],MANIFEST,SRC,(INPUT_W,INPUT_H),
             (1920,1080),FILM_PLAN.duration,FPS)
 
+    if "domPlanes" in FILM_PLAN_DATA:
+        from live_dom_multi_plane import load_live_dom_planes
+        if STUDIO_STAGE is None:
+            raise ValueError("Live DOM group must use a real studio stage")
+        DOM_PLANE_GROUP=load_live_dom_planes(
+            FILM_PLAN_DATA["domPlanes"],MANIFEST,SRC,MANIFEST_PATH,
+            source_size=(INPUT_W,INPUT_H),fps=FPS,duration=FILM_PLAN.duration)
+        from live_dom_multi_plane import verify_source_relative_material
+        verify_source_relative_material(DOM_PLANE_GROUP,STUDIO_STAGE,SRC)
+        from live_dom_multi_plane import verify_group_projected_visibility
+        verify_group_projected_visibility(STUDIO_STAGE,DOM_PLANE_GROUP)
     if "domPlane" in FILM_PLAN_DATA:
         from live_dom_depth_plane import load_live_dom_plane
         if STUDIO_STAGE is None:
@@ -433,6 +445,23 @@ def compose_window(source,t,static=False):
 def apply(source,t,static=False,plate_frame=None):
     if STUDIO_STAGE is not None:
         from spatial_studio_stage import render_studio_stage
+        if DOM_PLANE_GROUP is not None:
+            from live_dom_multi_plane import render_live_dom_planes
+            if plate_frame is None:
+                raise ValueError("Missing source-frame-matched group clean plate")
+            composed=render_live_dom_planes(
+                STUDIO_STAGE,source,plate_frame,DOM_PLANE_GROUP,t)
+            if POINTER is not None and t>=float(POINTER[0,0]):
+                from recorded_pointer import draw_pointer
+                px=float(np.interp(t,POINTER[:,0],POINTER[:,1]))
+                py=float(np.interp(t,POINTER[:,0],POINTER[:,2]))
+                sw,sh=STUDIO_STAGE.source_size
+                src_quad=np.float32([[0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]])
+                hom=cv2.getPerspectiveTransform(src_quad,STUDIO_STAGE.quad(t))
+                mapped=cv2.perspectiveTransform(np.float32([[[px,py]]]),hom)[0,0]
+                draw_pointer(composed,float(mapped[0]),float(mapped[1]),
+                             scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])))
+            return composed
         if DOM_PLANE is not None:
             from live_dom_depth_plane import render_live_dom_plane
             if plate_frame is None:
@@ -617,7 +646,9 @@ def render(output,seconds=None,static=False):
     frame_size=INPUT_W*INPUT_H*3
     start=time.monotonic()
     plate_reader=None
-    if DOM_PLANE is not None:
+    if DOM_PLANE_GROUP is not None:
+        plate_reader=DOM_PLANE_GROUP.reader()
+    elif DOM_PLANE is not None:
         from live_dom_depth_plane import PlaneFrameReader
         plate_reader=PlaneFrameReader(DOM_PLANE)
     for i in range(frames):
@@ -669,6 +700,15 @@ def render(output,seconds=None,static=False):
                 "contextVisibility":STUDIO_STAGE.context_visibility(FILM_PLAN.duration),
                 "payoffMode":STUDIO_STAGE.payoff_mode,
                 "sourcePixelsOnly":True}
+        if DOM_PLANE_GROUP is not None:
+            record["film_plan"]["domPlanes"]={
+                "ids":[member.id for member in DOM_PLANE_GROUP.members],
+                "sourceSha256":DOM_PLANE_GROUP.source_sha256,
+                "plateSha256":DOM_PLANE_GROUP.plate_sha256,
+                "nativeSourceRects":[list(r) for r in DOM_PLANE_GROUP.source_rects],
+                "sourceFrameCount":end_frames,"nativeFps":FPS,
+                "sourceClockPreserved":True,
+                "sourcePixelsOnly":True,"creativeApproval":False}
         if DOM_PLANE is not None:
             record["film_plan"]["domPlane"]={
                 "id":DOM_PLANE.id,"sourceSha256":DOM_PLANE.source_sha256,
@@ -716,7 +756,11 @@ if __name__=="__main__":
         path=args.output or ROOT/("sauce-static-preview.jpg" if args.static else "sauce-autozoom-preview.jpg")
         path.parent.mkdir(parents=True,exist_ok=True)
         plate=None
-        if DOM_PLANE is not None:
+        if DOM_PLANE_GROUP is not None:
+            reader=DOM_PLANE_GROUP.reader()
+            try:plate=reader.read(min(round(args.preview*FPS),round(DURATION*FPS)-1))
+            finally:reader.close()
+        elif DOM_PLANE is not None:
             from live_dom_depth_plane import PlaneFrameReader
             reader=PlaneFrameReader(DOM_PLANE)
             try:plate=reader.read(min(round(args.preview*FPS),round(DURATION*FPS)-1))

@@ -152,7 +152,7 @@ def load_window(data, plan_path):
 
 
 def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_duration,plan_path):
-    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","camera","audio","composition","window","glassLoupe","studioStage","domPlane"),"film plan")
+    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","camera","audio","composition","window", "glassLoupe","studioStage","domPlane","domPlanes"),"film plan")
     if data.get("schema")!=SCHEMA:
         raise ValueError("Unsupported Sauce film-plan schema")
     expected=data.get("sourceSha256")
@@ -187,6 +187,12 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
     if "studioStage" in data and (data["presentation"]!="fullscreen" or
                                  any(key in data for key in ("glassLoupe","window","composition"))):
         raise ValueError("studioStage is exclusive to fullscreen, without other stage effects")
+    if "domPlane" in data and "domPlanes" in data:
+        raise ValueError("Single and grouped DOM plane modes are mutually exclusive")
+    if "domPlanes" in data and "studioStage" not in data:
+        raise ValueError("Grouped DOM plane requires fullscreen studioStage")
+    if "domPlanes" in data and any(key in data for key in ("composition","glassLoupe","window")):
+        raise ValueError("Grouped DOM planes cannot mix with frozen isolation/window/glass")
     if "domPlane" in data and "studioStage" not in data:
         raise ValueError("Independent DOM plane requires real fullscreen studioStage")
     if "domPlane" in data and ("composition" in data or "glassLoupe" in data):

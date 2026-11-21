@@ -342,6 +342,15 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
                 raise ValueError("Studio hard cut must align with a native source frame")
             if round(at*fps)>=round(duration*fps):
                 raise ValueError("Studio hard cut at the exclusive final frame is not rendered")
+            # Six-decimal JSON timestamps (e.g. 0.516667 for frame31/60)
+            # can be 0.000000333s past the actual native frame boundary.
+            # Without snapping, pose(t) applies that camera cut ONE FRAME
+            # LATE, while source_aligned_cuts() and speed exclusion treat
+            # it as the earlier frame. Quantize to the ONLY frame the JSON
+            # already specifies; never move a cut to a different native
+            # frame or tolerate a genuinely nonaligned timestamp.
+            at=round(at*fps)/fps
+            start=at
             if sum(key.cut for key in parsed)>=3:
                 raise ValueError("Studio allows at most 3 intentional editorial cuts")
             if any(key.cut and at-key.at<.35 for key in parsed):

@@ -183,3 +183,195 @@ async def discover_verified_dom_plane(page,expected_css_rect):
     if not result or result["score"]<.65:
         return None
     return result
+
+
+@dataclass(frozen=True)
+class MultiPair:
+    """One authentic visible browser frame and one with all listed real DOM layers hidden."""
+    visible:bytes
+    clean:bytes
+    layers:tuple[dict,...]
+    outside_fraction:float
+    visible_sha256:str
+    clean_sha256:str
+
+
+def check_multi_pair(visible,clean,rects,*,max_outside_fraction=.00008,
+                     min_inside_fraction=.012):
+    if not 2<=len(rects)<=3:
+        raise ValueError("Paired multi-plane capture requires two or three DOM rectangles")
+    front=_frame(visible);back=_frame(clean)
+    if front.shape!=back.shape:
+        raise ValueError("Paired multi-plane captures must have identical resolution")
+    H,W=front.shape[:2]
+    outside=np.ones((H,W),bool)
+    for i,rect in enumerate(rects):
+        if len(rect)!=4 or not all(type(v) is int for v in rect):
+            raise ValueError("Unverified native DOM plane rectangle")
+        x,y,w,h=rect
+        if x<0 or y<0 or w<40 or h<30 or x+w>W or y+h>H:
+            raise ValueError("DOM multi-plane element not fully inside actual page")
+        for other in rects[:i]:
+            ox,oy,ow,oh=other
+            if max(0,min(x+w,ox+ow)-max(x,ox))*max(0,min(y+h,oy+oh)-max(y,oy))>0:
+                raise ValueError("Multi-plane elements overlap in genuine source")
+        pad=12
+        outside[max(0,y-pad):min(H,y+h+pad),max(0,x-pad):min(W,x+w+pad)]=False
+    diff=np.max(cv2.absdiff(front,back),axis=2)
+    external=float(np.mean(diff[outside]>12))
+    if external>max_outside_fraction:
+        raise ValueError(f"Changed pixels outside union of verified live DOM elements {external:.6f}")
+    fractions=[float(np.mean(diff[y:y+h,x:x+w]>12)) for x,y,w,h in rects]
+    if any(frac<min_inside_fraction for frac in fractions):
+        raise ValueError("One of the real DOM component planes has no distinct captured pixels")
+    return external,fractions
+
+
+_MULTI_INFO=r"""selectors => {
+  if (!Array.isArray(selectors)||selectors.length<2||selectors.length>3)return null;
+  return selectors.map(selector=>{
+    if(typeof selector!=='string'||selector.length>150)return null;
+    const matches=[...document.querySelectorAll(selector)];
+    if(matches.length!==1)return null;
+    const el=matches[0],r=el.getBoundingClientRect(),s=getComputedStyle(el);
+    const bg=s.backgroundColor.replace(/\s+/g,'');
+    const alpha=bg.startsWith('rgba(')?Number(bg.split(',').at(-1).replace(')','')):
+                bg.startsWith('rgb(')?1:0;
+    if(!Number.isFinite(alpha)||alpha<.995||
+       s.visibility==='hidden'||s.display==='none'||Number(s.opacity)<.995||
+       r.width<60||r.height<40||r.left<0||r.top<0||
+       r.right>innerWidth||r.bottom>innerHeight||
+       el.querySelector('input[type="password"],[contenteditable="true"],iframe'))
+         return null;
+    return {rect:{x:r.x,y:r.y,w:r.width,h:r.height},
+            radiusNativePixels:(parseFloat(s.borderTopLeftRadius)||0)*devicePixelRatio,
+            opaqueSurface:true};
+  });
+}"""
+
+_MULTI_HIDE=r"""selectors => {
+  if(window.__sauceActiveDomPlane||window.__sauceMultiCapture)return false;
+  const els=selectors.map(sel=>[...document.querySelectorAll(sel)]);
+  if(els.some(e=>e.length!==1))return false;
+  const records=els.map(v=>({el:v[0],css:v[0].style.cssText,
+                             before:v[0].getBoundingClientRect()}));
+  try{
+    for(const item of records)item.el.style.setProperty('visibility','hidden','important');
+    for(const item of records){
+      const after=item.el.getBoundingClientRect();
+      if(getComputedStyle(item.el).visibility!=='hidden'||
+          Math.abs(after.x-item.before.x)>1||
+          Math.abs(after.y-item.before.y)>1||
+          Math.abs(after.width-item.before.width)>1||
+          Math.abs(after.height-item.before.height)>1){
+        throw new Error('Verified DOM multi-plane hide changed browser layout');
+      }
+    }
+  }catch(error){
+    for(const item of records)item.el.style.cssText=item.css;
+    return false;
+  }
+  window.__sauceMultiCapture=records;
+  return true;
+}"""
+
+_MULTI_RESTORE=r"""() => {
+  const records=window.__sauceMultiCapture;
+  if(!records)return false;
+  for(const item of records)item.el.style.cssText=item.css;
+  delete window.__sauceMultiCapture;
+  return true;
+}"""
+
+async def capture_multi_pair(page,selectors,*,expected_native_size):
+    """One source and one collectively-hidden real browser plate, same virtual time."""
+    info=await page.evaluate(_MULTI_INFO,selectors)
+    if not info or any(not item for item in info):
+        raise ValueError("No unique eligible opaque DOM capture surfaces")
+    dpr=float(await page.evaluate('devicePixelRatio'))
+    if not math.isfinite(dpr) or dpr<1:
+        raise ValueError("Invalid browser screenshot device pixel ratio")
+    rects=[]
+    for row in info:
+        if row["radiusNativePixels"]>18:
+            raise ValueError("DOM plane source radius exceeds verified stencil bounds")
+        rects.append(tuple(round(row["rect"][k]*dpr) for k in ("x","y","w","h")))
+    # Validate disjoint measured DOM rectangles before touching the DOM.
+    for i,(x,y,w,h) in enumerate(rects):
+        if w<40 or h<30:
+            raise ValueError("Invalid DOM rectangle")
+        for ox,oy,ow,oh in rects[:i]:
+            if max(0,min(x+w,ox+ow)-max(x,ox))*max(0,min(y+h,oy+oh)-max(y,oy))>0:
+                raise ValueError("Overlapping UI components cannot be independently captured")
+    visible=await page.screenshot(type="png",animations="disabled",caret="hide")
+    if not await page.evaluate(_MULTI_HIDE,selectors):
+        raise ValueError("Cannot safely hide multiple genuine DOM components")
+    try:
+        clean=await page.screenshot(type="png",animations="disabled",caret="hide")
+    finally:
+        await page.evaluate(_MULTI_RESTORE)
+    im=_frame(visible)
+    if im.shape[:2]!=(expected_native_size[1],expected_native_size[0]):
+        raise ValueError("Wrong native source resolution for paired UI video")
+    outside,inside=check_multi_pair(visible,clean,rects)
+    return MultiPair(
+        visible,clean,
+        tuple({"rect":rect,"radiusPx":float(row["radiusNativePixels"]),
+               "opaqueSurface":True,"changedFraction":fraction}
+              for rect,row,fraction in zip(rects,info,inside)),
+        outside,hashlib.sha256(visible).hexdigest(),
+        hashlib.sha256(clean).hexdigest())
+
+
+_DISCOVER_MULTI=r"""(bounds) => {
+  if(!Array.isArray(bounds)||bounds.length<2||bounds.length>3)return null;
+  const options=[...document.querySelectorAll(
+    '[data-slot="card"],article,[role="dialog"],section,[data-testid]')];
+  const iou=(a,b)=>{
+    const x=Math.max(a.left,b.x),y=Math.max(a.top,b.y);
+    const r=Math.min(a.right,b.x+b.width),t=Math.min(a.bottom,b.y+b.height);
+    const n=Math.max(0,r-x)*Math.max(0,t-y);
+    return n/Math.max(1,a.width*a.height+b.width*b.height-n);
+  };
+  const used=new Set(),chosen=[];
+  for(const expected of bounds){
+    const candidate=options.map(el=>{
+      const r=el.getBoundingClientRect(),s=getComputedStyle(el),
+            bg=s.backgroundColor.replace(/\s+/g,''),
+            alpha=bg.startsWith('rgba(')?Number(bg.split(',').at(-1).replace(')','')):
+                  bg.startsWith('rgb(')?1:0;
+      if(used.has(el)||!Number.isFinite(alpha)||alpha<.995||
+         s.display==='none'||s.visibility==='hidden'||Number(s.opacity)<.995||
+         r.width<140||r.height<90||r.left<0||r.top<0||
+         r.right>innerWidth||r.bottom>innerHeight||
+         el.querySelector('input[type="password"],[contenteditable="true"],iframe'))
+          return null;
+      return {el,r,score:iou(r,expected)};
+    }).filter(x=>x&&x.score>.80).sort((a,b)=>b.score-a.score)[0];
+    if(!candidate)return null;
+    used.add(candidate.el);chosen.push(candidate);
+  }
+  for(let i=0;i<chosen.length;i++){
+    const r=chosen[i].r;
+    for(let j=0;j<i;j++){
+      const q=chosen[j].r;
+      if(Math.max(0,Math.min(r.right,q.right)-Math.max(r.left,q.left))*
+         Math.max(0,Math.min(r.bottom,q.bottom)-Math.max(r.top,q.top))>0)
+        return null;
+    }
+  }
+  if(chosen.some(c=>c.el.hasAttribute('data-sauce-multiplane')))return null;
+  return chosen.map((candidate,i)=>{
+    const marker='sauce-verified-'+i;
+    candidate.el.setAttribute('data-sauce-multiplane',marker);
+    return {selector:'[data-sauce-multiplane="'+marker+'"]',
+            score:candidate.score,
+            rect:{x:candidate.r.x,y:candidate.r.y,
+                  width:candidate.r.width,height:candidate.r.height}};
+  });
+}"""
+
+async def discover_verified_dom_planes(page,expected_css_rectangles):
+    """Measure exact live semantic elements; caller provides real DOM target bounds."""
+    result=await page.evaluate(_DISCOVER_MULTI,expected_css_rectangles)
+    return result if result and len(result)==len(expected_css_rectangles) else None

@@ -552,12 +552,98 @@
         "scale": {
           "type": "number",
           "minimum": 1,
-          "maximum": 1.18
+          "maximum": 1.55
         },
         "shadowStrength": {
           "type": "number",
           "minimum": 0,
           "maximum": 0.6
+        },
+        "driftXPx": {
+          "type": "number",
+          "minimum": -120,
+          "maximum": 120
+        },
+        "heroCenter": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "number",
+            "minimum": 0.14,
+            "maximum": 0.86
+          }
+        }
+      }
+    },
+    "domPlanes": {
+      "description": "At most three source-true real DOM planes, all selected from one synchronized collectively-hidden Chromium plate.",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Optional source-verified independently projected real DOM plane, requires an authentic same-clock DOM-hidden clean plate in capture manifest.",
+        "required": [
+          "id",
+          "eventIndex",
+          "startAt",
+          "peakAt",
+          "endAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 70
+          },
+          "eventIndex": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "startAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "peakAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "endAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "liftPx": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 160
+          },
+          "scale": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1.55
+          },
+          "shadowStrength": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.6
+          },
+          "driftXPx": {
+            "type": "number",
+            "minimum": -120,
+            "maximum": 120
+          },
+          "heroCenter": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number",
+              "minimum": 0.14,
+              "maximum": 0.86
+            }
+          }
         }
       }
     }

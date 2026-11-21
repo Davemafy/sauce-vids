@@ -71,6 +71,64 @@ def normalize_generated_studio_plan(raw, *, manifest=None, source_path=None,
             corrected["cursor"]="none"
             repairs.append({"field":"cursor","from":"recorded","to":"none",
                  "reason":"No genuine global pointer track; cannot render fictional cursor"})
+    # For a smooth camera transition toward a VERIFIED real result,
+    # Gemini may leave startAt implicit (= prior key), one original source
+    # frame BEFORE that result is visibly present. The unchanged renderer
+    # correctly rejects anticipatory framing. Only if decoded SOURCE PIXELS
+    # prove the real result appears within two native frames of that onset
+    # can we delay a transition start; the chosen destination, look, cut
+    # timing, focus and native UI pixels remain intact. No model redesign.
+    if (manifest is not None and source_path is not None and
+            source_size is not None and fps is not None and
+            isinstance(corrected.get("studioStage"),dict)):
+        from spatial_studio_stage import detect_appearance_onset
+        stage=corrected["studioStage"]
+        keys=stage.get("camera",[])
+        light=stage.get("lighting",{})
+        if isinstance(keys,list) and isinstance(light,dict):
+            events=manifest.get("events",[])
+            for i,key in enumerate(keys):
+                if i==0 or not isinstance(key,dict):
+                    continue
+                focus=key.get("focus","")
+                parts=focus.split(":") if isinstance(focus,str) else []
+                if (len(parts)!=3 or parts[0]!="event" or
+                    not parts[1].isdigit() or parts[2] not in ("result","component") or
+                    key.get("cut") is True):
+                    continue
+                event_index=int(parts[1])
+                if event_index>=len(events) or event_index!=light.get("eventIndex"):
+                    continue
+                current=key.get("startAt",keys[i-1].get("at"))
+                at=key.get("at")
+                if type(current) not in (int,float) or type(at) not in (int,float):
+                    continue
+                evidence=detect_appearance_onset(
+                    source_path,source_size,events[event_index],fps)
+                if evidence.get("method") not in (
+                        "sustained-pixel-evidence","sustained-source-pixel-change"):
+                    continue
+                actual=float(evidence["time"])
+                delta=actual-current
+                if not (1e-6<delta<=2.01/fps and actual<at-.1):
+                    continue
+                if light.get("trigger","verified")!="appearance":
+                    previous=light.get("trigger","verified")
+                    light["trigger"]="appearance"
+                    repairs.append({
+                        "field":"studioStage.lighting.trigger","from":previous,
+                        "to":"appearance",
+                        "reason":"Source-proven result visible within two native "
+                                 "frames of model camera transition start; "
+                                 "same light source, no imaginary state",
+                        "sourceEvidence":evidence})
+                key["startAt"]=round(actual,9)
+                repairs.append({
+                    "field":f"studioStage.camera[{i}].startAt",
+                    "from":current,"to":key["startAt"],
+                    "reason":"Wait for genuine source-visible product result "
+                             "before starting the model's unchanged easing",
+                    "sourceEvidence":evidence})
     # Conservative source-timed correction: the model sometimes requests a
     # verified RESULT cut exactly on the press frame, one 25fps source frame
     # before the original product result is truly visible. The actual encoded
@@ -139,6 +197,54 @@ def normalize_generated_studio_plan(raw, *, manifest=None, source_path=None,
                                  "native-frame cut shift <=2 frames, no synthetic state",
                         "sourceEvidence":source_onset,
                         "nativeFrame":int(round(onset*fps))})
+    # Snap only model-chosen grouped DOM motion times to nearest NATIVE source
+    # frame: less than half a frame change, no alterations to original model
+    # creative order/offset, no source retiming, no invented UI. Strict result
+    # bounds and holds still validated by real renderer.
+    if fps is not None and type(fps) in (int,float) and fps>0:
+        grouped=corrected.get("domPlanes")
+        if isinstance(grouped,list) and 2<=len(grouped)<=3:
+            for i,plane in enumerate(grouped):
+                if not isinstance(plane,dict):continue
+                for field in ("startAt","peakAt","endAt"):
+                    at=plane.get(field)
+                    if type(at) not in (int,float) or not math.isfinite(at):
+                        continue
+                    snapped=round(at*fps)/fps
+                    if abs(snapped-at)>1e-8 and abs(snapped-at)<=.501/fps:
+                        plane[field]=round(snapped,9)
+                        repairs.append({"field":f"domPlanes[{i}].{field}",
+                            "from":at,"to":plane[field],
+                            "reason":"Nearest original source frame for live DOM plane",
+                            "frame":int(round(snapped*fps))})
+    # Only adjust a slightly over-late *real DOM spatial lift* peak when the
+    # native source ends too soon to complete the strict 0.9s return. Preserve
+    # the original start, end, real product frame and model's hero position.
+    # This is an objective ≤0.20s earlier native-frame peak, never a hidden
+    # creative rewrite or permission to skip required reading/return time.
+    if fps is not None and type(fps) in (int,float) and fps>0:
+        group=corrected.get("domPlanes")
+        if isinstance(group,list) and 2<=len(group)<=3:
+            for i,plane in enumerate(group):
+                if not isinstance(plane,dict):continue
+                start=plane.get("startAt")
+                peak=plane.get("peakAt")
+                end=plane.get("endAt")
+                if any(type(x) not in (int,float) or not math.isfinite(x)
+                       for x in (start,peak,end)):
+                    continue
+                if .70<=end-peak<.9-1e-7:
+                    new_peak=math.floor((end-.9)*fps+1e-7)/fps
+                    if (0<peak-new_peak<=.201 and
+                        new_peak-start>=.35-1e-6):
+                        plane["peakAt"]=round(new_peak,9)
+                        repairs.append({
+                            "field":f"domPlanes[{i}].peakAt",
+                            "from":peak,"to":plane["peakAt"],
+                            "reason":"Bounded native-frame spatial peak advance "
+                                     "to ensure authentic foreground UI returns "
+                                     "before unchanged source film ends",
+                            "nativeFrame":round(new_peak*fps)})
     # Optional *objective* overview fit. The model already chose 'overview',
     # which means preserving most of the genuine product window. Shrink ONLY
     # the last camera scale by at most 0.22, never change focus, yaw, pitch,

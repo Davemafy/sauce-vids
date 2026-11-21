@@ -4,7 +4,7 @@
 The program is deliberately small: prepare source-hash-bound capabilities,
 ask one Gemini model for film JSON, normalize only a documented mechanical
 compatibility error, invoke the SAME strict renderer validator, optionally
-make one model repair attempt, then render or reject. Never manual per-site
+make up to two bounded model corrections, then render or reject. Never manual per-site
 compositor code, fabricated UI, fallback fake click, or implicit approval.
 
 This is a local/worker entry point and does not change the running pilot
@@ -31,7 +31,7 @@ from studio_plan_bounded_repair import normalize_generated_studio_plan
 RENDERER=Path(__file__).resolve().with_name("render_event_video.py")
 MAX_SOURCE_BYTES=24*1024*1024
 MAX_SOURCE_SECONDS=30
-MAX_ATTEMPTS=2
+MAX_ATTEMPTS=3
 MODELS_PREFIX="https://generativelanguage.googleapis.com/v1beta/models/"
 TEMPERATURE=.70
 
@@ -51,7 +51,8 @@ def safe_model_name(value):
     return value
 
 
-def _model_request(source,packet,model,key,feedback=None,*,reference_paths=()):
+def _model_request(source,packet,model,key,feedback=None,*,
+                   reference_paths=(),rejected_film=None):
     """One network call. Never persist the API key, raw data or headers."""
     source=Path(source)
     if source.stat().st_size>MAX_SOURCE_BYTES:
@@ -111,6 +112,22 @@ def _model_request(source,packet,model,key,feedback=None,*,reference_paths=()):
     parts.extend({"inline_data":{"mime_type":"video/mp4",
                         "data":base64.b64encode(path.read_bytes()).decode("ascii")}}
                  for path in references)
+    # Prior failed output may be shown only as an explicitly REJECTED,
+    # source-pinned negative example. It cannot become approved gold data.
+    if rejected_film is not None:
+        previous=Path(rejected_film)
+        if (not previous.is_file() or previous.suffix.lower()!=".mp4"
+                or previous.stat().st_size>MAX_SOURCE_BYTES):
+            raise ValueError("Unsafe or missing previous rejected film artifact")
+        parts.append({"text":"FINAL MP4 BELOW IS YOUR OWN PREVIOUSLY REJECTED "
+                      "RENDER, NOT A REFERENCE TO IMITATE. Compare its actual "
+                      "pixels to the genuine source and premium references. "
+                      "Correct the specifically reported encoded visual "
+                      "defects and retain authentic click/result source evidence. "
+                      "Choose different design decisions if necessary. "
+                      "Never treat a rejected film as approved gold."})
+        parts.append({"inline_data":{"mime_type":"video/mp4",
+                      "data":base64.b64encode(previous.read_bytes()).decode("ascii")}})
     payload={"contents":[{"role":"user","parts":parts}],
              "generationConfig":{"temperature":TEMPERATURE,
                                  "responseMimeType":"application/json",
@@ -126,7 +143,8 @@ def _model_request(source,packet,model,key,feedback=None,*,reference_paths=()):
     return raw,{"model":model,"finishReason":candidate.get("finishReason"),
                 "usageMetadata":body.get("usageMetadata",{}),
                 "sourceSha256":packet["actualCapture"]["sourceSha256"],
-                "referenceStudySha256":[sha(x) for x in references]}
+                "referenceStudySha256":[sha(x) for x in references],
+                "rejectedFilmFeedbackSha256":sha(rejected_film) if rejected_film else None}
 
 
 def _validate(source,manifest,plan,output_dir,timeout=120):
@@ -152,8 +170,8 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
     Output is fail-closed: cannot render until an actual renderer --validate-only
     pass. Does not infer meaning from a self-reported model confidence score.
     """
-    if type(max_attempts) is not int or not 1<=max_attempts<=2:
-        raise ValueError("Only one attempt and at most one bounded retry permitted")
+    if type(max_attempts) is not int or not 1<=max_attempts<=3:
+        raise ValueError("One to three bounded model attempts allowed; no unbounded retry")
     source=Path(source).resolve();manifest=Path(manifest).resolve();out=Path(out).resolve()
     if not source.is_file() or not manifest.is_file() or not source.suffix.lower()==".mp4":
         raise ValueError("A real local MP4 and sidecar are required")
@@ -184,14 +202,16 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
             "outcome":"failed","rendered":False,
             "why":"pending first source-verified direction"}
     feedback=None
+    rejected_film=None
     for i in range(1,max_attempts+1):
         record={"attempt":i,"status":"pending"}
         result["attempts"].append(record)
         try:
             began=time.monotonic()
-            if refs and model_call is _model_request:
+            if model_call is _model_request:
                 raw,usage=model_call(source,packet,model,key,feedback,
-                                     reference_paths=tuple(refs))
+                                     reference_paths=tuple(refs),
+                                     rejected_film=rejected_film)
             else:
                 raw,usage=model_call(source,packet,model,key,feedback)
             record.update(usage)
@@ -251,6 +271,34 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
                     record["status"]="rendered_objective_reject"
                     result["outcome"]="objective_reject"
                     result["why"]="Existing encoded-film supervisor rejected source-backed defects"
+                    # Preserve real first-pass encoded evidence and feed its
+                    # FAILED pixels back to the same director. Only when a
+                    # strictly bounded additional request remains. No direct
+                    # compositor edits, artificial film approvals or rewrite
+                    # of previous JSON/media.
+                    if i<max_attempts:
+                        prior=out/f"film-attempt-{i}-rejected.mp4"
+                        film.rename(prior)
+                        record["rejectedFilmPath"]=str(prior)
+                        old_quality=out/"encoded-visual-qa.json"
+                        old_quality.rename(
+                            out/f"encoded-visual-qa-attempt-{i}.json")
+                        codes=[finding["code"] for finding in quality["findings"]]
+                        feedback=("The actual encoded video failed objectively: "+
+                                  ", ".join(codes)+". Preserve all verified "
+                                  "source/event facts and the original UI. "
+                                  "The prior video will be attached as an "
+                                  "explicitly REJECTED negative example. "
+                                  "Redesign the camera, stage separation and "
+                                  "legible hero composition instead of copying "
+                                  "bad shots. Source frame constraints still "
+                                  "override visual preference.\nPrevious "
+                                  "rejected JSON:\n"+raw[:4800])
+                        rejected_film=prior
+                        record["status"]="rendered_objective_reject_retry"
+                        result["outcome"]="failed"
+                        result["why"]="Retained rejected source-backed film for bounded model retry"
+                        continue
                 else:
                     record["status"]="rendered_needs_visual_review"
                     result["outcome"]="needs_review"

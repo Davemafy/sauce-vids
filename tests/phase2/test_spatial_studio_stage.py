@@ -349,3 +349,45 @@ def test_hard_cut_does_not_weaken_existing_smooth_motion_constraints(capture):
     st=load(cfg,m,src)
     assert st.camera[1].cut
     assert not st.camera[2].cut
+
+
+
+def test_native_60fps_cut_decimal_json_snaps_to_exact_source_frame(tmp_path):
+    """Model cut at 0.516667 must execute exactly at encoded frame 31/60."""
+    source=tmp_path/"source-60.mp4"
+    v=cv2.VideoWriter(str(source),cv2.VideoWriter_fourcc(*"mp4v"),60,(320,180))
+    assert v.isOpened()
+    for i in range(144):
+        image=np.full((180,320,3),215,np.uint8)
+        if i>=31:
+            image[22:135,125:300]=(10,30,245)
+        v.write(image)
+    v.release()
+    m={"cursorless":True,"duration":2.4,
+       "capture_rect":{"width":320,"height":180},
+       "events":[{"kind":"theme_change","start":.5,
+                  "end":.501,"t":1.4,
+                  "evidence":"verified test input: real frame 31 changed",
+                  "targetRect":{"x":15,"y":28,"width":58,"height":19},
+                  "resultRect":{"x":125,"y":22,"width":175,"height":113}}]}
+    cfg={"camera":[
+       {"at":0,"scale":.78,"center":[.5,.5]},
+       {"at":.5,"scale":.78,"focus":"event:0:target"},
+       {"at":.516667,"startAt":.516667,"scale":.88,
+        "focus":"event:0:result","cut":True},
+       {"at":2.4,"scale":.88,"focus":"event:0:result"}],
+       "lighting":{"eventIndex":0,"trigger":"appearance"},
+       "payoff":{"region":"event:0:result","mode":"detail","minVisible":.62}}
+    stage=load_studio_stage(cfg,m,source,(320,180),(640,360),2.4,60)
+    assert stage.source_aligned_cuts(60)==(31,)
+    assert stage.camera[2].at==pytest.approx(31/60,abs=1e-12)
+    assert stage.camera[2].start_at==stage.camera[2].at
+    old=stage.quad(30/60)
+    switch=stage.quad(31/60)
+    stable=stage.quad(32/60)
+    assert np.linalg.norm(old-switch,axis=1).max()>20
+    assert np.allclose(switch,stable,atol=.1)
+    not_aligned=json.loads(json.dumps(cfg))
+    not_aligned["camera"][2].update(at=.52,startAt=.52)
+    with pytest.raises(ValueError,match="native source frame"):
+        load_studio_stage(not_aligned,m,source,(320,180),(640,360),2.4,60)

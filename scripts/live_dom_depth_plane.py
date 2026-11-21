@@ -76,6 +76,8 @@ class LiveDomPlane:
     native_fps:int
     event_index:int
     radius_px:float
+    drift_x_px:float=0.
+    hero_center:tuple[float,float]|None=None
 
     def amount(self,t):
         if not self.start_at<=t<=self.end_at:return 0.
@@ -107,13 +109,37 @@ def validate_matched_frames(source,plate,rect):
     return {"outsideDifferentFraction":escaped,"insideDifferentFraction":content}
 
 
+def check_multi_pair_video_frames(a,b,multi_rects):
+    """Decoded video frame pair: all selected source regions and genuine remainder."""
+    if a is None or b is None or a.shape!=b.shape:
+        raise ValueError("Unmatched decoded multi-plane source/plate")
+    H,W=a.shape[:2]
+    outside=np.ones((H,W),dtype=bool)
+    for i,(x,y,w,h) in enumerate(multi_rects):
+        if x<0 or y<0 or w<40 or h<30 or x+w>W or y+h>H:
+            raise ValueError("Invalid native DOM rectangle")
+        for ox,oy,ow,oh in multi_rects[:i]:
+            overlap=max(0,min(x+w,ox+ow)-max(x,ox))*max(0,min(y+h,oy+oh)-max(y,oy))
+            if overlap>0:raise ValueError("DOM component source rectangles overlap")
+        outside[max(0,y-12):min(H,y+h+12),
+                max(0,x-12):min(W,x+w+12)]=False
+    diff=cv2.absdiff(a,b).max(axis=2)
+    escaped=float(np.mean(diff[outside]>12))
+    if escaped>.00008:
+        raise ValueError(f"Unproven pixels outside independently hidden DOM planes: {escaped:.6f}")
+    inside=[float(np.mean(diff[y:y+h,x:x+w]>12)) for x,y,w,h in multi_rects]
+    if min(inside)<.012:
+        raise ValueError("Missing genuine DOM pixels in at least one captured element")
+    return {"outsideDifferentFraction":escaped,"insideChangedFraction":inside}
+
+
 def load_live_dom_plane(config,manifest,source_path,manifest_path,
-                        *,source_size,fps,duration):
+                        *,source_size,fps,duration,multi_rects=None):
     """Trusted captures describe eligible plates; the model may select IDs only."""
     if config is None:return None
     if not isinstance(config,dict) or set(config)-{
         "id","eventIndex","startAt","peakAt","endAt",
-        "liftPx","scale","shadowStrength"}:
+        "liftPx","scale","shadowStrength","driftXPx","heroCenter"}:
         raise ValueError("Unknown domPlane creative parameters")
     if not isinstance(manifest.get("domPlanes"),list):
         raise ValueError("domPlane requires a real paired-browser capture")
@@ -137,15 +163,23 @@ def load_live_dom_plane(config,manifest,source_path,manifest_path,
     peak=_num(config.get("peakAt"),"peakAt",0,duration)
     end=_num(config.get("endAt"),"endAt",0,duration)
     if not (start>=first/fps-1e-6 and start>=event["t"]+.12 and
-            peak-start>=.35 and end-peak>=.9 and end<=duration):
+            peak-start>=.35-1e-6 and end-peak>=.9-1e-6 and end<=duration+1e-6):
         raise ValueError("DOM plane may rise only after source-proof and must hold/return safely")
     if (abs(start*fps-round(start*fps))>.001 or
         abs(peak*fps-round(peak*fps))>.001 or
         abs(end*fps-round(end*fps))>.001):
         raise ValueError("domPlane effect timestamps must use exact native source frames")
     lift=_num(config.get("liftPx",60),"liftPx",0,160)
-    scale=_num(config.get("scale",1.06),"scale",1,1.18)
+    center_value=config.get("heroCenter")
+    hero_center=None
+    if center_value is not None:
+        if not isinstance(center_value,list) or len(center_value)!=2:
+            raise ValueError("DOM heroCenter must be normalized [x,y]")
+        hero_center=tuple(_num(v,f"heroCenter[{i}]",.14,.86)
+                          for i,v in enumerate(center_value))
+    scale=_num(config.get("scale",1.06),"scale",1,1.55 if hero_center else 1.18)
     shadow=_num(config.get("shadowStrength",.34),"shadowStrength",0,.6)
+    drift=_num(config.get("driftXPx",0),"driftXPx",-120,120)
     rect=_source_rect(record.get("rect"),source_size)
     # Move only an actual DOM component materially belonging to the verified
     # source outcome; not a random decor card the model finds attractive.
@@ -186,8 +220,12 @@ def load_live_dom_plane(config,manifest,source_path,manifest_path,
         raise ValueError("DOM plate frame count differs from real source")
     if abs(float(src_info["duration"])-float(plate_info["duration"]))>.0001:
         raise ValueError("DOM plate duration differs from source video")
-    if not (bool(record.get("captureMethod")) and
-            record["captureMethod"]=="playwright-visible-then-CSS-visibility-hidden-and-restored"):
+    if multi_rects is not None:
+        if record.get("captureMethod")!="playwright-visible-then-multiple-DOM-elements-hidden-and-restored":
+            raise ValueError("No genuine synchronized multi-plane capture provenance")
+        if not 2<=len(multi_rects)<=3 or rect not in multi_rects:
+            raise ValueError("No matching independent DOM plane geometry in shared capture")
+    elif record.get("captureMethod")!="playwright-visible-then-CSS-visibility-hidden-and-restored":
         raise ValueError("DOM plate has no approved dual-capture provenance")
 
     sc=cv2.VideoCapture(str(source_path));pc=cv2.VideoCapture(str(file))
@@ -200,11 +238,14 @@ def load_live_dom_plane(config,manifest,source_path,manifest_path,
             pc.set(cv2.CAP_PROP_POS_FRAMES,frame_index)
             ok,a=sc.read();ok2,b=pc.read()
             if not(ok and ok2):raise ValueError("DOM source/plate cannot decode sampled frame")
-            seen.append(validate_matched_frames(a,b,rect))
+            if multi_rects is None:
+                seen.append(validate_matched_frames(a,b,rect))
+            else:
+                seen.append(check_multi_pair_video_frames(a,b,multi_rects))
     finally:
         sc.release();pc.release()
     return LiveDomPlane(file,shaplate,shasrc,rect,record["id"],first,
-        start,peak,end,lift,scale,shadow,int(fps),ix,native_radius)
+        start,peak,end,lift,scale,shadow,int(fps),ix,native_radius,drift,hero_center)
 
 
 def render_live_dom_plane(stage,source_frame,plate_frame,plane:LiveDomPlane,t):
@@ -220,15 +261,42 @@ def render_live_dom_plane(stage,source_frame,plate_frame,plane:LiveDomPlane,t):
     validate_matched_frames(source_frame,plate_frame,plane.rect)
     from spatial_studio_stage import render_studio_stage
     surface=render_studio_stage(stage,plate_frame,t).astype(np.float32)
+    return composite_real_dom_element(stage,surface,source_frame,plane,t)
+
+
+def projected_real_element_quad(stage,plane:LiveDomPlane,t):
+    """Source component homography plus independently authored real-pixel placement."""
     sw,sh=stage.source_size
     ow,oh=stage.output_size
-    base_h=cv2.getPerspectiveTransform(np.float32([
-        [0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]]),stage.quad(t))
-    projected=cv2.perspectiveTransform(plane.source_quad()[None,:,:],base_h)[0]
+    source_quad=np.float32([[0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]])
+    base_h=cv2.getPerspectiveTransform(source_quad,stage.quad(t))
+    current=cv2.perspectiveTransform(plane.source_quad()[None,:,:],base_h)[0]
     a=plane.amount(t)
+    if plane.hero_center is not None and a>0:
+        departure_h=cv2.getPerspectiveTransform(
+            source_quad,stage.quad(plane.start_at))
+        departure=cv2.perspectiveTransform(
+            plane.source_quad()[None,:,:],departure_h)[0]
+        projected=current*(1-a)+departure*a
+    else:
+        projected=current
     center=projected.mean(axis=0)
     factor=1+(plane.scale-1)*a
-    projected=(projected-center)*factor+center+np.array([0.,-plane.lift_px*a],np.float32)
+    projected=(projected-center)*factor+center
+    if plane.hero_center is not None:
+        goal=np.array([plane.hero_center[0]*ow,
+                       plane.hero_center[1]*oh],np.float32)
+        projected+=(goal-center)*a
+    projected+=np.array([plane.drift_x_px*a,-plane.lift_px*a],np.float32)
+    return projected
+
+
+def composite_real_dom_element(stage,surface,source_frame,plane:LiveDomPlane,t):
+    """Render genuine DOM source pixels over the original clean browser source."""
+    surface=np.asarray(surface,dtype=np.float32)
+    ow,oh=stage.output_size
+    projected=projected_real_element_quad(stage,plane,t)
+    a=plane.amount(t)
     x,y,w,h=plane.rect
     crop=source_frame[y:y+h,x:x+w]
     if crop.size==0:raise ValueError("empty genuinely captured DOM source crop")

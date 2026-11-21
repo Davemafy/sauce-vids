@@ -272,3 +272,93 @@ def test_redundant_default_center_and_default_quintic_only_are_mechanical(source
     odd["studioStage"]["camera"][1]["easing"]="linear"
     unchanged,r=normalize_generated_studio_plan(odd)
     assert unchanged["studioStage"]["camera"][1]["easing"]=="linear"
+
+
+def test_encoded_video_reject_feedback_preserves_original_film_and_retries(source_pair,tmp_path,monkeypatch):
+    """Real rejection is retained and supplied to the next director attempt."""
+    import auto_direct_studio_film as director
+    import quality_preview_supervisor as supervisor
+    src,manifest=source_pair
+    plan=valid_plan(src,manifest)
+    attempts=[]
+    feedbacks=[]
+    def model(s,packet,model,key,feedback):
+        feedbacks.append(feedback)
+        return json.dumps(plan),{"usageMetadata":{"totalTokenCount":111}}
+    def validator(s,m,p,dir):
+        assert json.loads(p.read_text())==plan
+        return True,"Actual source hash and native timing approved"
+    real_run=director.subprocess.run
+    def render(cmd,**kwargs):
+        if "--output" not in cmd:
+            return real_run(cmd,**kwargs)
+        path=Path(cmd[cmd.index("--output")+1])
+        path.write_bytes(b"actual-encoded-film-stub-"+str(len(attempts)).encode())
+        attempts.append(str(path))
+        from subprocess import CompletedProcess
+        return CompletedProcess(cmd,0,stdout="verified film")
+    def qa(path,*,evidence,seconds):
+        if len(attempts)==1:
+            return {"verdict":"REJECT","findings":[
+                {"code":"WASHED_OUT_FRAMES","detail":{"fraction":.8}}]}
+        return {"verdict":"HUMAN_REVIEW_REQUIRED","findings":[]}
+    monkeypatch.setattr(director.subprocess,"run",render)
+    monkeypatch.setattr(supervisor,"analyze",qa)
+    out=tmp_path/"private"
+    result=run_unattended(
+        src,manifest,"A great real 2s cinematic film",out,
+        model="gemini-3-flash-preview",key="test-key",max_attempts=3,
+        model_call=model,validator=validator,render=True)
+    assert len(attempts)==2
+    assert result["winningAttempt"]==2
+    assert result["outcome"]=="needs_review"
+    assert result["creativeApproved"] is False
+    assert result["attempts"][0]["status"]=="rendered_objective_reject_retry"
+    assert (out/"film-attempt-1-rejected.mp4").read_bytes()==b"actual-encoded-film-stub-0"
+    assert (out/"film.mp4").read_bytes()==b"actual-encoded-film-stub-1"
+    assert (out/"encoded-visual-qa-attempt-1.json").exists()
+    assert (out/"encoded-visual-qa.json").exists()
+    assert "WASHED_OUT_FRAMES" in feedbacks[1]
+    assert feedbacks[0] is None
+    assert len(feedbacks)==2
+    assert "test-key" not in (out/"unattended-receipt.json").read_text()
+
+
+def test_bounded_three_calls_never_auto_approves_failed_creative_film(source_pair,tmp_path):
+    src,manifest=source_pair
+    def model(*args):return json.dumps(valid_plan(src,manifest)),{}
+    def reject(*args):return False,"Source camera leaves real action frame"
+    result=run(src,manifest,tmp_path/"private",model,reject,max_attempts=3)
+    assert len(result["attempts"])==3
+    assert result["outcome"]=="failed"
+    assert result["creativeApproved"] is False
+    assert not (tmp_path/"private"/"film.mp4").exists()
+    with pytest.raises(ValueError,match="bounded"):
+        run(src,manifest,tmp_path/"never",model,reject,max_attempts=4)
+
+
+def test_grouped_live_dom_time_repairs_are_native_and_bounded_only():
+    from studio_plan_bounded_repair import normalize_generated_studio_plan
+    p={"presentation":"fullscreen",
+       "studioStage":{},
+       "domPlanes":[
+         {"id":"a","startAt":1.5,"peakAt":2.5,"endAt":3.4},
+         {"id":"b","startAt":1.733,"peakAt":2.55,"endAt":3.4}
+       ]}
+    old=json.loads(json.dumps(p))
+    fixed,receipt=normalize_generated_studio_plan(p,fps=60)
+    assert p==old
+    assert fixed["domPlanes"][0]==old["domPlanes"][0]
+    assert fixed["domPlanes"][1]["startAt"]==pytest.approx(104/60,abs=1e-8)
+    assert fixed["domPlanes"][1]["peakAt"]==pytest.approx(150/60,abs=1e-8)
+    assert fixed["domPlanes"][1]["endAt"]==3.4
+    assert all(entry["field"].startswith("domPlanes[1].")
+               for entry in receipt["changes"])
+    assert len(receipt["changes"])==2
+    unsafe=json.loads(json.dumps(p))
+    unsafe["domPlanes"][1]["peakAt"]=2.73
+    not_fixed,unsafe_receipt=normalize_generated_studio_plan(unsafe,fps=60)
+    # Too late to return the genuine DOM plane: must fail strict renderer.
+    assert not_fixed["domPlanes"][1]["peakAt"]==2.733333333
+    assert not any(q["field"]=="domPlanes[1].peakAt" and q.get("reason","").startswith("Bounded")
+                   for q in unsafe_receipt["changes"])
