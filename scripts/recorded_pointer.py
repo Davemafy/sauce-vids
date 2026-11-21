@@ -21,14 +21,39 @@ def pointer_track(manifest, width, height):
     return track
 
 
+@lru_cache(maxsize=96)
+def _recorded_cursor_sprite(scale):
+    """Reuse the already licensed Tabler arrow, never an improvised polygon.
+
+    The source SVG's original arrow apex is the sole cursor click hotspot.
+    This render-time raster is cached so 60fps videos do not rerasterize SVGs.
+    """
+    from PIL import Image
+    from online_cursor_assets import icon, hotspot
+
+    artwork = icon("outline")
+    apex_x, apex_y = hotspot("outline")
+    if scale != 1.:
+        dims = (max(2, round(artwork.shape[1] * scale)),
+                max(2, round(artwork.shape[0] * scale)))
+        artwork = np.asarray(Image.fromarray(artwork, "RGBA").resize(
+            dims, Image.Resampling.LANCZOS), dtype=np.uint8)
+    return artwork, (apex_x * scale, apex_y * scale)
+
+
 def draw_pointer(stage, tip_x, tip_y, scale=1.):
-    height = stage.shape[0]
-    glyph = np.float32([[0,0],[4,32],[11,25],[18,43],[25,39],[17,22],[29,22]])
-    glyph *= scale * height/1080
-    glyph += (tip_x,tip_y)
-    polygon = np.int32(np.rint(glyph*16))
-    cv2.fillPoly(stage,[polygon],(13,14,15),cv2.LINE_AA,shift=4)
-    cv2.polylines(stage,[polygon],True,(249,249,249),max(1,round(scale * height/385)),cv2.LINE_AA,shift=4)
+    """Composite one conventional source-true arrow with an exact apex.
+
+    Coordinates are the actual recorded tip, projected by the caller's native
+    camera matrix. The sprite may change; its position and click never do.
+    """
+    if not np.isfinite((tip_x, tip_y, scale)).all() or scale <= 0:
+        raise ValueError("Non-finite source cursor coordinates or scale")
+    from cinematic_presentation_v13 import _blend
+
+    size = round(scale * stage.shape[0] / 1080., 4)
+    art, (hot_x, hot_y) = _recorded_cursor_sprite(size)
+    _blend(stage, art, round(tip_x - hot_x), round(tip_y - hot_y))
 
 
 @lru_cache(maxsize=2)
