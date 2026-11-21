@@ -113,6 +113,47 @@ def build_contract(source,manifest,brief):
                 "verifiedGeometry":fields,"candidateCuts":candidate_cuts})
     if not events:raise ValueError("No verified target and product result for director")
     schema=json.loads(SCHEMA_PATH.read_text())
+    # Advertise only genuinely captured, hash-pinned, independently decodable
+    # live DOM plates. Without those bytes no model may request this feature.
+    verified_layers=[]
+    for candidate in raw.get("domPlanes",[])[:5]:
+        if not isinstance(candidate,dict):
+            continue
+        paired_frame=candidate.get("firstPairedFrame")
+        if type(paired_frame) is not int or paired_frame<0:
+            continue
+        relevant=next((event for event in events
+            if event["sourceTime"]["confirmedResultAt"]+.12<=paired_frame/fps),None)
+        if relevant is None or paired_frame/fps>duration-1.6:
+            continue
+        first=math.ceil(max(paired_frame/fps,
+                 relevant["sourceTime"]["confirmedResultAt"]+.12)*fps-1e-9)/fps
+        if first+.35+.9>duration:
+            continue
+        # Reuse the strict renderer's source/plate audits, not a descriptive
+        # manifest's self-reported 'verified' boolean.
+        from live_dom_depth_plane import load_live_dom_plane
+        config={"id":candidate.get("id"),"eventIndex":relevant["index"],
+                "startAt":first,
+                "peakAt":math.ceil((first+.48)*fps)/fps,
+                "endAt":math.floor((duration-.04)*fps)/fps,
+                "liftPx":0,"scale":1}
+        try:
+            validated=load_live_dom_plane(config,raw,source,manifest,
+                source_size=tuple(size),fps=int(fps),duration=duration)
+        except (ValueError,KeyError,RuntimeError,subprocess.SubprocessError):
+            continue
+        verified_layers.append({
+            "id":validated.id,"nativeSourceRect":list(validated.rect),
+            "firstPairedNativeFrame":validated.first_frame,
+            "availableAtSeconds":validated.start_at,
+            "evidenceEventIndex":validated.event_index,
+            "cleanPlateSha256":validated.plate_sha256,
+            "captureMethod":"same-browser-clock DOM-hidden verified clean plate",
+            "opaqueSurface":True,
+            "boundedMotion":{"liftPx":[0,160],"scale":[1,1.18],
+                             "shadowStrength":[0,.6]},
+            "requiresRealSource":True})
     pointer=source_pointer_capabilities(raw,size)
     return {
         "schema":"sauce-director-available-capabilities-v1",
@@ -120,7 +161,8 @@ def build_contract(source,manifest,brief):
         "actualCapture":{"sourceSha256":_hash(source),"manifestSha256":_hash(manifest),
            "resolution":size,"nativeFps":fps,"durationSeconds":duration,
            "sourceCursorless":True,"verifiedEvents":events,
-           "pointerProvenance":pointer},
+           "pointerProvenance":pointer,
+           "verifiedLiveDomPlanes":verified_layers},
         "creativeInstruction":"Direct a compelling, source-true cinematic UI film. "
            "You may choose any exposed effect and design original camera/keyframe timings. "
            "Prior references are stylistic only; never copy old product states. "
@@ -134,7 +176,14 @@ def build_contract(source,manifest,brief):
               "startAt=at, at aligned to source FPS, maximum 3, >=0.35s apart), "
               "overview/detail payoff clipping guard",
             "glassLoupe":"optional event-driven optical magnifier; do not use merely for decoration",
-            "composition":"optional frozen genuine-UI pixel isolation, not live DOM layering"
+            "composition":"optional frozen genuine-UI pixel isolation, not live DOM layering",
+            **({"domPlane":"OPTIONAL: independently animate one REAL DOM foreground from genuine "
+                          "native-frame source/clean-plate browser screenshots with strict "
+                          "hash+pixel-mismatch provenance. Only IDs in actualCapture."
+                          "verifiedLiveDomPlanes exist; activate strictly after the proven "
+                          "result and first paired frame, lift 0..160px, scale<=1.18 and "
+                          "return to the original interface without fake pixels."}
+               if verified_layers else {})
         },
         "modelOutputInstructions":{
             "return":"One JSON object conforming exactly to included JSON Schema",
@@ -157,6 +206,12 @@ def build_contract(source,manifest,brief):
                 "native-frame cut timestamps are supplied per genuine verified event. "
                 "Protect action target, preserve legible final payoff and do not require "
                 "hard cuts where an authentic slow hold is more cinematic.",
+            "domPlane":"Only if a verified source-paired DOM plane exists and "
+                "your film benefits from a genuine independent element. "
+                "Set id from actualCapture.verifiedLiveDomPlanes, eventIndex "
+                "from evidence, frame-aligned startAt/peakAt/endAt. "
+                "Requires studioStage; never invent a plate, card, content or "
+                "fake underlay. A readable 0.5s hold and late return work well.",
             "cursor":"For studioStage and flat camera choose ONLY the modes listed "
                      "in actualCapture.pointerProvenance.allowedCursorModesForStudio; "
                      "never invent cursor motion. The legacy glassLoupe may use "

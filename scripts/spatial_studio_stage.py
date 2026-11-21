@@ -111,13 +111,24 @@ def detect_appearance_onset(source_path,source_size,event,fps):
     baseline_frame=max(0,round((start-.20)*fps))
     confirmed_frame=round(min(confirmed+.12,(stream.get(cv2.CAP_PROP_FRAME_COUNT)-1)/fps)*fps)
     fractions={}
+    # A second, genuinely independent pixel-difference criterion catches
+    # small real changes to text, thin graphs and borders that do NOT produce
+    # the large saturated area needed by the legacy color detector.
+    colored_source={}
+    x,y,w,h=rect
     i=0
     try:
         while i<=confirmed_frame:
             ok,img=stream.read()
             if not ok:break
-            if i==baseline_frame or i>=max(0,int((release-.08)*fps)):
+            if (i==baseline_frame or
+                    i==max(0,int(math.floor(start*fps-1e-6))) or
+                    i>=max(0,int((release-.08)*fps))):
                 fractions[i]=_source_fraction(img,rect)
+                crop=img[round(y):round(y+h),round(x):round(x+w)]
+                if crop.size:
+                    colored_source[i]=cv2.resize(crop,(192,108),
+                                    interpolation=cv2.INTER_AREA)
             i+=1
     finally:
         stream.release()
@@ -127,18 +138,60 @@ def detect_appearance_onset(source_path,source_size,event,fps):
              "baselineSaturationFraction":before,
              "confirmedSaturationFraction":after,
              "candidateFrame":None,"frameRate":fps}
-    if before is None or after is None or after-before<.035:
+    if before is None or after is None:
         return outcome
-    threshold=before+max(.018,(after-before)*.38)
-    first=max(0,math.ceil(release*fps))
+    first=max(0,math.ceil(release*fps-1e-8))
     stop=min(confirmed_frame-1,math.floor(confirmed*fps))
-    # Must persist for two consecutive encoded source frames.
+    if after-before>=.035:
+        threshold=before+max(.018,(after-before)*.38)
+        # Legacy conservative saturation detection preserved unchanged.
+        for k in range(first,stop):
+            if (k in fractions and k+1 in fractions and
+                    fractions[k]>=threshold and fractions[k+1]>=threshold):
+                outcome.update(method="sustained-pixel-evidence",time=k/fps,
+                               candidateFrame=k,threshold=threshold)
+                return outcome
+    # Fallback: the actual changed RESULT rectangle must differ *persistently*
+    # from the BEFORE frame and share the SAME changed pixels with the
+    # independently verified AFTER frame. This avoids admitting a temporary
+    # dropdown/animation as the final product outcome.
+    before_frame=colored_source.get(baseline_frame)
+    after_frame=colored_source.get(confirmed_frame)
+    if before_frame is None or after_frame is None:
+        return outcome
+    def differences(frame):
+        delta=cv2.absdiff(before_frame,frame)
+        return (delta.max(axis=2)>18)
+    after_changed=differences(after_frame)
+    total=float(after_changed.mean())
+    if total<.075:
+        return outcome
+    # The change must not already be established BEFORE the actual recorded
+    # action. This guards animated/unrelated content against attribution to
+    # the verified click, including across a long lazy-loading transition.
+    preaction=max(0,int(math.floor(start*fps-1e-6)))
+    before_action=colored_source.get(preaction)
+    if before_action is not None:
+        pre_change=(cv2.absdiff(before_frame,before_action).max(axis=2)>18)
+        if float(np.mean(pre_change&after_changed))/max(total,.0001)>.25:
+            return outcome
     for k in range(first,stop):
-        if (k in fractions and k+1 in fractions and
-                fractions[k]>=threshold and fractions[k+1]>=threshold):
-            outcome.update(method="sustained-pixel-evidence",time=k/fps,
-                           candidateFrame=k,threshold=threshold)
-            break
+        if k not in colored_source or k+1 not in colored_source:
+            continue
+        a=differences(colored_source[k])
+        b=differences(colored_source[k+1])
+        area=float(a.mean())
+        if area<.075 or float(b.mean())<.075:
+            continue
+        shared=float(np.mean(a&b&after_changed))
+        if shared/max(area,.0001)<.78 or shared/max(total,.0001)<.72:
+            continue
+        outcome.update(method="sustained-source-pixel-change",
+                       time=k/fps,candidateFrame=k,
+                       changedFraction=round(area,5),
+                       overlapWithConfirmedChange=round(shared/max(total,.0001),5),
+                       pixelDeltaThreshold=18)
+        return outcome
     return outcome
 
 

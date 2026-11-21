@@ -152,7 +152,7 @@ def load_window(data, plan_path):
 
 
 def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_duration,plan_path):
-    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","camera","audio","composition","window","glassLoupe","studioStage"),"film plan")
+    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","camera","audio","composition","window","glassLoupe","studioStage","domPlane"),"film plan")
     if data.get("schema")!=SCHEMA:
         raise ValueError("Unsupported Sauce film-plan schema")
     expected=data.get("sourceSha256")
@@ -187,6 +187,10 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
     if "studioStage" in data and (data["presentation"]!="fullscreen" or
                                  any(key in data for key in ("glassLoupe","window","composition"))):
         raise ValueError("studioStage is exclusive to fullscreen, without other stage effects")
+    if "domPlane" in data and "studioStage" not in data:
+        raise ValueError("Independent DOM plane requires real fullscreen studioStage")
+    if "domPlane" in data and ("composition" in data or "glassLoupe" in data):
+        raise ValueError("Independent DOM plane cannot mix with frozen isolation or glass optics")
     if data["cursor"]=="recorded" and "glassLoupe" not in data:
         from recorded_pointer import pointer_track
         if pointer_track(manifest,sw,sh) is None:

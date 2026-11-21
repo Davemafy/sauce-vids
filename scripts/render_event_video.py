@@ -122,6 +122,7 @@ LOUPE_STYLE=LoupeStyle()
 WINDOW_SCALE=None
 ISOLATION=None
 STUDIO_STAGE=None
+DOM_PLANE=None
 if FILM_PLAN_DATA is not None:
     from film_plan import load_film_plan, load_window
     FILM_PLAN=load_film_plan(FILM_PLAN_DATA, MANIFEST,SRC,MANIFEST_PATH,(INPUT_W,INPUT_H),
@@ -144,6 +145,14 @@ if FILM_PLAN_DATA is not None:
         STUDIO_STAGE=load_studio_stage(
             FILM_PLAN_DATA["studioStage"],MANIFEST,SRC,(INPUT_W,INPUT_H),
             (1920,1080),FILM_PLAN.duration,FPS)
+
+    if "domPlane" in FILM_PLAN_DATA:
+        from live_dom_depth_plane import load_live_dom_plane
+        if STUDIO_STAGE is None:
+            raise ValueError("Independent source-derived DOM plane requires studioStage")
+        DOM_PLANE=load_live_dom_plane(
+            FILM_PLAN_DATA["domPlane"],MANIFEST,SRC,MANIFEST_PATH,
+            source_size=(INPUT_W,INPUT_H),fps=FPS,duration=FILM_PLAN.duration)
 
     if FILM_PLAN.audio_file and args.music:
         parser.error("Film-plan audio and CLI music cannot be mixed implicitly")
@@ -421,9 +430,26 @@ def compose_window(source,t,static=False):
              window.astype(np.float32)*(1-OVERLAY_ALPHA),0,255).astype(np.uint8)
     return stage
 
-def apply(source,t,static=False):
+def apply(source,t,static=False,plate_frame=None):
     if STUDIO_STAGE is not None:
         from spatial_studio_stage import render_studio_stage
+        if DOM_PLANE is not None:
+            from live_dom_depth_plane import render_live_dom_plane
+            if plate_frame is None:
+                raise ValueError("Missing same-frame clean plate for independently animated DOM")
+            composed=render_live_dom_plane(STUDIO_STAGE,source,plate_frame,DOM_PLANE,t)
+            if POINTER is not None and t>=float(POINTER[0,0]):
+                # Render only ONE genuine source cursor, above all real UI planes.
+                from recorded_pointer import draw_pointer
+                px=float(np.interp(t,POINTER[:,0],POINTER[:,1]))
+                py=float(np.interp(t,POINTER[:,0],POINTER[:,2]))
+                sw,sh=STUDIO_STAGE.source_size
+                src_quad=np.float32([[0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]])
+                hom=cv2.getPerspectiveTransform(src_quad,STUDIO_STAGE.quad(t))
+                projected=cv2.perspectiveTransform(np.float32([[[px,py]]]),hom)[0,0]
+                draw_pointer(composed,float(projected[0]),float(projected[1]),
+                             scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])))
+            return composed
         # The only pointer is drawn on the REAL source frame *before* 3D
         # reprojection. An affine screen-pointer pass would misalign its tip.
         if POINTER is not None and t >= float(POINTER[0,0]):
@@ -590,14 +616,20 @@ def render(output,seconds=None,static=False):
     encoder=subprocess.Popen(cmd,stdin=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=2*1024*1024)
     frame_size=INPUT_W*INPUT_H*3
     start=time.monotonic()
+    plate_reader=None
+    if DOM_PLANE is not None:
+        from live_dom_depth_plane import PlaneFrameReader
+        plate_reader=PlaneFrameReader(DOM_PLANE)
     for i in range(frames):
         raw=ffread.stdout.read(frame_size)
         if len(raw)!=frame_size: raise RuntimeError(f"Short source frame: {i}")
         src=np.frombuffer(raw,dtype=np.uint8).reshape(INPUT_H,INPUT_W,3)
-        image=apply(src,(i+TRIM_FRAMES)/FPS,static=static)
+        plate=plate_reader.read(i+TRIM_FRAMES) if plate_reader is not None else None
+        image=apply(src,(i+TRIM_FRAMES)/FPS,static=static,plate_frame=plate)
         encoder.stdin.write(image.tobytes())
         if i%180==0:print("RENDER",i,"/",frames,
                          round(time.monotonic()-start,2),"sec",flush=True)
+    if plate_reader is not None:plate_reader.close()
     encoder.stdin.close()
     ffread.stdout.close()
     err=encoder.stderr.read().decode(errors="replace")
@@ -637,6 +669,18 @@ def render(output,seconds=None,static=False):
                 "contextVisibility":STUDIO_STAGE.context_visibility(FILM_PLAN.duration),
                 "payoffMode":STUDIO_STAGE.payoff_mode,
                 "sourcePixelsOnly":True}
+        if DOM_PLANE is not None:
+            record["film_plan"]["domPlane"]={
+                "id":DOM_PLANE.id,"sourceSha256":DOM_PLANE.source_sha256,
+                "plateSha256":DOM_PLANE.plate_sha256,
+                "genuineDOMRect":list(DOM_PLANE.rect),
+                "firstProvenPairedFrame":DOM_PLANE.first_frame,
+                "nativeFps":DOM_PLANE.native_fps,
+                "activationTime":DOM_PLANE.start_at,
+                "peakTime":DOM_PLANE.peak_at,
+                "endTime":DOM_PLANE.end_at,
+                "sourcePixelsOnly":True,"sourceClockPreserved":True,
+                "creativeApproval":False}
         if ISOLATION is not None:
             record["film_plan"]["isolation"]={
                 "mode":"isolated-ui","startAt":ISOLATION.start_at,
@@ -671,7 +715,14 @@ if __name__=="__main__":
         src=np.frombuffer(raw,dtype=np.uint8).reshape(INPUT_H,INPUT_W,3)
         path=args.output or ROOT/("sauce-static-preview.jpg" if args.static else "sauce-autozoom-preview.jpg")
         path.parent.mkdir(parents=True,exist_ok=True)
-        cv2.imwrite(str(path),apply(src,args.preview,args.static),[cv2.IMWRITE_JPEG_QUALITY,88])
+        plate=None
+        if DOM_PLANE is not None:
+            from live_dom_depth_plane import PlaneFrameReader
+            reader=PlaneFrameReader(DOM_PLANE)
+            try:plate=reader.read(min(round(args.preview*FPS),round(DURATION*FPS)-1))
+            finally:reader.close()
+        cv2.imwrite(str(path),apply(src,args.preview,args.static,plate_frame=plate),
+                    [cv2.IMWRITE_JPEG_QUALITY,88])
         print("PREVIEW",path,path.stat().st_size)
     else:
         name=("linear-static-master-1080p60.mp4" if args.static else

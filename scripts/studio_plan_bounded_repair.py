@@ -14,6 +14,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import math
 from fractions import Fraction
 
 
@@ -70,6 +71,74 @@ def normalize_generated_studio_plan(raw, *, manifest=None, source_path=None,
             corrected["cursor"]="none"
             repairs.append({"field":"cursor","from":"recorded","to":"none",
                  "reason":"No genuine global pointer track; cannot render fictional cursor"})
+    # Conservative source-timed correction: the model sometimes requests a
+    # verified RESULT cut exactly on the press frame, one 25fps source frame
+    # before the original product result is truly visible. The actual encoded
+    # source detector (never guessed DOM latency) may delay this exact cut by
+    # at most 2 SOURCE FRAMES. All previous/next cuts, scene content, source
+    # hashes and event time are immutable; broader mistakes remain rejected.
+    if (manifest is not None and source_path is not None and
+            source_size is not None and fps is not None and
+            isinstance(corrected.get("studioStage"),dict)):
+        from spatial_studio_stage import detect_appearance_onset
+        camera=corrected["studioStage"].get("camera",[])
+        light=corrected["studioStage"].get("lighting",{})
+        if isinstance(camera,list) and isinstance(light,dict):
+            if light.get("trigger","verified") in ("appearance","verified"):
+                for i,key in enumerate(camera):
+                    if i==0 or not isinstance(key,dict) or key.get("cut") is not True:
+                        continue
+                    focus=key.get("focus")
+                    chunks=focus.split(":") if isinstance(focus,str) else []
+                    if (len(chunks)!=3 or chunks[0]!="event" or
+                            not chunks[1].isdigit() or chunks[2] not in ("result","component")):
+                        continue
+                    event_i=int(chunks[1])
+                    events=manifest.get("events",[])
+                    if event_i>=len(events) or not isinstance(events[event_i],dict):
+                        continue
+                    source_onset=detect_appearance_onset(source_path,source_size,
+                                                        events[event_i],fps)
+                    if source_onset.get("method") not in (
+                           "sustained-pixel-evidence","sustained-source-pixel-change"):
+                        continue
+                    old_at=key.get("at")
+                    if type(old_at) not in (int,float) or not math.isfinite(old_at):
+                        continue
+                    onset=round(float(source_onset["time"]),6)
+                    drift=onset-float(old_at)
+                    if not (1e-7<drift<=2.01/fps):
+                        continue
+                    # No overlap with next creative key or unrelated hard cuts.
+                    if (onset>=float(camera[i+1].get("at",-1)) if i+1<len(camera)
+                            else False):
+                        continue
+                    start=key.get("startAt",float(camera[i-1].get("at",0)))
+                    if abs(float(start)-float(old_at))>1e-6:
+                        continue
+                    if light.get("trigger","verified")!="appearance":
+                        # The model demands an earlier source-result camera cut
+                        # yet chose a later DOM-confirmation lighting clock.
+                        # The exact source image itself proves this is a real
+                        # visible change; align the existing appearance trigger
+                        # rather than fake a future result.
+                        previous=light.get("trigger","verified")
+                        light["trigger"]="appearance"
+                        repairs.append({
+                            "field":"studioStage.lighting.trigger",
+                            "from":previous,"to":"appearance",
+                            "reason":"Source-proven genuine result was already visible; "
+                                     "match requested source-frame camera cut",
+                            "sourceEvidence":source_onset})
+                    key["at"]=onset
+                    key["startAt"]=onset
+                    repairs.append({
+                        "field":f"studioStage.camera[{i}].sourceCutTime",
+                        "from":round(float(old_at),6),"to":onset,
+                        "reason":"Real recorded result onset after press; source-verified "
+                                 "native-frame cut shift <=2 frames, no synthetic state",
+                        "sourceEvidence":source_onset,
+                        "nativeFrame":int(round(onset*fps))})
     # Optional *objective* overview fit. The model already chose 'overview',
     # which means preserving most of the genuine product window. Shrink ONLY
     # the last camera scale by at most 0.22, never change focus, yaw, pitch,
