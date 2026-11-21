@@ -254,7 +254,13 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
            optics_seed:int=20261116,
            result_aware_editorial:bool=False,
            result_payoff_push:bool=False,modal_lift:bool=False,
-           click_water_ripple:bool=False) -> dict:
+           click_water_ripple:bool=False,
+           cursorless_source:bool=False) -> dict:
+    if cursorless_source and (presentation_v12 or presentation_v13 or
+                              presentation_v14 or presentation_v15 or
+                              click_effect or click_water_ripple or backdrop_focus or
+                              studio_motion_plan is not None):
+        raise ValueError("Cursorless source must be original Chromium pixels, not a presentation")
     info_json=session_dir/'session.json'
     session=json.loads(info_json.read_text())
     info=verify_package(session,session_dir)
@@ -919,6 +925,16 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
                 if click_effect:
                     overlay_click(output_image,session['events'],start_ms,index/fps,
                                   info['dpr']*factor,dx,dy)
+            if cursorless_source:
+                # Bounded opt-in export for the existing source-verified film
+                # plan. Chromium's genuine DPR2 pixels have NO raster cursor;
+                # the separate compositor draws exactly one source-timed pointer.
+                # This path intentionally bypasses every legacy stage/backdrop
+                # and presentation overlay. The site's native aspect stays 16:9.
+                if source_px_w*MASTER_H != source_px_h*MASTER_W:
+                    raise ValueError("Cursorless export cannot distort source aspect ratio")
+                output_image=cv2.resize(decoded,(MASTER_W,MASTER_H),
+                                        interpolation=cv2.INTER_LANCZOS4)
             if composition is not None:
                 # Real Chromium actions/semantic checks always execute.
                 # Export only the versioned verified composited-frame proof.
@@ -1092,6 +1108,7 @@ def replay(session_dir:Path,workflow_file:Path,output:Path,
             'brand_tokens':session.get('brand_tokens'),
             'studio_brand_primary':brand_primary if root_stage else None,
             'studio_brand_accent':brand_accent if root_stage else None,
+            'cursorless_source':bool(cursorless_source),
             'experimental_orbit_optics':bool(experimental_orbit_optics),
             'optics_seed':root_stage.optics_seed if root_stage else None,
             'cinematic_stage_glow_blur':140 if root_stage else None,
@@ -1140,6 +1157,8 @@ def main():
        help='Optional decorative selector to suppress only in presentation replay')
     cli.add_argument('--raw-replay',action='store_true',
        help='Opt out of the default cinematic presentation (debug/legacy mode)')
+    cli.add_argument('--cursorless-source',action='store_true',
+       help='Opt-in native Chromium pixels for a separate hash-pinned film plan; never paints a cursor or stage')
     cli.add_argument('--presentation-v15',action='store_true',
        help='Reference-shaped rounded pointer with deep drop shadow (default)')
     cli.add_argument('--presentation-v14',action='store_true',
@@ -1161,6 +1180,9 @@ def main():
         cli.error('Choose one presentation version')
     if args.raw_replay and any(chosen):
         cli.error('--raw-replay is incompatible with a presentation version')
+    if args.cursorless_source and (not args.raw_replay or args.click_effect or
+                                   args.click_water_ripple or args.backdrop_focus):
+        cli.error('--cursorless-source requires --raw-replay without compositor effects')
     if not args.raw_replay and not any(chosen):
         # The polished reference-shaped vector cursor is the new film
         # default. Older versions and unstyled source replay stay opt-in.
@@ -1173,6 +1195,7 @@ def main():
                   presentation_hide_selector=args.presentation_hide_selector,
                   presentation_v13=args.presentation_v13,
                   presentation_v14=args.presentation_v14,cursor_style=args.cursor_style,
-                  presentation_v15=args.presentation_v15,cursor_scale=args.cursor_scale)
+                  presentation_v15=args.presentation_v15,cursor_scale=args.cursor_scale,
+                  cursorless_source=args.cursorless_source)
     print(json.dumps(result,indent=2))
 if __name__=='__main__':main()
