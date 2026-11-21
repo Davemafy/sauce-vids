@@ -25,7 +25,10 @@ def run(url:str,allowed_host:str,out:Path,*,seconds:float=16.,
         from_capture:Path|None=None,capture_only:bool=False,
         model:str="gemini-3-flash-preview",max_attempts:int=3,
         reference_videos:tuple[Path,...]=(),key:str|None=None,
-        client_brief:str|None=None,creative_brief_path:Path|None=None)->dict:
+        client_brief:str|None=None,creative_brief_path:Path|None=None,
+        director_mode:str="gemini")->dict:
+    if director_mode not in ("gemini","coverage"):
+        raise ValueError("Only the existing Gemini or verified coverage director is allowed")
     validate_public_url(url)
     if urlsplit(url).hostname!=allowed_host:
         raise ValueError("One explicitly allowed public host must match the requested URL")
@@ -91,6 +94,27 @@ def run(url:str,allowed_host:str,out:Path,*,seconds:float=16.,
     (out/"evidence-receipt.json").write_text(json.dumps(receipt,indent=2)+"\n")
     if capture_only:
         return receipt
+    if director_mode=="coverage":
+        # Autonomous *editorial* fallback for owner-only verified capture,
+        # not permission to execute different browser interactions.
+        from autonomous_shot_coverage import run as direct_coverage
+        coverage=direct_coverage(
+            source,manifest_path,out/"coverage",brief=client_brief,
+            expected_source_sha256=packet["actualCapture"]["sourceSha256"],
+            expected_manifest_sha256=packet["actualCapture"]["manifestSha256"],
+            max_renders=2)
+        accepted=next((film for film in coverage["rendered"] if
+            film["status"]=="rendered_needs_human_review"),None)
+        receipt["status"]=("film_requires_human_review" if accepted
+                           else "coverage_failed_source_retained")
+        receipt["directorMode"]="deterministic_source_coverage"
+        receipt["providerAttemptCount"]=0
+        receipt["coverageReceipt"]=str(out/"coverage"/"coverage-receipt.json")
+        receipt["coverageVariants"]=coverage["rendered"]
+        receipt["film"]=accepted["film"] if accepted else None
+        receipt["filmSha256"]=accepted["filmSha256"] if accepted else None
+        (out/"evidence-receipt.json").write_text(json.dumps(receipt,indent=2)+"\n")
+        return receipt
     if not key:
         receipt["status"]="fail_closed_provider_key_unavailable"
         (out/"evidence-receipt.json").write_text(json.dumps(receipt,indent=2)+"\n")
@@ -121,6 +145,8 @@ def main():
     p.add_argument("--from-capture",type=Path)
     p.add_argument("--capture-only",action="store_true")
     p.add_argument("--model",default="gemini-3-flash-preview")
+    p.add_argument("--director-mode",choices=("gemini","coverage"),default="gemini",
+                   help="Opt-in source-locked zero-model shot coverage on real capture")
     p.add_argument("--max-attempts",type=int,default=3)
     p.add_argument("--reference-video",type=Path,action="append",default=[])
     p.add_argument("--brief")
@@ -132,7 +158,8 @@ def main():
         from_capture=a.from_capture,capture_only=a.capture_only,
         model=a.model,max_attempts=a.max_attempts,
         reference_videos=tuple(a.reference_video),key=key,
-        client_brief=a.brief,creative_brief_path=a.creative_brief_json)
+        client_brief=a.brief,creative_brief_path=a.creative_brief_json,
+        director_mode=a.director_mode)
     print(json.dumps({k:result.get(k) for k in
         ("status","url","sourceSha256","manifestSha256","actualActions",
          "providerOutcome","providerAttemptCount","film","filmSha256",
