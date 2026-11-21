@@ -23,7 +23,8 @@ def _digest(data):
 
 
 def normalize_generated_studio_plan(raw, *, manifest=None, source_path=None,
-                                    source_size=None, fps=None, output_size=(1920,1080)):
+                                    source_size=None, fps=None,
+                                    output_size=(1920,1080),manifest_path=None):
     if not isinstance(raw,dict):
         raise ValueError("Film plan must be an object")
     source=copy.deepcopy(raw)
@@ -292,6 +293,17 @@ def normalize_generated_studio_plan(raw, *, manifest=None, source_path=None,
                                 "actual source geometry and original event unchanged",
                                 "sourceContextVisibleFraction":round(st.context_visibility(
                                     float(corrected["durationSeconds"])),4)})
+    # Compile physical depth only for an actual hash-validated grouped
+    # Chromium capture. The independent source-plane cinematography helper
+    # keeps model source pixels, hero sizes, frame timing and final camera.
+    if (manifest is not None and manifest_path is not None and
+            source_path is not None and source_size is not None and fps is not None
+            and corrected.get("presentation")=="fullscreen"):
+        from source_hero_choreography import fit_source_hero_choreography
+        corrected,compiled=fit_source_hero_choreography(
+            corrected,manifest,source_path,manifest_path,source_size,
+            fps,output_size=output_size)
+        repairs.extend(compiled)
     return corrected,{"schema":"sauce-bounded-studio-repair-v1",
                       "sourcePlanSha256":_digest(source),
                       "repairedPlanSha256":_digest(corrected),
@@ -324,7 +336,8 @@ def main():
         fps=float(Fraction(stream["avg_frame_rate"]))
     corrected,receipt=normalize_generated_studio_plan(
         json.loads(a.plan.read_text()),manifest=real_manifest,
-        source_path=a.source,source_size=size,fps=fps)
+        source_path=a.source,source_size=size,fps=fps,
+        manifest_path=a.manifest)
     a.out.write_text(json.dumps(corrected,indent=2)+"\n")
     a.receipt.write_text(json.dumps(receipt,indent=2)+"\n")
     print(json.dumps({"repairCount":len(receipt["changes"]),"creativeApproval":False,

@@ -26,6 +26,7 @@ from urllib.request import Request,urlopen
 
 from film_director_capabilities import build_contract
 from studio_plan_bounded_repair import normalize_generated_studio_plan
+from source_director_preflight import preflight_source_edit,director_feedback
 
 
 RENDERER=Path(__file__).resolve().with_name("render_event_video.py")
@@ -59,22 +60,20 @@ def _model_request(source,packet,model,key,feedback=None,*,
         raise ValueError("Real source exceeds bounded vision request size")
     model=safe_model_name(model)
     prompt=(
-        "You are a cinematic software-product film director. Direct a compelling "
-        "short, source-true film from the attached genuine browser recording. "
-        "The controls listed in the attached capability packet are real capabilities "
-        "of the renderer, not instructions to use every effect. Return ONE exact "
-        "sauce-film-plan-v1 JSON object. Do not invent product UI, cursor motions, "
-        "buttons, time travel, overlays or fictional results. The visible real "
-        "interaction must be clear, and the final verified product result must "
-        "remain legible. Your output will be independently validated and rendered "
-        "without any human fixes. Production quality requires strong first-second "
-        "composition, ambitious but useful spatial staging, and readable payoff. "
-        "For an action closeup choose the source-verified event target anchor; "
-        "the camera center only places the WHOLE app window in the output and "
-        "is not a website focus coordinate. "
-        "If a reference suggests a decisive editorial cut, use only native-source-frame "
-        "times and do not show verified results before they genuinely appear.\n"
-        "REAL VERIFIED SOURCE + EXACT EXECUTABLE CONTRACT:\n"+
+        "You are the lead film director at a world-class software motion studio. "
+        "A client has paid for an extraordinary product film, not another screen recording. "
+        "Study the attached REAL interface and make it clear in the opening frames; "
+        "show the real interaction, then give its verified outcome a decisive, readable "
+        "visual payoff. Where source-proven independently moving UI components exist, "
+        "use them creatively if they improve the story, with genuine original UI pixels. "
+        "Compose with taste, tension, pacing and legible visual hierarchy. "
+        "The first 0.18s must show >=76% of the source interface so the product is "
+        "recognizable, before any extreme detail shot. For actual recorded clicks, "
+        "choose subtle source-event Foley unless the client explicitly requests silence. "
+        "Never invent interface content or events. Your JSON will be rendered and "
+        "judged on its actual pixels, not confident descriptions. "
+        "Return a single complete executable sauce-film-plan-v1 JSON object.\n"
+        "ACTUAL SOURCE EVIDENCE AND EXACT RENDERER CONTRACT:\n"+
         json.dumps(packet,ensure_ascii=False,separators=(",",":"))
     )
     if feedback:
@@ -164,7 +163,8 @@ def _validate(source,manifest,plan,output_dir,timeout=120):
 
 def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMPTS,
                    model_call=_model_request,validator=_validate,
-                   render=True,reference_paths=()):
+                   render=True,reference_paths=(),editorial_preflight=True,
+                   allow_silent=False):
     """Run an evidence-first film job; returns private receipts and stage status.
 
     Output is fail-closed: cannot render until an actual renderer --validate-only
@@ -229,7 +229,8 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
             amended,repair=normalize_generated_studio_plan(
                 plan,manifest=json.loads(manifest.read_text()),
                 source_path=source,source_size=tuple(packet["actualCapture"]["resolution"]),
-                fps=packet["actualCapture"]["nativeFps"])
+                fps=packet["actualCapture"]["nativeFps"],
+                manifest_path=manifest)
             normalized=out/f"model-{i}-normalized.json"
             normalized.write_text(json.dumps(amended,indent=2)+"\n")
             (out/f"model-{i}-mechanical-repair.json").write_text(
@@ -241,6 +242,22 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
             if not valid:
                 feedback=detail+"\nPrevious model JSON:\n"+raw[:4200]
                 continue
+            if render and editorial_preflight:
+                preflight=preflight_source_edit(
+                    amended,json.loads(manifest.read_text()),source,
+                    tuple(packet["actualCapture"]["resolution"]),
+                    packet["actualCapture"]["nativeFps"],
+                    audio_required=not allow_silent,manifest_path=manifest)
+                (out/f"editorial-preflight-{i}.json").write_text(
+                    json.dumps(preflight,indent=2)+"\n")
+                record["editorialPreflightVerdict"]=preflight["verdict"]
+                record["editorialPreflightFindings"]=[
+                    finding["code"] for finding in preflight["findings"]]
+                if preflight["findings"]:
+                    record["status"]="editorial_preflight_reject"
+                    feedback=(director_feedback(preflight)+
+                             "\nOriginal model creative choices:\n"+raw[:4800])
+                    continue
             if render:
                 film=out/"film.mp4"
                 cmd=[sys.executable,str(RENDERER),"--video",str(source),
@@ -327,14 +344,16 @@ def main():
     p.add_argument("--brief",required=True)
     p.add_argument("--out",type=Path,required=True)
     p.add_argument("--model",default=os.environ.get("SAUCE_DIRECTOR_MODEL","gemini-3-flash-preview"))
-    p.add_argument("--max-attempts",type=int,default=2)
+    p.add_argument("--max-attempts",type=int,default=3)
+    p.add_argument("--silent",action="store_true",
+                   help="Explicit customer request: skip action Foley preflight")
     p.add_argument("--reference-video",type=Path,action="append",default=[],
                    help="Optional research-only owned/licensed UI-motion reference MP4, max 2")
     a=p.parse_args()
     key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     r=run_unattended(a.source,a.manifest,a.brief,a.out,
           model=a.model,key=key,max_attempts=a.max_attempts,
-          reference_paths=a.reference_video)
+          reference_paths=a.reference_video,allow_silent=a.silent)
     print(json.dumps({"outcome":r["outcome"],"rendered":r["rendered"],
         "attempts":len(r["attempts"]),"creativeApproved":False,
         "receipt":str(a.out/"unattended-receipt.json")}))

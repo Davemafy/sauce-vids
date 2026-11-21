@@ -308,7 +308,8 @@ def test_encoded_video_reject_feedback_preserves_original_film_and_retries(sourc
     result=run_unattended(
         src,manifest,"A great real 2s cinematic film",out,
         model="gemini-3-flash-preview",key="test-key",max_attempts=3,
-        model_call=model,validator=validator,render=True)
+        model_call=model,validator=validator,render=True,
+        editorial_preflight=False)
     assert len(attempts)==2
     assert result["winningAttempt"]==2
     assert result["outcome"]=="needs_review"
@@ -362,3 +363,97 @@ def test_grouped_live_dom_time_repairs_are_native_and_bounded_only():
     assert not_fixed["domPlanes"][1]["peakAt"]==2.733333333
     assert not any(q["field"]=="domPlanes[1].peakAt" and q.get("reason","").startswith("Bounded")
                    for q in unsafe_receipt["changes"])
+
+
+def test_source_director_preflight_rejects_cropped_and_silent_real_action(source_pair):
+    from source_director_preflight import preflight_source_edit
+    src,manifest=source_pair
+    m=json.loads(manifest.read_text())
+    plan=valid_plan(src,manifest)
+    del plan["camera"]
+    plan["studioStage"]={
+      "camera":[{"at":0,"scale":1.45,"focus":"event:0:target"},
+                {"at":2.0,"scale":.78,"center":[.5,.5]}],
+      "lighting":{"eventIndex":0,"trigger":"verified"},
+      "payoff":{"region":"event:0:result","mode":"overview",
+                "minVisible":.75,"minContextVisible":.80}
+    }
+    report=preflight_source_edit(plan,m,src,(320,180),25,output_size=(640,360))
+    assert report["verdict"]=="REJECT"
+    assert report["creativeApproved"] is False
+    codes=[f["code"] for f in report["findings"]]
+    assert "UNRECOGNIZABLE_OPENING_CROP" in codes
+    assert "ACTION_FILM_WITHOUT_VERIFIED_AUDIO" in codes
+    plan["studioStage"]["camera"][0]={"at":0,"scale":.78,"center":[.5,.5]}
+    plan["audio"]={"mode":"eventFoley","eventIndex":0,
+                   "clickGain":.4,"motionGain":.15,"masterGain":.35}
+    fixed=preflight_source_edit(plan,m,src,(320,180),25,output_size=(640,360))
+    assert fixed["verdict"]=="GEOMETRY_AND_AUDIO_PREFLIGHT_PASS"
+    assert not fixed["findings"]
+    assert fixed["creativeApproved"] is False
+
+
+def test_explicit_customer_mute_skips_audio_veto_but_not_source_crop(source_pair):
+    from source_director_preflight import preflight_source_edit
+    src,manifest=source_pair
+    m=json.loads(manifest.read_text())
+    plan=valid_plan(src,manifest)
+    plan["studioStage"]={
+      "camera":[{"at":0,"scale":1.45,"focus":"event:0:target"},
+                {"at":2.0,"scale":.78,"center":[.5,.5]}],
+      "lighting":{"eventIndex":0},
+      "payoff":{"region":"event:0:result","minVisible":.75}
+    }
+    r=preflight_source_edit(plan,m,src,(320,180),25,
+                            output_size=(640,360),audio_required=False)
+    assert [f["code"] for f in r["findings"]]==["UNRECOGNIZABLE_OPENING_CROP"]
+
+
+def test_unattended_director_retries_real_source_editorial_failures(
+        source_pair,tmp_path,monkeypatch):
+    import auto_direct_studio_film as director
+    import quality_preview_supervisor as supervisor
+    src,manifest=source_pair
+    base=valid_plan(src,manifest)
+    del base["camera"]
+    base["studioStage"]={
+      "camera":[{"at":0,"scale":.78,"center":[.5,.5]},
+                {"at":2.0,"scale":.78,"center":[.5,.5]}],
+      "lighting":{"eventIndex":0},
+      "payoff":{"region":"event:0:result","mode":"overview"}
+    }
+    base["audio"]={"mode":"eventFoley","eventIndex":0,
+                   "clickGain":.4,"motionGain":.2,"masterGain":.5}
+    broken=json.loads(json.dumps(base))
+    broken["studioStage"]["camera"][0]={
+      "at":0,"scale":1.45,"focus":"event:0:target"}
+    broken["audio"]={"mode":"clean"}
+    seen=[]
+    def model(s,packet,model,key,feedback):
+        seen.append(feedback)
+        plan=broken if len(seen)==1 else base
+        return json.dumps(plan),{"usageMetadata":{"totalTokenCount":99}}
+    def validate(*args):return True,"real renderer source verified"
+    subprocess_run=director.subprocess.run
+    def render(cmd,**kwargs):
+        if "--output" not in cmd:return subprocess_run(cmd,**kwargs)
+        Path(cmd[cmd.index("--output")+1]).write_bytes(b"mock-encoded-output")
+        from subprocess import CompletedProcess
+        return CompletedProcess(cmd,0,stdout="rendered")
+    monkeypatch.setattr(director.subprocess,"run",render)
+    monkeypatch.setattr(supervisor,"analyze",
+                        lambda *args,**kwargs:{"verdict":"HUMAN_REVIEW_REQUIRED","findings":[]})
+    out=tmp_path/"private"
+    result=run_unattended(src,manifest,"Real software film",out,
+         model="gemini-3-flash-preview",key="test-secret",
+         model_call=model,validator=validate,max_attempts=3,render=True)
+    assert len(seen)==2
+    assert "UNRECOGNIZABLE_OPENING_CROP" in seen[1]
+    assert "ACTION_FILM_WITHOUT_VERIFIED_AUDIO" in seen[1]
+    assert result["attempts"][0]["status"]=="editorial_preflight_reject"
+    assert result["outcome"]=="needs_review"
+    assert result["creativeApproved"] is False
+    assert (out/"editorial-preflight-1.json").exists()
+    assert (out/"editorial-preflight-2.json").exists()
+    assert not (out/"film-attempt-1-rejected.mp4").exists()
+    assert (out/"film.mp4").exists()

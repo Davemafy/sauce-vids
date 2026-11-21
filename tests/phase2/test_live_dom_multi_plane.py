@@ -223,3 +223,183 @@ def test_real_chromium_multiple_opaque_cards_are_original_dom_pixels(tmp_path):
                                          expected_native_size=(640,360))
             await browser.close()
     asyncio.run(perform())
+
+
+def test_generic_source_relative_hero_depth_rejects_flat_staging(twin):
+    """Two verified actual UI foreground planes require visible spatial separation."""
+    from source_director_preflight import preflight_source_edit
+    src,plate,manifest,m,params,_=twin
+    plan={
+        "durationSeconds":4.0,
+        "studioStage":{
+          "camera":[{"at":0,"scale":.90,"center":[.5,.5]},
+                    {"at":4.0,"scale":.90,"center":[.5,.5]}],
+          "lighting":{"eventIndex":0,"trigger":"verified"},
+          "payoff":{"region":"event:0:result","mode":"overview",
+                    "minVisible":.80,"minContextVisible":.80},
+          "material":{"color":[16,17,22]}
+        },
+        "domPlanes":params,
+        "audio":{"mode":"eventFoley","eventIndex":0,
+                 "clickGain":.4,"motionGain":.2,"masterGain":.5}
+    }
+    report=preflight_source_edit(plan,m,src,(640,360),25,output_size=(1280,720))
+    assert report["verdict"]=="REJECT"
+    assert [x["code"] for x in report["findings"]]==["FLAT_FOREGROUND_HIERARCHY"]
+    assert report["observations"]["heroSourceWindowAreaFraction"]>.62
+    # No source UI edited. Only model's original camera scale is revised:
+    # the *same* source cards remain hero-anchored at the *same* positions.
+    plan["studioStage"]["camera"][0]["scale"]=.58
+    plan["studioStage"]["camera"][1]["scale"]=.58
+    accepted=preflight_source_edit(plan,m,src,(640,360),25,
+                                   output_size=(1280,720))
+    assert not accepted["findings"]
+    assert accepted["verdict"]=="GEOMETRY_AND_AUDIO_PREFLIGHT_PASS"
+    assert accepted["observations"]["heroSourceWindowAreaFraction"]<.62
+    assert accepted["creativeApproved"] is False
+
+
+def test_bounded_source_true_hero_compiler_preserves_card_size_and_rejects_collision(twin):
+    """No authored website selectors/timing. Real capture proves card arrangement."""
+    import copy
+    from source_hero_choreography import (
+        audit_hero_scene,fit_source_hero_choreography)
+    from source_director_preflight import preflight_source_edit
+    src,plate,manifest,m,layers,_=twin
+    model={
+      "schema":"sauce-film-plan-v1",
+      "durationSeconds":4.0,
+      "presentation":"fullscreen",
+      "studioStage":{
+        "camera":[{"at":0,"scale":.9,"center":[.5,.5]},
+                  {"at":4.0,"scale":.9,"center":[.5,.5]}],
+        "material":{"color":[18,19,24]},
+        "lighting":{"eventIndex":0,"trigger":"verified"},
+        "payoff":{"region":"event:0:result","mode":"overview",
+                  "minVisible":.80,"minContextVisible":.80}
+      },
+      "audio":{"mode":"eventFoley","eventIndex":0,
+               "clickGain":.4,"motionGain":.2,"masterGain":.5},
+      "domPlanes":copy.deepcopy(layers)
+    }
+    for i,x in enumerate(model["domPlanes"]):
+        x["heroCenter"]=[.35,.48] if i==0 else [.65,.48]
+    initial=copy.deepcopy(model)
+    bad=preflight_source_edit(model,m,src,(640,360),25,
+                              output_size=(1280,720),manifest_path=manifest)
+    assert bad["verdict"]=="REJECT"
+    assert "FLAT_FOREGROUND_HIERARCHY" in [x["code"] for x in bad["findings"]]
+    repaired,changes=fit_source_hero_choreography(
+        model,m,src,manifest,(640,360),25,output_size=(1280,720))
+    assert model==initial
+    assert changes
+    assert len(repaired["studioStage"]["camera"])==3
+    assert any("studioStage.camera[1]" in c["field"] for c in changes)
+    assert len([c for c in changes if c["field"].endswith("heroCenter")])==2
+    assert repaired["domPlanes"][0]["scale"]==initial["domPlanes"][0]["scale"]
+    assert repaired["domPlanes"][1]["scale"]==initial["domPlanes"][1]["scale"]
+    assert repaired["domPlanes"][0]["startAt"]==initial["domPlanes"][0]["startAt"]
+    assert repaired["domPlanes"][1]["endAt"]==initial["domPlanes"][1]["endAt"]
+    assert repaired["studioStage"]["camera"][0]==initial["studioStage"]["camera"][0]
+    assert repaired["studioStage"]["camera"][-1]["at"]==4.0
+    assert repaired["audio"]==initial["audio"]
+    after=preflight_source_edit(repaired,m,src,(640,360),25,
+                                output_size=(1280,720),manifest_path=manifest)
+    assert after["verdict"]=="GEOMETRY_AND_AUDIO_PREFLIGHT_PASS"
+    assert after["observations"]["sourceTrueForegroundGutterPx"]>=48
+    assert after["observations"]["heroSourceWindowAreaFraction"]<=.62
+    assert after["creativeApproved"] is False
+    a=audit_hero_scene(repaired,m,src,manifest,(640,360),25,
+                       output_size=(1280,720))
+    assert a["gutter"]["pixels"]>=48
+
+
+def test_tampered_chromium_pair_cannot_be_scene_compiled(twin):
+    """A false hidden background is NEVER authorized by the creative compiler."""
+    import copy
+    from source_hero_choreography import fit_source_hero_choreography
+    src,plate,manifest,m,layers,_=twin
+    bad=copy.deepcopy(m);bad["domPlanes"][0]["plateSha256"]="0"*64
+    plan={
+      "durationSeconds":4.0,"presentation":"fullscreen",
+      "studioStage":{
+        "camera":[{"at":0,"scale":.8,"center":[.5,.5]},
+                  {"at":4.0,"scale":.8,"center":[.5,.5]}],
+        "lighting":{"eventIndex":0},
+        "payoff":{"region":"event:0:result","minVisible":.75}
+      },
+      "domPlanes":copy.deepcopy(layers)
+    }
+    untouched=copy.deepcopy(plan)
+    output,changes=fit_source_hero_choreography(
+       plan,bad,src,manifest,(640,360),25,output_size=(1280,720))
+    assert output==untouched
+    assert changes==[]
+    assert plan==untouched
+
+
+def test_unattended_model_plan_compiles_source_true_hero_cinema(
+        twin,tmp_path,monkeypatch):
+    """Provider supplies ONLY original creative JSON; engine arranges genuine UI."""
+    import hashlib
+    import auto_direct_studio_film as runner
+    import quality_preview_supervisor as qa
+    src,plate,manifest,m,layers,_=twin
+    model={
+      "schema":"sauce-film-plan-v1",
+      "sourceSha256":hashlib.sha256(src.read_bytes()).hexdigest(),
+      "manifestSha256":hashlib.sha256(manifest.read_bytes()).hexdigest(),
+      "durationSeconds":4.,
+      "presentation":"fullscreen",
+      "cursor":"none",
+      "studioStage":{
+        "camera":[{"at":0,"scale":.9,"center":[.5,.5]},
+                  {"at":4.,"scale":.9,"center":[.5,.5]}],
+        "material":{"color":[20,22,24],"grain":0},
+        "lighting":{"eventIndex":0,"trigger":"verified"},
+        "payoff":{"region":"event:0:result","mode":"overview",
+                  "minVisible":.8,"minContextVisible":.8}
+      },
+      "audio":{"mode":"eventFoley","eventIndex":0,
+              "clickGain":.4,"motionGain":.2,"masterGain":.5},
+      "domPlanes":json.loads(json.dumps(layers))
+    }
+    model["domPlanes"][0]["heroCenter"]=[.35,.48]
+    model["domPlanes"][1]["heroCenter"]=[.65,.48]
+    def actual_fake_model(source,packet,model_name,key,feedback):
+        assert feedback is None
+        assert packet["actualCapture"]["verifiedLiveDomPlaneGroup"]
+        return json.dumps(model),{"usageMetadata":{"totalTokenCount":87}}
+    def validator(source,manifest_path,plan_path,output_dir):
+        plan=json.loads(plan_path.read_text())
+        assert len(plan["studioStage"]["camera"])==3
+        assert plan["domPlanes"][0]["heroCenter"][0]<.35
+        assert plan["domPlanes"][1]["heroCenter"][0]>.65
+        return True,"source-time camera and genuine pair verified"
+    original_run=runner.subprocess.run
+    def render(cmd,**kwargs):
+        if "--output" not in cmd:return original_run(cmd,**kwargs)
+        Path(cmd[cmd.index("--output")+1]).write_bytes(b"source-verified-local-demo")
+        from subprocess import CompletedProcess
+        return CompletedProcess(cmd,0,stdout="rendered")
+    monkeypatch.setattr(runner.subprocess,"run",render)
+    monkeypatch.setattr(qa,"analyze",
+                        lambda *args,**kwargs:{
+                            "verdict":"HUMAN_REVIEW_REQUIRED","findings":[]})
+    receipt=runner.run_unattended(
+       src,manifest,"A real cinematic source product film",tmp_path/"private",
+       model="gemini-3-flash-preview",key="test-only",
+       max_attempts=1,model_call=actual_fake_model,
+       validator=validator,render=True)
+    assert receipt["outcome"]=="needs_review"
+    assert receipt["creativeApproved"] is False
+    assert receipt["attempts"][0]["editorialPreflightFindings"]==[]
+    assert receipt["attempts"][0]["editorialPreflightVerdict"]=="GEOMETRY_AND_AUDIO_PREFLIGHT_PASS"
+    evidence=receipt["attempts"][0]["mechanicalChanges"]
+    assert any(c["field"].startswith("studioStage.camera[1]") for c in evidence)
+    assert len([c for c in evidence if c["field"].endswith("heroCenter")])==2
+    report=json.loads((tmp_path/"private"/"editorial-preflight-1.json").read_text())
+    assert report["observations"]["sourceTrueForegroundGutterPx"]>=48
+    assert report["observations"]["heroSourceWindowAreaFraction"]<=.62
+    assert (tmp_path/"private"/"model-1-original.json").is_file()
+    assert (tmp_path/"private"/"model-1-mechanical-repair.json").is_file()
