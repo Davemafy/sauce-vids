@@ -22,7 +22,8 @@ from film_director_capabilities import build_contract
 
 
 def run(url:str,allowed_host:str,out:Path,*,seconds:float=16.,
-        from_capture:Path|None=None,capture_only:bool=False,
+        from_capture:Path|None=None,from_paired_capture:Path|None=None,
+        capture_only:bool=False,
         model:str="gemini-3-flash-preview",max_attempts:int=3,
         reference_videos:tuple[Path,...]=(),key:str|None=None,
         client_brief:str|None=None,creative_brief_path:Path|None=None,
@@ -35,12 +36,27 @@ def run(url:str,allowed_host:str,out:Path,*,seconds:float=16.,
     if creative_brief_path is not None:
         from client_creative_brief import load_client_creative_brief
         load_client_creative_brief(creative_brief_path,url)
+    if from_capture is not None and from_paired_capture is not None:
+        raise ValueError("Choose exactly one capture input")
+    if from_paired_capture is not None and director_mode!="coverage":
+        raise ValueError("Paired capture requires coverage mode")
     if out.exists() and (not out.is_dir() or any(out.iterdir())):
         raise ValueError("New output must be empty; do not overwrite source or prior model receipts")
     out.mkdir(parents=True,exist_ok=True,mode=0o700)
     try:os.chmod(out,0o700)
     except OSError:pass
-    if from_capture is None:
+    if from_paired_capture is not None:
+        capture_dir=Path(from_paired_capture).resolve()
+        source=capture_dir/"source.mp4"
+        manifest_path=capture_dir/"capture.json"
+        if (not capture_dir.is_dir() or
+            any(not p.is_file() or p.is_symlink() or p.resolve().parent!=capture_dir
+                for p in (source,manifest_path))):
+            raise ValueError("Paired capture source and manifest must be regular local files")
+        original=json.loads(manifest_path.read_text())
+        if original.get("source")!=url or not original.get("domPlanes"):
+            raise ValueError("Paired capture source contradicts requested public URL")
+    elif from_capture is None:
         proof=discover(url,allowed_host)
         capture_dir=out/"capture"
         recording=record(url,proof,capture_dir,duration=seconds)
@@ -57,9 +73,10 @@ def run(url:str,allowed_host:str,out:Path,*,seconds:float=16.,
         proof=json.loads(discovery_file.read_text())
         if proof.get("url")!=url or proof.get("host")!=allowed_host:
             raise ValueError("Original capture public URL contradicts request")
-    manifest=normalize(source,source_receipt,discovery_file)
-    manifest_path=out/"source-locked-manifest.json"
-    manifest_path.write_text(json.dumps(manifest,indent=2)+"\n")
+    if from_paired_capture is None:
+        manifest=normalize(source,source_receipt,discovery_file)
+        manifest_path=out/"source-locked-manifest.json"
+        manifest_path.write_text(json.dumps(manifest,indent=2)+"\n")
     if not client_brief:
         client_brief=("Direct a cinematic 16:9 product demo of the REAL public "
                       "software interface. Preserve the original recorded "
@@ -71,6 +88,9 @@ def run(url:str,allowed_host:str,out:Path,*,seconds:float=16.,
                       "actual source. Use source-timed sound for every true "
                       "interaction. No fictional software or outcomes.")
     packet=build_contract(source,manifest_path,client_brief)
+    if (from_paired_capture is not None and
+        packet["actualCapture"].get("verifiedLiveDomPlaneGroup") is None):
+        raise ValueError("Real source clean-plate hashes or geometry failed verification")
     receipt={
         "schema":"sauce-autonomous-public-ui-film-v1",
         "url":url,
@@ -87,7 +107,9 @@ def run(url:str,allowed_host:str,out:Path,*,seconds:float=16.,
         "noAutoPublication":True,
         "creativeApproved":False,
         "independentPremiumApproval":False,
-        "scope":"explicit-allowlist anonymous public reversible ARIA tabs",
+        "scope":("owner-provided synchronized real-browser public DOM capture"
+                 if from_paired_capture is not None else
+                 "explicit-allowlist anonymous public reversible ARIA tabs"),
         "clientCreativeBrief":("unverified_client_intent_only" if creative_brief_path
                                else "short_text_intent"),
         "productionReady":False}
@@ -97,20 +119,35 @@ def run(url:str,allowed_host:str,out:Path,*,seconds:float=16.,
     if director_mode=="coverage":
         # Autonomous *editorial* fallback for owner-only verified capture,
         # not permission to execute different browser interactions.
-        from autonomous_shot_coverage import run as direct_coverage
-        coverage=direct_coverage(
-            source,manifest_path,out/"coverage",brief=client_brief,
-            expected_source_sha256=packet["actualCapture"]["sourceSha256"],
-            expected_manifest_sha256=packet["actualCapture"]["manifestSha256"],
-            max_renders=2)
-        accepted=next((film for film in coverage["rendered"] if
-            film["status"]=="rendered_needs_human_review"),None)
+        # Only the original verified browser capture can authorize real
+        # independent layers. Do not manufacture a plate from an existing MP4.
+        paired=packet["actualCapture"].get("verifiedLiveDomPlaneGroup")
+        if paired and paired.get("verifiedSynchronizedSameBrowserFrames"):
+            from autonomous_spatial_film import run as spatial_director
+            spatial=spatial_director(
+                source,manifest_path,out/"spatial",
+                expected_source_sha256=packet["actualCapture"]["sourceSha256"],
+                expected_manifest_sha256=packet["actualCapture"]["manifestSha256"])
+            accepted=next((candidate for candidate in spatial["candidates"]
+                if candidate["status"]=="rendered_needs_human_review"),None)
+            receipt["directorMode"]="source_true_verified_spatial"
+            receipt["spatialReceipt"]=str(out/"spatial"/"autonomous-spatial-receipt.json")
+            receipt["spatialVariants"]=spatial["candidates"]
+        else:
+            from autonomous_shot_coverage import run as direct_coverage
+            coverage=direct_coverage(
+                source,manifest_path,out/"coverage",brief=client_brief,
+                expected_source_sha256=packet["actualCapture"]["sourceSha256"],
+                expected_manifest_sha256=packet["actualCapture"]["manifestSha256"],
+                max_renders=2)
+            accepted=next((film for film in coverage["rendered"] if
+                film["status"]=="rendered_needs_human_review"),None)
+            receipt["directorMode"]="deterministic_source_coverage"
+            receipt["coverageReceipt"]=str(out/"coverage"/"coverage-receipt.json")
+            receipt["coverageVariants"]=coverage["rendered"]
         receipt["status"]=("film_requires_human_review" if accepted
                            else "coverage_failed_source_retained")
-        receipt["directorMode"]="deterministic_source_coverage"
         receipt["providerAttemptCount"]=0
-        receipt["coverageReceipt"]=str(out/"coverage"/"coverage-receipt.json")
-        receipt["coverageVariants"]=coverage["rendered"]
         receipt["film"]=accepted["film"] if accepted else None
         receipt["filmSha256"]=accepted["filmSha256"] if accepted else None
         (out/"evidence-receipt.json").write_text(json.dumps(receipt,indent=2)+"\n")
@@ -143,6 +180,8 @@ def main():
     p.add_argument("--out",type=Path,required=True)
     p.add_argument("--seconds",type=float,default=16.)
     p.add_argument("--from-capture",type=Path)
+    p.add_argument("--from-paired-capture",type=Path,
+                   help="Verified source.mp4/capture.json/plate.mp4 capture directory")
     p.add_argument("--capture-only",action="store_true")
     p.add_argument("--model",default="gemini-3-flash-preview")
     p.add_argument("--director-mode",choices=("gemini","coverage"),default="gemini",
@@ -155,7 +194,8 @@ def main():
     a=p.parse_args()
     key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     result=run(a.url,a.allowed_host,a.out,seconds=a.seconds,
-        from_capture=a.from_capture,capture_only=a.capture_only,
+        from_capture=a.from_capture,from_paired_capture=a.from_paired_capture,
+        capture_only=a.capture_only,
         model=a.model,max_attempts=a.max_attempts,
         reference_videos=tuple(a.reference_video),key=key,
         client_brief=a.brief,creative_brief_path=a.creative_brief_json,
