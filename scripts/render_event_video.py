@@ -273,7 +273,7 @@ if FILM_PLAN_DATA is not None and FILM_PLAN_DATA.get("audio",{}).get("mode")=="e
                      cue("whoosh_soft",changed,sound.get("motionGain",.3))])
         event_receipts.append({"eventIndex":ix,"pressAt":at,"visibleResultAt":changed})
     audio_plan={"schema":"sauce-foley-plan-v1","sampleRate":RATE,
-                "durationMs":int(round(FILM_PLAN.duration*1000)),
+                "durationMs":FILM_PLAN.duration*1000,
                 "masterGain":sound.get("masterGain",.55),"musicGain":0,
                 "muted":False,"duckIntervals":[],"cues":cues}
     if not args.validate_only:

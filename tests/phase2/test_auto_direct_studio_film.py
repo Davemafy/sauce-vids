@@ -526,3 +526,20 @@ def test_refit_story_is_aspirational_and_never_changes_real_capture(source_pair,
              model_call=fake_model,validator=lambda *args:(True,"source verified"),
              max_attempts=1,render=False,creative_brief_path=creative_wrong)
     assert not (tmp_path/"wrong-story").exists()
+
+
+def test_provider_503_fails_closed_after_one_call(source_pair,tmp_path):
+    from urllib.error import HTTPError
+    src,manifest=source_pair
+    attempts=[]
+    def model_call(*args):
+        attempts.append(1)
+        raise HTTPError("https://example.invalid/",503,"Unavailable",{},None)
+    result=run_unattended(src,manifest,"A verified demo",tmp_path/"503",
+        model="gemini-3.7-flash",key="test-in-memory-only",
+        max_attempts=1,model_call=model_call,render=False)
+    assert len(attempts)==1
+    assert result["outcome"]=="provider_unavailable"
+    assert result["attempts"][0]["httpStatus"]==503
+    assert result["attempts"][0]["status"]=="provider_http_unavailable"
+    assert result["rendered"] is False

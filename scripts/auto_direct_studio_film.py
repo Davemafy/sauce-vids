@@ -369,8 +369,9 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
                 # request header, API key or private provider account text.
                 code=int(exc.code)
                 record["httpStatus"]=code
-                if code in (400,401,403,404,413,429):
-                    record["status"]="provider_http_blocked"
+                if code in (400,401,403,404,413,429,500,502,503,504):
+                    record["status"]=("provider_http_unavailable" if code>=500
+                                      else "provider_http_blocked")
                     result["outcome"]="provider_unavailable"
                     result["why"]="Model call rejected with safe HTTP status "+str(code)
                     break
