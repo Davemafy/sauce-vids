@@ -167,7 +167,51 @@ def analyze(path, evidence=None, seconds=15):
     def issue(code,details): findings.append({"code":code,"detail":details})
     if len(opener)>=10 and np.percentile(opener,80)<1.3: issue("STATIC_OPENING_2S",{"p80_frame_delta":round(float(np.percentile(opener,80)),3)})
     if np.mean((means>185)&(std<30))>.35: issue("WASHED_OUT_FRAMES",{"fraction":round(float(np.mean((means>185)&(std<30))),3)})
-    if np.any(diffs>62): issue("ABRUPT_CUT_CANDIDATE",{"max_frame_delta":round(float(max(diffs)),2)})
+    # A theme switch or newly displayed panel can legitimately change
+    # thousands of original browser pixels IN ONE SOURCE FRAME. This is
+    # not a composited editorial cut. Suppress only abrupt candidates that
+    # match SHA256-verified source video changes at recorded source-event
+    # times, within one QA sample frame. Any unverified/new editorial
+    # discontinuity still fails closed.
+    source_relative_transitions=[]
+    abrupt_indices=np.where(diffs>62)[0]
+    unverified_abrupt=list(abrupt_indices)
+    ev=evidence if isinstance(evidence,dict) else {}
+    if len(abrupt_indices) and ev.get("source_sha256") and ev.get("event_manifest_sha256"):
+        original=Path(ev.get("source_path",""))
+        original_manifest=Path(ev.get("event_manifest_path",""))
+        if (original.is_file() and original_manifest.is_file()
+                and digest(original)==ev["source_sha256"]
+                and digest(original_manifest)==ev["event_manifest_sha256"]):
+            try:
+                source_events=json.loads(original_manifest.read_text()).get("events",[])
+                original_frames=frames(original,min(duration,seconds))
+                original_diff=np.abs(np.diff(original_frames,axis=0)).mean(axis=(1,2))
+                unverified_abrupt=[]
+                for ix in abrupt_indices:
+                    t=float(ix+1)/10
+                    close=any(isinstance(e,dict) and
+                        isinstance(e.get("evidence"),str) and e["evidence"].strip()
+                        and type(e.get("start")) in (float,int)
+                        and type(e.get("t")) in (float,int)
+                        and e["start"]-.15<=t<=e["t"]+.2
+                        for e in source_events)
+                    matching=original_diff[max(0,ix-1):min(len(original_diff),ix+2)]
+                    peak=float(max(matching,default=0))
+                    if close and peak>=62 and float(diffs[ix])<=peak*1.25:
+                        source_relative_transitions.append({
+                           "actualSourceTime":round(t,3),
+                           "sourceFrameDifference":round(peak,3),
+                           "filmFrameDifference":round(float(diffs[ix]),3),
+                           "verifiedRealUiTransition":True})
+                    else:unverified_abrupt.append(int(ix))
+            except (OSError,ValueError,TypeError,KeyError,json.JSONDecodeError):
+                unverified_abrupt=list(abrupt_indices)
+                source_relative_transitions=[]
+    if unverified_abrupt:
+        issue("ABRUPT_CUT_CANDIDATE",
+              {"max_frame_delta":round(float(max(diffs[i] for i in unverified_abrupt)),2),
+               "unmatchedSamples":len(unverified_abrupt)})
     if np.mean(diffs<.35)>.55: issue("REPEATED_OR_STATIC_FRAMES",{"fraction":round(float(np.mean(diffs<.35)),3)})
     # A naturally dark genuine source interface must not be treated as a
     # broken film merely because its gray standard deviation is <24. Compare
@@ -220,7 +264,8 @@ def analyze(path, evidence=None, seconds=15):
     if "verified_focal_sequence" in ev:
         findings.extend(verified_focal_sequence(
             ev["verified_focal_sequence"],(video["width"],video["height"])))
-    return {"schema":"sauce-film-quality-v1","film":str(path),"film_sha256":digest(path),"duration":duration,"video_dimensions":[video["width"],video["height"]],"sampled_frames":len(a), "sample_fps":10,"sourceRelativeDarkUiEvidence":source_referenced_dark_ui,
+    return {"schema":"sauce-film-quality-v1","film":str(path),"film_sha256":digest(path),"duration":duration,"video_dimensions":[video["width"],video["height"]],"sampled_frames":len(a),  "sample_fps":10,"sourceRelativeRealUiTransitions":source_relative_transitions,
+            "sourceRelativeDarkUiEvidence":source_referenced_dark_ui,
             "findings":findings,"verdict":"REJECT" if findings else "HUMAN_REVIEW_REQUIRED"}
 
 def repair_edl(edit,manifest,report):

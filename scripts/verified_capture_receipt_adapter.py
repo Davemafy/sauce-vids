@@ -53,6 +53,11 @@ def convert(source,receipt):
             label=e.get("label")
             if not label or label in outstanding:raise ValueError("Duplicate pointerdown")
             outstanding[label]=e
+        elif e.get("kind")=="pointerup":
+            label=e.get("label")
+            if label not in outstanding or outstanding[label].get("release") is not None:
+                raise ValueError("Unmatched or duplicate real mouse release")
+            outstanding[label]["release"]=e.get("t")
         elif e.get("kind")=="verified_result":
             label=e.get("label")
             if label not in outstanding:raise ValueError("No genuine matching press")
@@ -67,10 +72,32 @@ def convert(source,receipt):
                 target["y"]-18<=p["y"]<=target["y"]+target["height"]+18
                 for p in pts):
                 raise ValueError("Recorded pointer does not approach observed control")
-            action={"kind":"slider_change","start":float(start),
-                "t":float(end),"end":float(end),"targetRect":target,"resultRect":result,
+            kind=press.get("actionKind","slider_change")
+            if kind not in ("click","slider_change"):
+                raise ValueError("Unrecognized original source action kind")
+            if kind=="click":
+                released=press.get("release")
+                if (type(released) not in (int,float) or
+                    not start<released<=end or released-start>.75):
+                    raise ValueError("Click must have a true original timed release")
+                final_time=float(released)
+            else:
+                if "release" in press:
+                    released=press["release"]
+                    if type(released) not in (int,float) or not start<released<=end:
+                        raise ValueError("Invalid observed slider release")
+                final_time=float(end)
+            action={"kind":kind,"start":float(start),
+                "t":float(end),"end":final_time,"targetRect":target,"resultRect":result,
                 "evidence":"Original Chromium press and live observed result: "+
                     str(e["evidence"])[:160]}
+            # Public display-control labels originate from the original
+            # Chromium DOM's visible accessible name and the independently
+            # accepted candidate. Only a compact safe label may reach Gemini.
+            label=press.get("label")
+            if (kind=="click" and isinstance(label,str) and
+                re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 /:+&(),.\-]{1,70}",label)):
+                action["verifiedObservedPublicAction"]=label
             # The original browser receipt already verified this PUBLIC
             # pricing text was visibly present in the real page after the
             # drag. Pass only a strict, non-sensitive price token to the

@@ -457,3 +457,72 @@ def test_unattended_director_retries_real_source_editorial_failures(
     assert (out/"editorial-preflight-2.json").exists()
     assert not (out/"film-attempt-1-rejected.mp4").exists()
     assert (out/"film.mp4").exists()
+
+
+def test_provider_429_stops_before_unbounded_retry_or_fake_film(source_pair,tmp_path):
+    from urllib.error import HTTPError
+    src,manifest=source_pair
+    seen=[]
+    def blocked(*args):
+        seen.append(1)
+        raise HTTPError("https://example.invalid/",429,"Quota",{},None)
+    def forbidden_validator(*args):
+        raise AssertionError("No plan/renderer call after provider rejected")
+    out=tmp_path/"quota-blocked"
+    result=run(src,manifest,out,blocked,forbidden_validator,max_attempts=3)
+    assert seen==[1]
+    assert result["outcome"]=="provider_unavailable"
+    assert result["attempts"][0]["httpStatus"]==429
+    assert result["attempts"][0]["status"]=="provider_http_blocked"
+    assert result["rendered"] is False
+    assert result["creativeApproved"] is False
+    assert not (out/"film.mp4").exists()
+    assert "secret-used-only-in-memory" not in (out/"unattended-receipt.json").read_text()
+
+
+
+def test_refit_story_is_aspirational_and_never_changes_real_capture(source_pair,tmp_path):
+    src,manifest=source_pair
+    m=json.loads(manifest.read_text())
+    m["source"]="https://refit.davemafy.xyz/"
+    manifest.write_text(json.dumps(m))
+    brief={
+        "schema":"sauce-creative-brief-v1",
+        "sourceUrl":"https://refit.davemafy.xyz",
+        "output":{"orientation":"landscape","targetDurationSeconds":80},
+        "story":{"payoff":"Bring your agent. Change the model. Keep the behavior."},
+        "scenes":[
+            {"id":"hook","role":"hook","targetSeconds":9,
+             "recordedEvidence":{"original":"24/24","replacement":"13/24"},
+             "actions":[{"type":"navigate","target":"/"}]},
+            {"id":"run","role":"demonstration","targetSeconds":12,
+             "actions":[{"type":"click","target":"Run refund agent"}]}
+        ]}
+    creative=tmp_path/"client-story.json";creative.write_text(json.dumps(brief))
+    plan=valid_plan(src,manifest)
+    calls=[]
+    def fake_model(s,packet,model,key,feedback):
+        assert packet["actualCapture"]["durationSeconds"]==2.0
+        assert len(packet["actualCapture"]["verifiedEvents"])==1
+        assert "24/24" not in json.dumps(packet["actualCapture"])
+        assert packet["unverifiedClientStoryIntent"]["requestedDurationSeconds"]==80
+        assert packet["unverifiedClientStoryIntent"]["clientBrief"]["scenes"][0]["recordedEvidence"]["original"]=="24/24"
+        calls.append(1)
+        return json.dumps(plan),{"usageMetadata":{}}
+    result=run_unattended(src,manifest,"Demonstrate product with source-true evidence",
+         tmp_path/"with-story",model="gemini-3-flash-preview",key="fake",
+         model_call=fake_model,validator=lambda *args:(True,"source verified"),
+         max_attempts=1,render=False,creative_brief_path=creative)
+    assert calls==[1]
+    assert result["outcome"]=="validated_not_rendered"
+    assert result["creativeApproved"] is False
+
+    creative_wrong=tmp_path/"wrong-product-story.json"
+    brief["sourceUrl"]="https://other.example"
+    creative_wrong.write_text(json.dumps(brief))
+    with pytest.raises(ValueError,match="hostname"):
+        run_unattended(src,manifest,"Demonstrate product with source-true evidence",
+             tmp_path/"wrong-story",model="gemini-3-flash-preview",key="fake",
+             model_call=fake_model,validator=lambda *args:(True,"source verified"),
+             max_attempts=1,render=False,creative_brief_path=creative_wrong)
+    assert not (tmp_path/"wrong-story").exists()
