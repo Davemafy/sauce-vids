@@ -202,7 +202,7 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
         if pointer_track(manifest,sw,sh) is None:
             raise ValueError("Recorded cursor requires a valid, source-timed track")
     audio=data.get("audio",{"mode":"clean"})
-    _obj(audio,("mode","file","eventIndex","clickGain","motionGain","masterGain"),"audio")
+    _obj(audio,("mode","file","eventIndex","eventIndices","clickGain","motionGain","masterGain"),"audio")
     if audio.get("mode") not in ("clean","file","eventFoley"):
         raise ValueError("Unsupported audio mode")
     audio_file=None
@@ -219,16 +219,29 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
     elif audio["mode"]=="eventFoley":
         if "file" in audio:
             raise ValueError("Event Foley is synthesized from real actions, not paths")
-        ix=audio.get("eventIndex")
-        if type(ix) is not int or ix<0 or ix>=len(manifest.get("events",[])):
-            raise ValueError("Event Foley needs a genuine event index")
-        e=manifest["events"][ix]
-        if not isinstance(e.get("evidence"),str) or not e["evidence"].strip():
-            raise ValueError("Event Foley requires verified outcome evidence")
-        for key in ("start","t"):
-            _float(e.get(key),f"Foley event.{key}",0,duration)
-        if e["start"]>e["t"]:
-            raise ValueError("Foley cannot predate real action")
+        if ("eventIndex" in audio)==("eventIndices" in audio):
+            raise ValueError("Event Foley selects exactly one eventIndex or eventIndices")
+        if "eventIndex" in audio:
+            indexes=[audio["eventIndex"]]
+        else:
+            indexes=audio["eventIndices"]
+            if (not isinstance(indexes,list) or not 1<=len(indexes)<=6 or
+                    len(set(str(x) for x in indexes))!=len(indexes)):
+                raise ValueError("Event Foley indices must be unique and bounded")
+        observed=[]
+        for ix in indexes:
+            if type(ix) is not int or ix<0 or ix>=len(manifest.get("events",[])):
+                raise ValueError("Event Foley needs a genuine event index")
+            e=manifest["events"][ix]
+            if not isinstance(e.get("evidence"),str) or not e["evidence"].strip():
+                raise ValueError("Event Foley requires verified outcome evidence")
+            for key in ("start","t"):
+                _float(e.get(key),f"Foley event.{key}",0,duration)
+            if e["start"]>e["t"]:
+                raise ValueError("Foley cannot predate real action")
+            observed.append((e["start"],e["t"]))
+        if any(b[0]<=a[0] for a,b in zip(observed,observed[1:])):
+            raise ValueError("Event Foley source chronology must be increasing")
         for key in ("clickGain","motionGain","masterGain"):
             _float(audio.get(key,.5),f"audio.{key}",0,1)
     elif "file" in audio or set(audio)-{"mode"}:

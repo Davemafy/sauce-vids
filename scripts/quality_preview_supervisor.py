@@ -169,7 +169,32 @@ def analyze(path, evidence=None, seconds=15):
     if np.mean((means>185)&(std<30))>.35: issue("WASHED_OUT_FRAMES",{"fraction":round(float(np.mean((means>185)&(std<30))),3)})
     if np.any(diffs>62): issue("ABRUPT_CUT_CANDIDATE",{"max_frame_delta":round(float(max(diffs)),2)})
     if np.mean(diffs<.35)>.55: issue("REPEATED_OR_STATIC_FRAMES",{"fraction":round(float(np.mean(diffs<.35)),3)})
-    if np.mean(std<24)>.5: issue("LOW_VISUAL_DETAIL",{"fraction":round(float(np.mean(std<24)),3)})
+    # A naturally dark genuine source interface must not be treated as a
+    # broken film merely because its gray standard deviation is <24. Compare
+    # the encoded film to the separately SHA-verified actual source frames:
+    # source-dark UI is not source damage. Still reject black/blank footage
+    # and any plan that loses more than 15% of genuine source contrast.
+    source_referenced_dark_ui=None
+    if np.mean(std<24)>.5:
+        ev=evidence if isinstance(evidence,dict) else {}
+        original=Path(ev.get("source_path",""))
+        if (ev.get("source_sha256") and original.is_file() and
+                digest(original)==ev["source_sha256"]):
+            src_frames=frames(original,min(seconds,duration))
+            src_std=src_frames.std(axis=(1,2))
+            src_means=src_frames.mean(axis=(1,2))
+            baseline=float(np.median(src_std))
+            actual=float(np.median(std))
+            if (baseline<24 and float(np.median(src_means))<45
+                    and baseline>=8 and actual>=max(8,baseline*.85)):
+                source_referenced_dark_ui={
+                    "verifiedSourceMedianGrayStd":round(baseline,3),
+                    "filmMedianGrayStd":round(actual,3),
+                    "sourceOriginalDarkUi":True,
+                    "contrastPreservedFraction":round(actual/baseline,3)}
+        if source_referenced_dark_ui is None:
+            issue("LOW_VISUAL_DETAIL",
+                  {"fraction":round(float(np.mean(std<24)),3)})
     audio=next((s for s in info["streams"] if s["codec_type"]=="audio"),None)
     if audio is None: issue("NO_AUDIO_STREAM",{})
     else:
@@ -195,7 +220,8 @@ def analyze(path, evidence=None, seconds=15):
     if "verified_focal_sequence" in ev:
         findings.extend(verified_focal_sequence(
             ev["verified_focal_sequence"],(video["width"],video["height"])))
-    return {"schema":"sauce-film-quality-v1","film":str(path),"film_sha256":digest(path),"duration":duration,"video_dimensions":[video["width"],video["height"]],"sampled_frames":len(a),"sample_fps":10,"findings":findings,"verdict":"REJECT" if findings else "HUMAN_REVIEW_REQUIRED"}
+    return {"schema":"sauce-film-quality-v1","film":str(path),"film_sha256":digest(path),"duration":duration,"video_dimensions":[video["width"],video["height"]],"sampled_frames":len(a), "sample_fps":10,"sourceRelativeDarkUiEvidence":source_referenced_dark_ui,
+            "findings":findings,"verdict":"REJECT" if findings else "HUMAN_REVIEW_REQUIRED"}
 
 def repair_edl(edit,manifest,report):
     """Only shorten a proven event-free static first shot, never remove real events."""

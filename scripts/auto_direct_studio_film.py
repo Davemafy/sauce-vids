@@ -76,6 +76,21 @@ def _model_request(source,packet,model,key,feedback=None,*,
         "ACTUAL SOURCE EVIDENCE AND EXACT RENDERER CONTRACT:\n"+
         json.dumps(packet,ensure_ascii=False,separators=(",",":"))
     )
+    verified=packet["actualCapture"]["verifiedEvents"]
+    if len(verified)>=2:
+        indices=[e["index"] for e in verified]
+        prompt+=(
+            "\nTHIS IS A COMPLETE MULTI-ACTION PRODUCT STORY, NOT A SINGLE "
+            "CLICK TEASER: The original source has "+str(len(verified))+
+            " genuine verified outcomes with indices "+json.dumps(indices)+
+            ". Show the original pointer approach and EVERY observed result "
+            "at its actual timestamp; dedicate a readable result/group camera "
+            "focus shot to each in order. Keep an intelligible opening, "
+            "a genuine final hold, and no filler. For audio use "
+            "eventFoley.eventIndices="+json.dumps(indices)+
+            " with the real press/result times. Do not fabricate UI or "
+            "retime/replay source frames."
+        )
     if feedback:
         prompt+=(
             "\nThe previous attempt failed the actual local validator. "

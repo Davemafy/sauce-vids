@@ -255,28 +255,33 @@ FOLEY_RECEIPT=None
 if FILM_PLAN_DATA is not None and FILM_PLAN_DATA.get("audio",{}).get("mode")=="eventFoley":
     from foley_mixer import render_foley_plan, RATE
     sound=FILM_PLAN_DATA["audio"]
-    event=MANIFEST["events"][sound["eventIndex"]]
-    at=event["start"]
-    changed=(STUDIO_STAGE.onset["time"]
-             if STUDIO_STAGE is not None and STUDIO_STAGE.light_event==sound["eventIndex"]
-             else event["t"])
+    indices=(sound["eventIndices"] if "eventIndices" in sound
+             else [sound["eventIndex"]])
     def cue(name,seconds,gain):
         sample=int(round(seconds*RATE))
         return {"sound":name,"outputSample":sample,
                 "outputMs":sample/48.,"gain":gain}
+    cues=[]
+    event_receipts=[]
+    for ix in indices:
+        event=MANIFEST["events"][ix]
+        at=event["start"]
+        changed=(STUDIO_STAGE.onset["time"]
+                 if STUDIO_STAGE is not None and STUDIO_STAGE.light_event==ix
+                 else event["t"])
+        cues.extend([cue("click_crisp",at,sound.get("clickGain",.47)),
+                     cue("whoosh_soft",changed,sound.get("motionGain",.3))])
+        event_receipts.append({"eventIndex":ix,"pressAt":at,"visibleResultAt":changed})
     audio_plan={"schema":"sauce-foley-plan-v1","sampleRate":RATE,
                 "durationMs":int(round(FILM_PLAN.duration*1000)),
                 "masterGain":sound.get("masterGain",.55),"musicGain":0,
-                "muted":False,"duckIntervals":[],
-                "cues":[cue("click_crisp",at,sound.get("clickGain",.47)),
-                        cue("whoosh_soft",changed,sound.get("motionGain",.3))]}
+                "muted":False,"duckIntervals":[],"cues":cues}
     if not args.validate_only:
         FILM_FOLEY=WORKDIR/"source-verified-event-foley.wav"
         FOLEY_RECEIPT=render_foley_plan(audio_plan,FILM_FOLEY,
                                 target_duration_ms=FILM_PLAN.duration*1000)
         (WORKDIR/"source-verified-foley-receipt.json").write_text(
-             json.dumps({"eventIndex":sound["eventIndex"],
-                         "pressAt":at,"visibleResultAt":changed,
+             json.dumps({"verifiedSourceEvents":event_receipts,
                          **FOLEY_RECEIPT},indent=2))
 (WORKDIR/"camera-plan.json").write_text(json.dumps(
  {"source":str(MANIFEST_PATH),"algorithm":"event-driven camera planner, no authored cues",

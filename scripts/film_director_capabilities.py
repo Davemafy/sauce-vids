@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import subprocess
 from pathlib import Path
 from fractions import Fraction
@@ -108,9 +109,14 @@ def build_contract(source,manifest,brief):
                          "notBeforeActualPress":True},
                "result":{"nativeFrame":result_frame,"atSeconds":round(result_frame/fps,6),
                          "onsetMethod":method,"notBeforeActualResult":True}}
-            events.append({"index":i,"kind":str(e.get("kind","event"))[:40],
+            summary={"index":i,"kind":str(e.get("kind","event"))[:40],
                 "sourceTime":{"start":e["start"],"end":e["end"],"confirmedResultAt":e["t"]},
-                "verifiedGeometry":fields,"candidateCuts":candidate_cuts})
+                "verifiedGeometry":fields,"candidateCuts":candidate_cuts}
+            observed=e.get("observedPublicPrice")
+            if isinstance(observed,str) and re.fullmatch(
+                    r"\$[0-9][0-9,]*(?:\.[0-9]{2})? / mo",observed):
+                summary["verifiedObservedPublicPrice"]=observed
+            events.append(summary)
     if not events:raise ValueError("No verified target and product result for director")
     schema=json.loads(SCHEMA_PATH.read_text())
     # Advertise only genuinely captured, hash-pinned, independently decodable
@@ -297,7 +303,12 @@ def build_contract(source,manifest,brief):
                 "from evidence, frame-aligned startAt/peakAt/endAt. "
                 "Requires studioStage; never invent a plate, card, content or "
                 "fake underlay. A readable 0.5s hold and late return work well.",
-            "audio":"Use source-backed eventFoley on a genuine verified click "
+            "audio":"For an audible multi-action story, choose "
+                "audio.mode=eventFoley and eventIndices=[all genuine narrated "
+                "source event indices] in chronological order. Single-event "
+                "films retain eventIndex. These synths are tied to ORIGINAL "
+                "recorded press/result times, not invented new interactions. "
+                "Use source-backed eventFoley on a genuine verified click "
                 "when the requested product demo is audible. mode=clean means "
                 "the FINAL VIDEO HAS NO AUDIO, not a quietly polished soundtrack; "
                 "the encoded film supervisor will reject a missing audio stream. "
@@ -308,7 +319,12 @@ def build_contract(source,manifest,brief):
                      "separate verified event-local pointer samples when present.",
             "sourceTruth":"Never add fabricated buttons, text, results, future-state motion, "
                 "unverified click targets, or invented pointer samples.",
-            "narrative":"Show action, observed change and a legible final payoff."
+            "narrative":"For a genuine multi-action capture and a client brief "
+                "requiring its complete workflow, show each observed result "
+                "clearly and in order, with original recorded cursor approach "
+                "and readable result holds. Source camera anchors event:i:result "
+                "are available for each VERIFIED event; do not manufacture an "
+                "extra action, price or missing result.",
         },
         "outputSchema":schema,
         "localGate":{"executable":str(RENDERER_PATH.name),

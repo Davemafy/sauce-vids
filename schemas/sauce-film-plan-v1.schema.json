@@ -72,8 +72,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "mode",
-            "eventIndex"
+            "mode"
           ],
           "properties": {
             "mode": {
@@ -97,8 +96,30 @@
               "type": "number",
               "minimum": 0,
               "maximum": 1
+            },
+            "eventIndices": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 6,
+              "uniqueItems": true,
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
-          }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "eventIndex"
+              ]
+            },
+            {
+              "required": [
+                "eventIndices"
+              ]
+            }
+          ]
         }
       ]
     },

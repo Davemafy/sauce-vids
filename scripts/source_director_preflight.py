@@ -126,6 +126,59 @@ def preflight_source_edit(plan:dict,manifest:dict,source_path:Path,
                     "The actual browser/source UI pixels and interactions "
                     "must remain untouched."
                 })
+    # Multi-event source films should tell the whole actually-recorded
+    # sequence, not endlessly replay event zero. Each original observed
+    # result needs its own camera focus/anchor after its native confirmation.
+    # This is a source-coverage check, not a creativity grade.
+    events=[(i,e) for i,e in enumerate(manifest.get("events",[]))
+            if isinstance(e,dict) and e.get("evidence") and
+            type(e.get("t")) in (int,float)
+            and e["t"] < plan.get("durationSeconds",0)-.25]
+    if len(events)>=2 and plan.get("durationSeconds",0)>=8:
+        camera=(stage_plan.get("camera",[]) if isinstance(stage_plan,dict)
+                else plan.get("camera",[]))
+        covered=[]
+        for ix,e in events:
+            fields=("focus",) if isinstance(stage_plan,dict) else ("anchor",)
+            matched=any(isinstance(k,dict)
+                and k.get(fields[0]) in (f"event:{ix}:result",
+                    f"event:{ix}:group",f"event:{ix}:component")
+                and type(k.get("at")) in (int,float)
+                and k["at"]>=e["t"]
+                for k in camera)
+            if matched:covered.append(ix)
+        observations["verifiedResultShotCoverage"]=covered
+        missing=[i for i,_ in events if i not in covered]
+        if missing:
+            faults.append({
+              "code":"REAL_WORKFLOW_RESULTS_OMITTED",
+              "detail":{"originalVerifiedEventIndices":[i for i,_ in events],
+                        "missingCameraResultIndices":missing},
+              "directorFeedback":
+                "This genuine source contains multiple independent verified "
+                "product outcomes, and the full workflow is the client's story. "
+                "Provide a dedicated shot anchored to each actual event:i:result "
+                "AFTER that event's recorded result time, keep actual recorded "
+                "pointer approach, and preserve a readable hold. Do not invent "
+                "extra outcomes or re-order existing source footage."
+            })
+        audio=plan.get("audio",{})
+        if audio_required and isinstance(audio,dict) and audio.get("mode")=="eventFoley":
+            selected=(audio.get("eventIndices") if "eventIndices" in audio else
+                      [audio.get("eventIndex")])
+            observations["eventFoleyCoverage"]=selected
+            if selected!=[i for i,_ in events]:
+                faults.append({
+                  "code":"REAL_WORKFLOW_FOLEY_INCOMPLETE",
+                  "detail":{"expectedActualEventIndices":[i for i,_ in events],
+                            "modelEventIndices":selected},
+                  "directorFeedback":
+                    "Use the actual captured multi-action source sound grammar: "
+                    "audio={mode:eventFoley,eventIndices:[verified event indices "
+                    "in recorded order]}. Each selected cue is tied to one "
+                    "genuine mouse press and its observed result; never add "
+                    "a fictional click or effect."
+                })
     # Missing sound is a product-demo storytelling problem but must NEVER
     # override explicit real customer muted intent or invent audio events.
     if audio_required and _has_real_action(manifest):
