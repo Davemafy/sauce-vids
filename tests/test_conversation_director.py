@@ -104,6 +104,21 @@ class ConversationalDirectorTests(unittest.TestCase):
         self.assertEqual(compiled["core_claims"][0]["provenance"],"site_claim")
         self.assertTrue(compiled["core_claims"][0]["downgraded_unverified_recording"])
 
+    def test_exact_short_button_label_is_observed_but_never_executed(self):
+        report=product_report()
+        report["pages"][1]["controls"].append(
+            control("p1:a12","Run","button",classification="costly_or_nondeterministic"))
+        report["pages"][1]["text"]+=" Run."
+        plan=sample_plan()
+        plan["steps"][3]["control_id"]="p1:a12"
+        plan["steps"][3]["quote"]="Run"
+        compiled=validate_compilation(plan,report)
+        self.assertFalse(compiled["steps"][3]["may_execute"])
+        self.assertEqual(compiled["steps"][3]["action_class"],"costly_or_nondeterministic")
+        plan["steps"][3]["quote"]="Pay"
+        with self.assertRaises(ValueError):
+            validate_compilation(plan,report)
+
     def test_a_safe_link_misclassified_as_costly_is_never_promoted_to_click(self):
         plan=sample_plan()
         plan["steps"][0]["type"]="propose_action"

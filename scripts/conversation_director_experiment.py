@@ -214,11 +214,23 @@ def validate_compilation(plan,report):
         if not isinstance(step,dict) or step.get("type") not in ALLOWED_STEPS:
             raise ValueError("Unsupported proposed action")
         pid=step.get("page_id")
-        quote_valid(pid,step.get("quote"))
         if pid!=current:
             raise ValueError("Unreachable page "+str(pid)+" from current "+str(current)+"; navigation is missing or wrong")
         buttons={c["id"]:c for c in pages[pid]["controls"]}
         cid=step.get("control_id")
+        quote=step.get("quote")
+        # A verified button/tab can genuinely have a short visible label such
+        # as "Run" or "Save". Those labels are strong evidence ONLY when
+        # they exactly match the unique observed control ID on that page.
+        # Ordinary source claims, narration hooks and inspection quotes still
+        # require the longer exact-source-phrase check.
+        short_observed_action=(step["type"]!="inspect"
+                               and isinstance(cid,str) and cid in buttons
+                               and isinstance(quote,str)
+                               and 1<=len(quote)<8
+                               and quote.strip()==buttons[cid]["text"].strip())
+        if not short_observed_action:
+            quote_valid(pid,quote)
         if step["type"]=="inspect":
             if cid is not None and cid not in buttons:
                 raise ValueError("Unknown inspect ID")
