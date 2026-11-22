@@ -1,5 +1,9 @@
 # Sauce — living handoff for new agents and new chats
 
+## 2026-11-22 — Post-merge reproducibility of reference-paced 60fps film
+
+Fresh main-only clone of commit 96df4980044155bfd89ccec680ee5ea59f316fc1 from existing persistent Vultr worker, not the modified experiment checkout: **468 passed, 10 skipped, 29 subtests passed**. Running the documented zero-model source-event autonomous director against unchanged 613-frame Resend original-pixel trim selected cinematic_paced with exact result SHA256 **60dc30af5068d1e50a6307ac92dd329d8c7a5cc849831d4aa1fc9bf122e32d30**, identical to the previously independently rendered private film. Both original source and manifest SHA256 verified. Strict video/audio full decode, H264 1920x1080/60fps + AAC48kHz, actual signed desktop/mobile Chromium playback and seek had zero errors. Encoded QA HUMAN_REVIEW_REQUIRED, no objective findings. Creative approval **NOT granted**: dark source interface, small phone labels, story value still weak. Private [paced reference film](https://devmcp.davemafy.xyz/sauce-expiring-review/tweakcn-20261120/sauce-resend-motion-cinematic-paced-20261122.mp4?md5=GCOjuXNtgQc0t3pTysqWUA&expires=1795596626) (72-hour link). No service deployment or auto-publishing.
+
 ## 2026-11-22 — Reference-paced camera physics and source-true Resend motion A/B (main)
 
 **Reason for the fix:** prior visual review found a real, measurable "smooth but rushed" problem, not a need for more glass/3D effects. Same authentic Resend 613f/10.2167s 60fps capture, all three real $35/$160/$350 results and 325 recorded pointer samples preserved. Existing restrained camera return peaked at **44.25 output pixels per 60fps frame**; asymmetric easing plus shutter alone did NOT fix it (44.57 peak). The saved REAL Screen Studio reference study estimated ~0.84-0.96s pushes and ~1.2s releases (not their proprietary internals).
