@@ -166,6 +166,11 @@ if FILM_PLAN_DATA is not None:
             FILM_PLAN_DATA["domPlane"],MANIFEST,SRC,MANIFEST_PATH,
             source_size=(INPUT_W,INPUT_H),fps=FPS,duration=FILM_PLAN.duration)
 
+    if STUDIO_STAGE is not None and STUDIO_STAGE.shutter>0 and (
+            DOM_PLANE is not None or DOM_PLANE_GROUP is not None):
+        raise ValueError("Same-frame cinematic shutter does not yet support "
+                         "independently moving real DOM planes. Use shutter=0 "
+                         "rather than silently blurring or desynchronizing the plate.")
     if FILM_PLAN.audio_file and args.music:
         parser.error("Film-plan audio and CLI music cannot be mixed implicitly")
 
@@ -484,8 +489,27 @@ def apply(source,t,static=False,plate_frame=None):
                 draw_pointer(composed,float(projected[0]),float(projected[1]),
                              scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])))
             return composed
-        # The only pointer is drawn on the REAL source frame *before* 3D
-        # reprojection. An affine screen-pointer pass would misalign its tip.
+        if STUDIO_STAGE.motion_style=="cinematic":
+            # A genuine cursor is the sharp foreground instrument of action.
+            # Draw it ONCE over the shutter-exposed camera image, from its
+            # original recorded source position projected at this exact frame.
+            # This avoids perspective-warping the glyph or smearing the tip.
+            composed=render_studio_stage(STUDIO_STAGE,source,t)
+            if POINTER is not None and t>=float(POINTER[0,0]):
+                from recorded_pointer import draw_pointer
+                px=float(np.interp(t,POINTER[:,0],POINTER[:,1]))
+                py=float(np.interp(t,POINTER[:,0],POINTER[:,2]))
+                sw,sh=STUDIO_STAGE.source_size
+                H=cv2.getPerspectiveTransform(
+                   np.float32([[0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]]),
+                   STUDIO_STAGE.quad(t))
+                mapped=cv2.perspectiveTransform(
+                    np.float32([[[px,py]]]),H)[0,0]
+                draw_pointer(composed,float(mapped[0]),float(mapped[1]),
+                             scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])))
+            return composed
+        # Legacy source-projection is unchanged unless the cinematic profile
+        # is explicitly selected; existing source-verified films are stable.
         if POINTER is not None and t >= float(POINTER[0,0]):
             from recorded_pointer import draw_pointer
             real=source.copy()
@@ -590,7 +614,12 @@ def diagnostics():
             "finalContextVisibleFraction":round(STUDIO_STAGE.context_visibility(FILM_PLAN.duration),4),
             "payoffMode":STUDIO_STAGE.payoff_mode,
             "cameraKeys":len(STUDIO_STAGE.camera),
-            "hardCutSourceFrames":list(hard_cut_frames)}
+            "hardCutSourceFrames":list(hard_cut_frames),
+            "motionProfile":STUDIO_STAGE.motion_style,
+            "sameSourceFrameShutter":STUDIO_STAGE.shutter,
+            "cameraShutterFrames":sum(
+                STUDIO_STAGE.shutter_times((TRIM_FRAMES+i)/FPS) is not None
+                for i in range(frames))}
         if POINTER is not None:
             # Verify actual recorded cursor tip is visible during the
             # source-backed hero event, not merely drawn off-screen.
@@ -704,6 +733,8 @@ def render(output,seconds=None,static=False):
                 "payoffVisibility":STUDIO_STAGE.visibility(FILM_PLAN.duration),
                 "contextVisibility":STUDIO_STAGE.context_visibility(FILM_PLAN.duration),
                 "payoffMode":STUDIO_STAGE.payoff_mode,
+                "motionProfile":STUDIO_STAGE.motion_style,
+                "sameSourceFrameShutter":STUDIO_STAGE.shutter,
                 "sourcePixelsOnly":True}
         if DOM_PLANE_GROUP is not None:
             record["film_plan"]["domPlanes"]={

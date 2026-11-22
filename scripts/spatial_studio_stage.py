@@ -43,6 +43,19 @@ def _eased(p):
     return t*t*t*(t*(6*t-15)+10)
 
 
+def _cinematic_eased(progress, *, advance=.34):
+    """Monotone asymmetric minimum-jerk movement.
+
+    Unlike arbitrary bounce/overshoot, this keeps both endpoints exact and
+    retains zero endpoint velocity/acceleration. Advance changes WHERE peak
+    speed occurs: an early purposeful move followed by a longer soft settle.
+    All time changes are inside the already verified source transition.
+    """
+    p=max(0.,min(1.,progress))
+    u=p+advance*p*(1.-p)
+    return _eased(u)
+
+
 @dataclass(frozen=True)
 class Key:
     at:float
@@ -215,6 +228,9 @@ class StudioStage:
     output_size:tuple[int,int]
     duration:float
     result_rect:tuple[float,float,float,float]
+    motion_style:str
+    shutter:float
+    fps:float
 
     def pose(self,t):
         prev=self.camera[0]
@@ -223,9 +239,17 @@ class StudioStage:
                 # Intentional hard cut holds the previous *real source* camera
                 # pose until the exact source-frame boundary, then jumps. This
                 # never changes the browser state or invents intermediate UI.
-                p=(0. if key.cut else
-                   _eased((t-key.start_at)/(key.at-key.start_at))
-                   if t>=key.start_at else 0.)
+                if key.cut or t<key.start_at:
+                    p=0.
+                else:
+                    progress=(t-key.start_at)/(key.at-key.start_at)
+                    if self.motion_style=="cinematic":
+                        # Push toward an action decisively, release deliberately.
+                        # Never alter the genuine click/result clock.
+                        advance=.34 if key.scale>=prev.scale else -.12
+                        p=_cinematic_eased(progress,advance=advance)
+                    else:
+                        p=_eased(progress)
                 break
             prev=key
         else:
@@ -233,6 +257,21 @@ class StudioStage:
         return tuple(a+(b-a)*p for a,b in zip(
             (prev.scale,prev.yaw,prev.pitch,prev.center_x,prev.center_y),
             (key.scale,key.yaw,key.pitch,key.center_x,key.center_y)))
+
+    def shutter_times(self,t):
+        """Same-source-frame camera exposure; never blend across a hard cut."""
+        if self.shutter<=0:
+            return None
+        half=self.shutter/(2*self.fps)
+        before=max(0.,t-half);after=min(self.duration,t+half)
+        if any(k.cut and before<k.at<=after for k in self.camera):
+            return None
+        if after-before<=1e-9:
+            return None
+        motion=np.linalg.norm(self.quad(after)-self.quad(before),axis=1)
+        if float(motion.max(initial=0.))<2.0:
+            return None
+        return before,after
 
     def source_aligned_cuts(self,fps,trim_frames=0):
         # Only emitted cuts strictly inside the encoded range are measured.
@@ -299,7 +338,14 @@ class StudioStage:
 
 
 def load_studio_stage(data,manifest,source_path,source_size,output_size,duration,fps):
-    _fields(data,("camera","material","depthPx","reflection","lighting","payoff"),"studioStage")
+    _fields(data,("camera","material","depthPx","reflection","lighting","payoff","motion"),"studioStage")
+    motion=_fields(data.get("motion",{}),("profile","shutter"),"studioStage.motion")
+    profile=motion.get("profile","classic")
+    if profile not in ("classic","cinematic"):
+        raise ValueError("Studio motion profile must be classic or cinematic")
+    shutter=_number(motion.get("shutter",0.),"studioStage.motion.shutter",0,.75)
+    if shutter>0 and profile!="cinematic":
+        raise ValueError("Motion shutter requires the opt-in cinematic camera profile")
     material=_fields(data.get("material",{}),("color","grain"),"studioStage.material")
     rgb=_color(material.get("color",[28,30,32]))
     grain=_number(material.get("grain",.25),"studioStage.material.grain",0,1)
@@ -403,7 +449,8 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
     box=_bounds(pe,"resultRect" if pp[2]=="result" else "componentRect",source_size)
     visible=_number(payoff.get("minVisible",.82),"studioStage.payoff.minVisible",.6,1)
     obj=StudioStage(tuple(parsed),rgb,grain,depth,reflection,index,intensity,seconds,
-                    onset,pi,pp[2],visible,mode,context,source_size,output_size,duration,box)
+                    onset,pi,pp[2],visible,mode,context,source_size,output_size,duration,box,
+                    profile,shutter,fps)
     actual=obj.visibility(duration)
     # The visible click/drag location, not just the broad source window, must
     # be on screen at the moment the user acts. This fail-closed gate catches
@@ -484,6 +531,20 @@ def render_studio_stage(stage,frame,t):
     warp=cv2.getPerspectiveTransform(src,q)
     projected=cv2.warpPerspective(frame,warp,(ow,oh),flags=cv2.INTER_LINEAR,
                                    borderMode=cv2.BORDER_CONSTANT)
+    # Shutter motion is only an exposure of the SAME genuine source frame
+    # from neighboring CAMERA positions. Never mix separate UI states or
+    # motion-blur the recorded cursor tip; it is overlaid once after capture.
+    exposure=stage.shutter_times(t)
+    if exposure is not None:
+        before,after=exposure
+        early=cv2.getPerspectiveTransform(src,stage.quad(before))
+        late=cv2.getPerspectiveTransform(src,stage.quad(after))
+        a=cv2.warpPerspective(frame,early,(ow,oh),flags=cv2.INTER_LINEAR,
+                             borderMode=cv2.BORDER_CONSTANT)
+        b=cv2.warpPerspective(frame,late,(ow,oh),flags=cv2.INTER_LINEAR,
+                             borderMode=cv2.BORDER_CONSTANT)
+        projected=((a.astype(np.uint16)+4*projected.astype(np.uint16)+
+                    b.astype(np.uint16)+3)//6).astype(np.uint8)
     mask=np.zeros((oh,ow),np.uint8)
     cv2.fillConvexPoly(mask,qi,255,lineType=cv2.LINE_AA)
     alpha=mask.astype(np.float32)[:,:,None]/255.

@@ -32,6 +32,8 @@ PROFILES=(
     ("spacious",.78,.98,1.17,False,True),
     ("precise",.82,1.09,1.43,True,False),
     ("restrained",.84,1.01,1.23,False,False),
+    ("cinematic",.84,1.01,1.23,False,False),
+    ("cinematic_paced",.84,1.01,1.23,False,False),
 )
 
 PANEL_PROFILES=(
@@ -39,6 +41,7 @@ PANEL_PROFILES=(
     ("panel_context",.78,.90,.85,False,True),
     ("panel_punch",.81,1.03,.98,True,False),
     ("panel_cut",.80,.98,.94,True,False),
+    ("panel_cinematic",.80,.94,.90,False,False),
 )
 
 
@@ -129,7 +132,7 @@ def make_plan(source,manifest,packet,profile):
                              "yaw":0,"pitch":0})
         # First action with no genuine approach remains an honest wide shot.
         result_at=(onset if hard_cuts else
-                   frame(onset+.68,fps,ceil=True))
+                   frame(onset+(.82 if name=="cinematic_paced" else .68),fps,ceil=True))
         if result_at<=keys[-1]["at"]+.02 or result_at>=duration-.25:
             raise ValueError("No safe genuine outcome camera interval")
         result_key={"at":result_at,"startAt":result_at if hard_cuts else onset,
@@ -139,6 +142,20 @@ def make_plan(source,manifest,packet,profile):
         keys.append(result_key)
         rows.append({"eventIndex":i,"press":press,"result":e["t"],
                      "aimAt":aim,"resultFocusAt":result_at})
+        if name=="cinematic_paced" and i+1<len(events):
+            # Give the genuine result a reading hold, then release at a
+            # reference-inspired, physically legible pace. This may finish
+            # during the NEXT genuine pointer action, but the exact
+            # action-time target and actual recorded pointer must remain in
+            # view. Those independent projection gates run below.
+            upcoming=events[i+1]
+            hold_start=frame(result_at+.12,fps,ceil=True)
+            release_at=frame(min(float(upcoming["start"])+.32,
+                                  float(upcoming["t"])-.70),fps)
+            if release_at-hold_start>=.80:
+                keys.append({"at":release_at,"startAt":hold_start,
+                             "scale":opening+.025,"center":[.5,.5],
+                             "yaw":0,"pitch":0})
         if i+1<len(events) and wide_breaks:
             nxt=float(events[i+1]["start"])
             release=frame(nxt-.66,fps)
@@ -175,6 +192,8 @@ def make_plan(source,manifest,packet,profile):
         "payoff":{"region":f"event:{len(events)-1}:result",
                   "mode":"detail","minVisible":.94,"minContextVisible":.66}
       }}
+    if "cinematic" in name:
+        plan["studioStage"]["motion"]={"profile":"cinematic","shutter":.58}
     return plan,rows
 
 
@@ -273,6 +292,21 @@ def candidate_plans(source,manifest,brief,out,*,profiles=None):
                                     (1920,1080),plan["durationSeconds"],fps)
             score=geometry_score(stage,raw,beats,fps=fps)
             row.update(score)
+            if name=="cinematic_paced":
+                # Reference-inspired motion bound is stricter than the
+                # legacy emergency 45px/native60 tolerance. If the actual
+                # browser geometry cannot fit a legible move in source time,
+                # reject this candidate instead of disguising a whip-pan
+                # under motion blur or changing source timestamps.
+                quads=np.asarray([stage.quad(i/fps)
+                     for i in range(round(stage.duration*fps))])
+                displacements=np.linalg.norm(np.diff(quads,axis=0),
+                                             axis=2).max(axis=1)*fps/60
+                top=float(displacements.max(initial=0))
+                row["motionMaxPxPerNative60Frame"]=round(top,3)
+                if top>32.:
+                    raise ValueError("Cinematic motion speed exceeds reference-paced "
+                                     "source-verified safety bound")
             preflight=preflight_source_edit(plan,raw,source,size,fps,
                                             manifest_path=manifest)
             if preflight["findings"]:
@@ -298,15 +332,25 @@ def candidate_plans(source,manifest,brief,out,*,profiles=None):
 
 
 def choose_diverse(ranked,max_renders):
-    """Prefer one smooth continuous take and one deliberately event-cut take."""
-    accepted=[row for row in ranked if row["status"]=="source_verified_plan"]
+    """If valid, compare cinematic movement to source-identical classic motion."""
+    accepted=[r for r in ranked if r["status"]=="source_verified_plan"]
     if not accepted:return []
-    first=accepted[0]
+    best=accepted[0]
+    motion=next((r for r in accepted if "cinematic" in r["name"]
+                 and r["score"]>=best["score"]-1.5),None)
+    first=motion or best
     chosen=[first]
-    remaining=[row for row in accepted[1:] if row["hardCuts"]!=first["hardCuts"]]
-    if remaining and max_renders>1:
-        chosen.append(remaining[0])
-    chosen.extend(row for row in accepted if row not in chosen)
+    if motion is not None:
+        baseline=next((r for r in accepted if r is not first
+                       and r["hardCuts"]==first["hardCuts"]
+                       and abs(r["score"]-first["score"])<.001
+                       and "cinematic" not in r["name"]),None)
+        if baseline is not None and max_renders>1:chosen.append(baseline)
+    else:
+        different=next((r for r in accepted if r is not first and
+                        r["hardCuts"]!=first["hardCuts"]),None)
+        if different is not None and max_renders>1:chosen.append(different)
+    chosen.extend(r for r in accepted if r not in chosen)
     return chosen[:max_renders]
 
 

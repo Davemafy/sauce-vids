@@ -170,3 +170,48 @@ def test_public_url_pipeline_uses_coverage_without_model_key(tmp_path,monkeypatc
     assert receipt["creativeApproved"] is False
     assert receipt["noAutoPublication"] is True
     assert receipt["productionReady"] is False
+
+def test_cinematic_ablation_reuses_exact_existing_keyframes(tmp_path):
+    src,man,packet=dummy(tmp_path)
+    a,_=make_plan(src,man,packet,next(x for x in PROFILES if x[0]=="restrained"))
+    b,_=make_plan(src,man,packet,next(x for x in PROFILES if x[0]=="cinematic"))
+    assert a["studioStage"]["camera"]==b["studioStage"]["camera"]
+    assert a["sourceSha256"]==b["sourceSha256"]
+    assert a["manifestSha256"]==b["manifestSha256"]
+    assert a["audio"]==b["audio"]
+    assert "motion" not in a["studioStage"]
+    assert b["studioStage"]["motion"]=={"profile":"cinematic","shutter":.58}
+    ranked=[
+       {"name":"restrained","status":"source_verified_plan","score":102,"hardCuts":0},
+       {"name":"cinematic","status":"source_verified_plan","score":102,"hardCuts":0},
+       {"name":"punchy","status":"source_verified_plan","score":100,"hardCuts":3}]
+    assert [x["name"] for x in choose_diverse(ranked,2)]==["cinematic","restrained"]
+
+
+def test_cinematic_camera_does_not_override_better_source_geometry():
+    ranked=[
+       {"name":"proof","status":"source_verified_plan","score":130,"hardCuts":0},
+       {"name":"cinematic","status":"source_verified_plan","score":90,"hardCuts":0},
+       {"name":"punchy","status":"source_verified_plan","score":106,"hardCuts":3}]
+    assert [x["name"] for x in choose_diverse(ranked,2)]==["proof","punchy"]
+
+def test_reference_paced_motion_has_readable_release_before_next_real_result(tmp_path):
+    source,manifest,packet=dummy(tmp_path)
+    paced=next(x for x in PROFILES if x[0]=="cinematic_paced")
+    plan,rows=make_plan(source,manifest,packet,paced)
+    real=json.loads(manifest.read_text())["events"]
+    camera=plan["studioStage"]["camera"]
+    assert plan["studioStage"]["motion"]["profile"]=="cinematic"
+    for i,e in enumerate(real[:-1]):
+        result=next(k for k in camera if k.get("focus")==f"event:{i}:result")
+        release=next(k for k in camera if k.get("center")==[.5,.5]
+                     and k["at"]>result["at"]+.1)
+        assert .8<=result["at"]-result["startAt"]<=.9
+        assert release["startAt"]>=result["at"]+.1
+        # On fast workflows the release must end *before* the next
+        # recorded press; on longer drags it may finish during the action.
+        assert release["at"]<=min(real[i+1]["start"]+.32,
+                                 real[i+1]["t"]-.70)+1/60+1e-7
+        assert release["at"]<real[i+1]["t"]
+    assert plan["sourceSha256"]==sha(source)
+    assert plan["manifestSha256"]==sha(manifest)
