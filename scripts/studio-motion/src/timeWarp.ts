@@ -38,6 +38,10 @@ export interface TimeWarpPlan {
 function kindOf(e:TraceEvent):string{return (e.eventType||e.type||"").toLowerCase().replaceAll("_","-")}
 export function isHighIntent(e:TraceEvent):boolean {
   const k=kindOf(e);
+  // Existing film-plan editor may protect a verified RESULT and its reading
+  // hold, not only the initiating click. The caller must have independently
+  // admitted the source-bound outcome; never trust an unverified model marker.
+  if(k==="verified-result")return e.verifiedSource===true;
   if (["click","pointerdown","submit","modal-open","dialog-visible","modal-opened","copy","paste"].includes(k))return true;
   if (["focus","focusin"].includes(k))return e.isInitial===true ||
     (e.isInitial!==false && (e.role==="textbox" || e.tag==="input" || e.tag==="textarea"));

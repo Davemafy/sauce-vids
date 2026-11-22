@@ -23,6 +23,8 @@ export interface TraceEvent {
   x?:number|null;
   y?:number|null;
   redacted?:boolean;
+  /** An externally source-SHA-admitted DOM result. Not a camera hero by itself. */
+  verifiedSource?:boolean;
   selector?:string;
   tag?:string;
   role?:string;
