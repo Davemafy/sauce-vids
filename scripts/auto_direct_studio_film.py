@@ -281,7 +281,8 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
                     amended,json.loads(manifest.read_text()),source,
                     tuple(packet["actualCapture"]["resolution"]),
                     packet["actualCapture"]["nativeFps"],
-                    audio_required=not allow_silent,manifest_path=manifest)
+                    audio_required=not allow_silent,manifest_path=manifest,
+                    enforce_reading_holds=True)
                 (out/f"editorial-preflight-{i}.json").write_text(
                     json.dumps(preflight,indent=2)+"\n")
                 record["editorialPreflightVerdict"]=preflight["verdict"]

@@ -24,7 +24,7 @@ def _has_real_action(manifest:dict) -> bool:
 def preflight_source_edit(plan:dict,manifest:dict,source_path:Path,
                           source_size:tuple[int,int],fps:float,
                           *,output_size=(1920,1080),audio_required=True,
-                          manifest_path=None) -> dict:
+                          manifest_path=None,enforce_reading_holds=False) -> dict:
     """Return source-grounded failures, NEVER a creative quality approval."""
     faults=[]
     observations={}
@@ -64,6 +64,31 @@ def preflight_source_edit(plan:dict,manifest:dict,source_path:Path,
                   "planes. The camera center is OUTPUT placement, not a "
                   "source focus coordinate."
             })
+    # Multi-action narratives can pass every camera/source check while
+    # flashing real product results too briefly to understand. Audit the
+    # actual source-clock camera QUAD at native FPS, not JSON's aspirational
+    # labels, inferred media states, or post-process screenshot fiction.
+    # A small graphic/icon can be effective without being 360px wide;
+    # therefore this stronger text-like result constraint only applies to
+    # shallow, horizontally wide genuine results in >=8s multi-step demos.
+    if (isinstance(stage_plan,dict) and
+            float(plan.get("durationSeconds",0))>=8 and
+            len(manifest.get("events",[]))>=2):
+        from studio_result_hold_audit import inspect_result_holds
+        readable=inspect_result_holds(stage,manifest,fps=fps)
+        observations["sourceResultReadingHolds"]=readable["measurements"]
+        for candidate in readable["findings"]:
+            if not enforce_reading_holds:
+                # Legacy source-verified coverage remains unchanged; model
+                # direction opts into stricter editorial feedback. We still
+                # record measurements for honest post-render review.
+                continue
+            index=candidate["detail"]["eventIndex"]
+            rect=manifest["events"][index].get("resultRect",{})
+            if (isinstance(rect,dict) and
+                    float(rect.get("height",0))>0 and
+                    float(rect.get("width",0))/float(rect["height"])>=2.5):
+                faults.append(candidate)
     # Screen-anchored foreground should have a discernibly separate REAL
     # browser background. This is a role-based shot check, not a generic
     # aesthetic. Full-interface shots (no independent heroCenter) are exempt.
