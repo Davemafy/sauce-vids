@@ -105,6 +105,7 @@ class FilmPlan:
     audio_file: Path|None
     camera_keys: tuple[CameraKey,...]
     source_size: tuple[int,int]
+    cursor_pack: str = "mint-studio"
 
     def at(self,t,output_size,*,stretch=False):
         """Affine matrix in *source-pixel* coordinates; output 16:9."""
@@ -152,7 +153,7 @@ def load_window(data, plan_path):
 
 
 def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_duration,plan_path):
-    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","camera","audio","composition","window", "glassLoupe","studioStage","domPlane","domPlanes"),"film plan")
+    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","cursorPack","camera","audio","composition","window", "glassLoupe","studioStage","domPlane","domPlanes"),"film plan")
     if data.get("schema")!=SCHEMA:
         raise ValueError("Unsupported Sauce film-plan schema")
     expected=data.get("sourceSha256")
@@ -180,6 +181,12 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
         raise ValueError("Unsupported presentation")
     if data.get("cursor") not in ("recorded","none"):
         raise ValueError("Cursor mode must be recorded or none")
+    from recorded_pointer import CURSOR_PACKS
+    cursor_pack=data.get("cursorPack", "mint-studio")
+    if cursor_pack not in CURSOR_PACKS:
+        raise ValueError("Unrecognized source-timed cursor appearance")
+    if data.get("cursor") == "none" and "cursorPack" in data:
+        raise ValueError("Cursor appearance cannot be specified when cursor is absent")
     if ("window" in data or "glassLoupe" in data) and data["presentation"] != "window":
         raise ValueError("Window and glass loupe controls require window presentation")
     if "glassLoupe" in data and data["cursor"] != "recorded":
@@ -282,7 +289,7 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
     if keys[0].at!=0 or keys[-1].at>duration:
         raise ValueError("Camera must establish the first frame and fit duration")
     # Source rectangle safety for every result/group endpoint: no clipped proof.
-    result=FilmPlan(actual,actual_manifest_hash,duration,data["presentation"],data["cursor"],audio_file,tuple(keys),(sw,sh))
+    result=FilmPlan(actual,actual_manifest_hash,duration,data["presentation"],data["cursor"],audio_file,tuple(keys),(sw,sh),cursor_pack)
     for k in keys:
         if k.bounds is None:continue
         for out_size in ((1920,1080),(1280,720)):

@@ -46,6 +46,9 @@ parser.add_argument("--guided-result",action="store_true",
                     help="Frame the recorded click and smoothly push into its verified result")
 parser.add_argument("--recorded-pointer",action="store_true",
                     help="Draw the timed mouse path on cursorless fullscreen footage")
+from recorded_pointer import CURSOR_PACKS
+parser.add_argument("--cursor-pack",choices=CURSOR_PACKS,default=None,
+                    help="Per-film cursor appearance: Mint CC0, three original Sauce styles, or explicit legacy")
 parser.add_argument("--result-focus",action="store_true",
                     help="Gently dim the context outside the result after an anchored cut")
 parser.add_argument("--slider-framing", action="store_true",
@@ -64,10 +67,16 @@ if args.film_plan:
         parser.error("--film-plan owns the camera/editorial path; conflicting legacy flags are rejected")
     # The film plan is authoritative for presentation and pointer configuration.
     FILM_PLAN_DATA=json.loads(args.film_plan.read_text())
+    declared_cursor_pack=FILM_PLAN_DATA.get("cursorPack")
+    if (declared_cursor_pack is not None and args.cursor_pack is not None
+            and declared_cursor_pack != args.cursor_pack):
+        parser.error("--cursor-pack conflicts with film-plan cursorPack")
+    args.cursor_pack=declared_cursor_pack or args.cursor_pack or "mint-studio"
     args.presentation=FILM_PLAN_DATA.get("presentation","fullscreen")
     args.recorded_pointer=(FILM_PLAN_DATA.get("cursor")=="recorded" and "glassLoupe" not in FILM_PLAN_DATA)
 else:
     FILM_PLAN_DATA=None
+    args.cursor_pack=args.cursor_pack or "mint-studio"
 if args.validate_only and FILM_PLAN_DATA is None:
     parser.error("--validate-only requires --film-plan")
 if FILM_PLAN_DATA is not None and FILM_PLAN_DATA.get("audio",{}).get("mode")=="eventFoley" and args.music:
@@ -470,7 +479,8 @@ def apply(source,t,static=False,plate_frame=None):
                 hom=cv2.getPerspectiveTransform(src_quad,STUDIO_STAGE.quad(t))
                 mapped=cv2.perspectiveTransform(np.float32([[[px,py]]]),hom)[0,0]
                 draw_pointer(composed,float(mapped[0]),float(mapped[1]),
-                             scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])))
+                             scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])),
+                             theme=args.cursor_pack)
             return composed
         if DOM_PLANE is not None:
             from live_dom_depth_plane import render_live_dom_plane
@@ -487,7 +497,8 @@ def apply(source,t,static=False,plate_frame=None):
                 hom=cv2.getPerspectiveTransform(src_quad,STUDIO_STAGE.quad(t))
                 projected=cv2.perspectiveTransform(np.float32([[[px,py]]]),hom)[0,0]
                 draw_pointer(composed,float(projected[0]),float(projected[1]),
-                             scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])))
+                             scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])),
+                             theme=args.cursor_pack)
             return composed
         if STUDIO_STAGE.motion_style=="cinematic":
             # A genuine cursor is the sharp foreground instrument of action.
@@ -506,7 +517,8 @@ def apply(source,t,static=False,plate_frame=None):
                 mapped=cv2.perspectiveTransform(
                     np.float32([[[px,py]]]),H)[0,0]
                 draw_pointer(composed,float(mapped[0]),float(mapped[1]),
-                             scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])))
+                             scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])),
+                             theme=args.cursor_pack)
             return composed
         # Legacy source-projection is unchanged unless the cinematic profile
         # is explicitly selected; existing source-verified films are stable.
@@ -515,7 +527,7 @@ def apply(source,t,static=False,plate_frame=None):
             real=source.copy()
             px=float(np.interp(t,POINTER[:,0],POINTER[:,1]))
             py=float(np.interp(t,POINTER[:,0],POINTER[:,2]))
-            draw_pointer(real,px,py,scale=.73)
+            draw_pointer(real,px,py,scale=.73,theme=args.cursor_pack)
         else:
             real=source
         return render_studio_stage(STUDIO_STAGE,real,t)
@@ -526,7 +538,7 @@ def apply(source,t,static=False,plate_frame=None):
         stage=project_pointer(stage,POINTER,camera_matrix(t,static),t,
                               scale=(.73 if FILM_PLAN is not None else
                                      EDIT_CAMERA.get("cursor_scale",.85) if SLIDER_SHOT
-                                     else 1.6-.18*press))
+                                     else 1.6-.18*press),theme=args.cursor_pack)
     if args.result_focus and RESULT_CUT is not None and not static:
         elapsed_frames = round(t * FPS) - RESULT_CUT.frame
         if elapsed_frames > 0:
@@ -570,6 +582,7 @@ def diagnostics():
        "glass_loupe_shots":len(LOUPE_SHOTS),
        "slider_framed": SLIDER_SHOT is not None,
        "recorded_pointer_samples":len(POINTER) if POINTER is not None else 0,
+       "cursor_pack":args.cursor_pack if POINTER is not None else None,
        "max_translation_per_frame_px":round(float(np.max(np.abs(vel[:,[2,5]]),initial=0)),4),
        "max_continuous_translation_per_frame_px":round(
            float(np.max(np.abs(continuous_vel[:,[2,5]]),initial=0)),4),

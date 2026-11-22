@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="56" viewBox="0 0 48 56">
+  <title>Sauce Gloss Carbon — original dimensional arrow, hotspot 4,4</title>
+  <desc>Original sculpted graphite pointer with silver reflective rim and restrained specular face. No third-party icon or film asset.</desc>
+  <defs>
+    <linearGradient id="shell" x1="0" y1="0" x2=".85" y2="1">
+      <stop offset="0" stop-color="#f8fcff"/>
+      <stop offset=".16" stop-color="#ccd5df"/>
+      <stop offset=".47" stop-color="#677388"/>
+      <stop offset=".68" stop-color="#f5f7fb"/>
+      <stop offset="1" stop-color="#576072"/>
+    </linearGradient>
+    <linearGradient id="carbon" x1="0" y1="0" x2=".85" y2="1">
+      <stop offset="0" stop-color="#e2eaf4"/>
+      <stop offset=".20" stop-color="#8492a6"/>
+      <stop offset=".57" stop-color="#344154"/>
+      <stop offset=".83" stop-color="#a7b6ca"/>
+      <stop offset="1" stop-color="#465368"/>
+    </linearGradient>
+    <linearGradient id="glint" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".85"/>
+      <stop offset=".48" stop-color="#ffffff" stop-opacity=".36"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <path d="M 4 4 Q 3.2 3.1 3.2 4.65 L 3.2 44.3 Q 3.2 46.2 4.65 45.2 L 15.15 35.65 L 22.35 51.25 Q 22.94 52.63 24.43 51.99 L 29.45 49.61 Q 30.96 48.93 30.28 47.43 L 23.07 32.05 L 38.16 32.05 Q 40.23 32.05 38.73 30.55 Z" transform="translate(1.7 2.1)" fill="#02060b" opacity=".40"/>
+  <path d="M 4 4 Q 3.2 3.1 3.2 4.65 L 3.2 44.3 Q 3.2 46.2 4.65 45.2 L 15.15 35.65 L 22.35 51.25 Q 22.94 52.63 24.43 51.99 L 29.45 49.61 Q 30.96 48.93 30.28 47.43 L 23.07 32.05 L 38.16 32.05 Q 40.23 32.05 38.73 30.55 Z" fill="url(#shell)" stroke="#070b11" stroke-width="2.8" stroke-linejoin="round"/>
+  <path d="M 4 4 Q 3.2 3.1 3.2 4.65 L 3.2 44.3 Q 3.2 46.2 4.65 45.2 L 15.15 35.65 L 22.35 51.25 Q 22.94 52.63 24.43 51.99 L 29.45 49.61 Q 30.96 48.93 30.28 47.43 L 23.07 32.05 L 38.16 32.05 Q 40.23 32.05 38.73 30.55 Z" transform="translate(.80 .78) scale(.95 .955)" fill="url(#carbon)" stroke="#0e141b" stroke-width=".48" stroke-linejoin="round"/>
+  <path d="M 6.6 8.2 L 7.4 32.9 Q 7.7 34 8.6 33.1 L 10.1 31.4 L 12.6 29.3 L 33.5 29.4 Z" fill="url(#glint)" opacity=".88"/>
+  <path d="M 16.25 34.8 L 24.3 49.4 L 26.9 48.1 L 19.8 32.5 Z" fill="#b8c5d7" opacity=".22"/>
+</svg>

@@ -211,3 +211,27 @@ def test_json_camera_component_cannot_fallback_to_text_result(source):
     plan["camera"][-1]["anchor"]="event:0:component"
     with pytest.raises(ValueError,match="Missing verified componentRect"):
         compile_plan(source)
+
+
+def test_all_cursor_styles_are_selectable_in_verified_film_plan(source):
+    from recorded_pointer import CURSOR_PACKS
+    for name in CURSOR_PACKS:
+        _, _, p=source
+        chosen=copy.deepcopy(p)
+        chosen["cursorPack"]=name
+        plan=compile_plan((source[0],source[1],chosen))
+        assert plan.cursor_pack==name
+        assert plan.cursor=="recorded"
+    assert compile_plan(source).cursor_pack=="mint-studio"
+
+
+def test_film_plan_rejects_unregistered_cursor_styles_or_disabled_pointer(source):
+    _,_,plan=source
+    bad=copy.deepcopy(plan)
+    bad["cursorPack"]="random-external-asset"
+    with pytest.raises(ValueError,match="Unrecognized source-timed cursor"):
+        compile_plan((source[0],source[1],bad))
+    bad["cursorPack"]="aero-prism"
+    bad["cursor"]="none"
+    with pytest.raises(ValueError,match="cannot be specified when cursor is absent"):
+        compile_plan((source[0],source[1],bad))
