@@ -1,5 +1,22 @@
 # Sauce — living handoff for new agents and new chats
 
+## 2026-11-23 — Existing Gemini key recovered; genuine Stagehand workflow and film proof (creative REJECT)
+
+**Code:** [GitHub main 06db7dc](https://github.com/Davemafy/sauce-vids/commit/06db7dce09d1732864159a43627eb262a1ab5bc3).
+
+**Credential correction:** Owner was right: the existing Gemini key has always been available to running `sauce-url2video.service` through root-owned, mode-600 `/etc/sauce-url2video.env`. Only the isolated development shell lacked its environment. We reused the service's configured `gemini-3.1-flash-lite` in-memory for an authorized live Stagehand v4.4 study; no key was printed, persisted, or committed. Do NOT repeat the earlier false claim that Sauce had no Gemini key.
+
+**Live genuine observations:** First candidate sites cssgradient.io, animista.net, neumorphism.io found no filmable local interaction; honest negatives. Fixed Stagehand timeout milliseconds (35ms→35,000ms), accepted only exact first-party apex/www canonical host aliases, and prioritized independent allowlisted product buttons/tabs/sliders instead of navigation links. On new real sites Gemini identified Brimble **Connect your agent** (independently observed `a1`, verified real visible DOM result, delta above baseline 0.8051) and HeroUI **Switch preview to dark mode** (observed `a11`, verified real visible DOM result, delta 0.35679). SEAL still had no matching local action from the model. No agent-invented selectors or outcomes.
+
+**Actual source-pinned diagnostic films:** The legacy recorder originally skipped Brimble's valid click because its origin guard compared netloc literally and rejected `brimble.io → www.brimble.io`. Fixed narrowly without allowing unrelated origins or insecure protocol downgrades. Replayed both actual Gemini-selected IDs from private source-inspection/probe receipts through unchanged real browser capture and the existing encoder, not through a mocked UI. Genuine Brimble high-quality source H264-independent browser SHA `fc7b03e6220f283761f80f9f9d93362a948f7b555ccf71ec57adf9339a796237`, final H.264 1920×1080/60 MP4 6.250s SHA `6fa6c42faf337ec0e1e1cd79b71bfd54a660aca5d044a6b1f911775c71a65f17`; HeroUI genuine source SHA `f6d63fefdfb7ffd94693fc43f66918701fe362071390fb5296604b19640f321a`, final 8.733s 1080p60 MP4 SHA `52b3c3e7ad5e8ff24602566c480d32f791971153ad50cadea031c39c8b29534f`. Both source DPR2, strict FFmpeg full decode PASS. Fresh encoded contact sheets visually inspected. Detailed code/run/safety/evidence: [docs/SAUCE_STAGEHAND_LIVE_20261123.md](SAUCE_STAGEHAND_LIVE_20261123.md). Output stored privately; no public deployment or client delivery.
+
+**Critical creative assessment:** BOTH films REJECTED. This diagnostic URL pathway uses the legacy floating-browser stage, not Phase 2 cloud; Brimble dialog tiny with wasted space, HeroUI dark preview small after aimless page scroll, and the 60fps exports resample 25fps source capture (not 60 distinct source frames). Genuine actions and green tests do not equal premium film quality. **ZERO owner-approved premium results.** Next work: agent-selected source-verified real workflow → Phase2 native60 studio composition, meaningful wide/detail visual grammar, phone legibility, actual encoded QA. No new VM/branch/paid model service; original captures preserved.
+
+
+
+
+
+
 ## 2026-11-23 — Owner's exact 1536×864 cobalt Cloud Shadow and floating shell verified (STAGE PASS, FILM REJECT)
 
 **Code on current `main`:** [6f24d2abc52b601c6807d75ea649a9b9d29c20f4](https://github.com/Davemafy/sauce-vids/commit/6f24d2abc52b601c6807d75ea649a9b9d29c20f4). Scoped 9-file change to existing Cloud Shadow compositor, camera projection, stage regression tests and provenance/docs; **no branch, no new VM, no rebuilt capture system, no public deployment**. Retains concurrently landed Stagehand read-only discovery and genuine mouse spring/physical camera dolly; full merged tests passed.
