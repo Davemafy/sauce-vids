@@ -48,7 +48,8 @@ def worker(job_id):
     try:
         job=JOBS[job_id]
         result=execute(job["url"],folder,progress=stage,
-                       brief=job.get("brief",""),audio=job.get("audio","auto"))
+                       brief=job.get("brief",""),audio=job.get("audio","auto"),
+                       cursor_pack=job.get("cursor_pack","founder-reference"))
         with LOCK:
             JOBS[job_id].update(result)
             JOBS[job_id]["updated_at"]=time.time()
@@ -190,6 +191,10 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc: return self.send_json(422,{"error":str(exc)})
             brief=body.get("brief","")
             audio=body.get("audio","auto")
+            cursor_pack=body.get("cursorPack","founder-reference")
+            from backend.cursor_capture_js import CURSOR_STYLES
+            if cursor_pack not in CURSOR_STYLES:
+                return self.send_json(422,{"error":"Choose a supported cursor style"})
             if not isinstance(brief,str) or len(brief)>240 or audio not in ("auto","clean","narrated"):
                 return self.send_json(422,{"error":"Invalid brief or audio preference"})
             with LOCK:
@@ -198,7 +203,8 @@ class Handler(BaseHTTPRequestHandler):
                        for x in JOBS.values())>=2:
                     return self.send_json(429,{"error":"Sauce queue full"})
                 job_id=secrets.token_hex(12)
-                JOBS[job_id]={"id":job_id,"url":url,"brief":brief,"audio":audio,"stage":"queued",
+                JOBS[job_id]={"id":job_id,"url":url,"brief":brief,"audio":audio,
+                              "cursor_pack":cursor_pack,"stage":"queued",
                               "status":"queued","created_at":time.time(),
                               "updated_at":time.time(),"stage_started_at":time.time()}
                 save(job_id)
@@ -237,6 +243,7 @@ class Handler(BaseHTTPRequestHandler):
                 now=time.time()
                 JOBS[revision_id]={"id":revision_id,"revision_of":source_id,
                     "url":original["url"],"brief":brief,"audio":audio,
+                    "cursor_pack":original.get("cursor_pack","arrow"),
                     "status":"queued","stage":"rendering",
                     "created_at":now,"updated_at":now,"stage_started_at":now}
                 save(revision_id)

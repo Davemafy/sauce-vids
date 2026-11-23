@@ -11,6 +11,7 @@ const maxAgeSeconds=6*60*60;
 const cookiePath=(process.env.NEXT_PUBLIC_SAUCE_BASE_PATH||"")+"/api/studio/url";
 type Context={params:Promise<{parts:string[]}>};
 const jobPattern=/^[a-f0-9]{24}$/;
+const cursorPacks=["founder-reference","studio-rounded","gloss-carbon","aero-prism","mint-studio"] as const;
 
 function sameOrigin(req:NextRequest):boolean {
  const origin=req.headers.get("origin");
@@ -142,7 +143,10 @@ export async function POST(req:NextRequest,{params}:Context) {
    const parsed=new URL(url);
    if(!["https:","http:"].includes(parsed.protocol)||parsed.username||parsed.password)
     return json({error:"Public HTTP(S) URLs only"},400);
-   const {status,data}=await backendJson("/v1/jobs",{url,brief:body.brief,audio:body.audio});
+   const cursorPack=body.cursorPack??"founder-reference";
+   if(typeof cursorPack!=="string"||!(cursorPacks as readonly string[]).includes(cursorPack))
+    return json({error:"Choose a supported cursor style"},422);
+   const {status,data}=await backendJson("/v1/jobs",{url,brief:body.brief,audio:body.audio,cursorPack});
    return json(status===202?{jobId:data.job_id}:{error:data.error||"Unable to start job"},status);
   }catch(e){
    if(e instanceof TypeError)return json({error:"Enter a valid URL"},400);

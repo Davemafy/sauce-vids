@@ -24,7 +24,7 @@ def pointer_track(manifest, width, height):
 # Colorosse Mint Cursors: original CC0 vector pack, not a UI icon or a
 # hand-drawn compositor polygon. The source SVGs remain verbatim under assets.
 # Explicit legacy mode retains reproducibility of prior rejected comparisons.
-CURSOR_PACKS = ("mint-studio", "studio-rounded", "gloss-carbon", "aero-prism", "tabler-legacy")
+CURSOR_PACKS = ("founder-reference", "mint-studio", "studio-rounded", "gloss-carbon", "aero-prism", "tabler-legacy")
 SAUCE_ORIGINAL_STYLE_PACKS = ("studio-rounded", "gloss-carbon", "aero-prism")
 
 
@@ -71,6 +71,78 @@ def _mint_svg_sprite(role: str, pixel_size: int):
     return art, tuple(v*pixel_size/32. for v in original_hotspot)
 
 
+def pointer_role_at(manifest: dict, time: float) -> str:
+    """Only an observed CSS cursor may change the arrow to a hand or I-beam.
+
+    The browser recorder already stores computed CSS cursor strings on its
+    pointermove events. An event-aligned capture adapter may carry that string
+    into the hashed pointer_samples. No nearest-target guesses are allowed.
+    Critically, role changes are stepwise AFTER the recorded timestamp, never
+    anticipated from a future mouse position or nearby button.
+    """
+    points = manifest.get("pointer_samples", [])
+    if not isinstance(points, list) or not np.isfinite(time):
+        return "arrow"
+    role = "arrow"
+    previous_time = -float("inf")
+    for sample in points:
+        if not isinstance(sample, dict):
+            return "arrow"
+        stamp = sample.get("t")
+        if type(stamp) not in (float,int) or not np.isfinite(stamp) or stamp <= previous_time:
+            return "arrow"
+        previous_time = stamp
+        if stamp > time:
+            break
+        observed = sample.get("cursor")
+        # No role metadata means prior arrow/hand should not persist across
+        # newly observed geometry that has not been semantically classified.
+        if observed == "pointer":
+            role = "hand"
+        elif observed in ("text", "vertical-text"):
+            role = "text"
+        else:
+            role = "arrow"
+    return role
+
+
+@lru_cache(maxsize=96)
+def _founder_reference_sprite(role: str, pixel_width: int):
+    """Reference-inspired cursor artwork with exact source-declared hotspots.
+
+    Uses a new Sauce arrow drawing and CC0-derived hand/I-beam paths. No
+    copyrighted screenshot images or UI icon glyphs become product assets.
+    """
+    if role not in ("arrow","hand","text"):
+        raise ValueError("Unknown observed cursor role")
+    if type(pixel_width) is not int or not 2 <= pixel_width <= 256:
+        raise ValueError("Cursor tile width outside supported bounds")
+    from io import BytesIO
+    from pathlib import Path
+    import xml.etree.ElementTree as ET
+    import cairosvg
+    from PIL import Image
+
+    expected = {"arrow":(48,56,4,4),"hand":(32,32,10,2),"text":(32,32,16,16)}
+    base_w,base_h,tip_x,tip_y=expected[role]
+    filename=(Path(__file__).resolve().parents[1]/"assets"/"cursors"
+              /"founder-reference"/f"{role}.svg")
+    source=filename.read_text(encoding="utf-8")
+    tree=ET.fromstring(source)
+    if tree.tag!="{http://www.w3.org/2000/svg}svg" or tree.get("viewBox")!=f"0 0 {base_w} {base_h}":
+        raise ValueError("Source cursor geometry changed")
+    title=tree.find("{http://www.w3.org/2000/svg}title")
+    if title is None or f"hotspot {tip_x},{tip_y}" not in (title.text or ""):
+        raise ValueError("Source cursor hotspot changed")
+    height=round(pixel_width*base_h/base_w)
+    raw=cairosvg.svg2png(bytestring=source.encode(),
+                          output_width=pixel_width*4,output_height=height*4)
+    sprite=Image.open(BytesIO(raw)).convert("RGBA").resize(
+        (pixel_width,height),Image.Resampling.LANCZOS)
+    return np.asarray(sprite,dtype=np.uint8).copy(),(
+        tip_x*pixel_width/base_w,tip_y*height/base_h)
+
+
 @lru_cache(maxsize=96)
 def _sauce_style_sprite(theme: str, pixel_width: int):
     """Rasterize an original Sauce cursor design, preserving its SVG click tip.
@@ -111,12 +183,14 @@ def _sauce_style_sprite(theme: str, pixel_width: int):
 
 
 @lru_cache(maxsize=96)
-def _recorded_cursor_sprite(scale, theme="mint-studio"):
+def _recorded_cursor_sprite(scale, theme="founder-reference", role="arrow"):
     """Load a precise cursor asset and hotspot for the selected source pack."""
     if theme not in CURSOR_PACKS:
         raise ValueError("Unknown cursor theme")
     if not np.isfinite(scale) or scale<=0:
         raise ValueError("Invalid cursor scale")
+    if theme == "founder-reference" or role in ("hand", "text"):
+        return _founder_reference_sprite(role,max(2,round(55*scale)))
     if theme in SAUCE_ORIGINAL_STYLE_PACKS:
         return _sauce_style_sprite(theme, max(2, round(55 * scale)))
     if theme == "mint-studio":
@@ -139,13 +213,13 @@ def _recorded_cursor_sprite(scale, theme="mint-studio"):
     return artwork,(apex_x*scale,apex_y*scale)
 
 
-def draw_pointer(stage, tip_x, tip_y, scale=1., theme="mint-studio"):
+def draw_pointer(stage, tip_x, tip_y, scale=1., theme="founder-reference", role="arrow"):
     """Render the one real source-timed pointer, not a synthetic cursor path."""
     if not np.isfinite((tip_x,tip_y,scale)).all() or scale<=0:
         raise ValueError("Non-finite source cursor coordinates or scale")
     from cinematic_presentation_v13 import _blend
     effective=round(scale*stage.shape[0]/1080.,4)
-    art,(hot_x,hot_y)=_recorded_cursor_sprite(effective,theme)
+    art,(hot_x,hot_y)=_recorded_cursor_sprite(effective,theme,role)
     _blend(stage,art,round(tip_x-hot_x),round(tip_y-hot_y))
 
 
@@ -186,7 +260,7 @@ def draw_loupe_pointer(stage, tip_x, tip_y, *, scale=1., clean=False):
     roi[:] = np.rint(roi*(1.-cursor[:,:,3:4])+255.*cursor[:,:,:3])
 
 
-def project_pointer(stage, track, matrix, time, scale=1., theme="mint-studio"):
+def project_pointer(stage, track, matrix, time, scale=1., theme="founder-reference", role="arrow"):
     x, y = (np.interp(time, track[:, 0], track[:, col]) for col in (1, 2))
-    draw_pointer(stage, *(matrix @ [x, y, 1.]), scale=scale, theme=theme)
+    draw_pointer(stage, *(matrix @ [x, y, 1.]), scale=scale, theme=theme, role=role)
     return stage

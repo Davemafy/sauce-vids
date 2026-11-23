@@ -16,7 +16,7 @@ def test_pointer_requires_cursorless_source_and_projects_recorded_hotspot():
     matrix = np.array([[2, 0, 30], [0, 2, 40]])
     out = project_pointer(frame, track, matrix, 0.5)
     assert np.any(out[80:124, 90:121] != 120)
-    assert np.all(out[:77] == 120)
+    assert np.all(out[:65] == 120)
 
 
 def test_recorded_cursor_matches_original_cc0_svg_geometry_and_hotspot():
@@ -29,7 +29,7 @@ def test_recorded_cursor_matches_original_cc0_svg_geometry_and_hotspot():
     stage=np.full((1080,1920,3),[32,34,39],dtype=np.uint8)
     actual=stage.copy()
     recorded_tip=(801.25,342.7)
-    draw_pointer(actual,*recorded_tip,scale=.73)
+    draw_pointer(actual,*recorded_tip,scale=.73,theme="mint-studio")
 
     source=(Path(__file__).resolve().parents[2]
             /"assets/cursors/mint-studio/arrow.svg").read_text()
@@ -48,7 +48,7 @@ def test_recorded_cursor_matches_original_cc0_svg_geometry_and_hotspot():
     roi=actual[342:386,801:846]
     assert np.count_nonzero(np.all(roi>220,axis=2))>=30
     np.testing.assert_array_equal(actual[:320],stage[:320])
-    assert _recorded_cursor_sprite(.73)[0] is _recorded_cursor_sprite(.73)[0]
+    assert _recorded_cursor_sprite(.73,"mint-studio")[0] is _recorded_cursor_sprite(.73,"mint-studio")[0]
 
 
 def test_mint_svg_cursor_pack_roles_have_verified_native_hotspots():
@@ -151,3 +151,60 @@ def test_style_selection_modifies_sprite_not_recorded_cursor_coordinates():
     assert not np.array_equal(views[1],views[2])
     with pytest.raises(ValueError,match="Unknown cursor theme"):
         _recorded_cursor_sprite(.73, "copied-proprietary-package")
+
+
+def test_founder_reference_arrow_hand_text_are_actual_vector_cursor_roles():
+    """Three supplied video references require real cursor semantics, not icons."""
+    from recorded_pointer import _founder_reference_sprite, _recorded_cursor_sprite
+    import xml.etree.ElementTree as ET
+    expected={"arrow":(48,56,4,4),"hand":(32,32,10,2),"text":(32,32,16,16)}
+    shapes=[]
+    for role,(w,h,hx,hy) in expected.items():
+        path=Path(__file__).resolve().parents[2]/"assets"/"cursors"/"founder-reference"/f"{role}.svg"
+        root=ET.fromstring(path.read_text())
+        assert root.attrib["viewBox"]==f"0 0 {w} {h}"
+        title=root.find("{http://www.w3.org/2000/svg}title")
+        assert title is not None and f"hotspot {hx},{hy}" in (title.text or "")
+        art,hot=_founder_reference_sprite(role,40)
+        assert art.shape==(round(40*h/w),40,4)
+        assert hot==(hx*40/w,hy*round(40*h/w)/h)
+        assert np.count_nonzero(art[:,:,3]>30)>100
+        assert art[:,:,3].max()==255
+        actual= _recorded_cursor_sprite(.73,"founder-reference",role)
+        assert actual[0] is _recorded_cursor_sprite(.73,"founder-reference",role)[0]
+        shapes.append(actual[0].shape)
+    assert len(set(shapes))==2  # geometry varies by actual cursor role
+
+
+def test_pointer_role_uses_only_observed_css_and_never_future_hover():
+    from recorded_pointer import pointer_role_at
+    manifest={"cursorless":True,"pointer_samples":[
+        {"t":0.2,"x":100,"y":120,"cursor":"default"},
+        {"t":1.1,"x":130,"y":150,"cursor":"pointer"},
+        {"t":1.8,"x":140,"y":155,"cursor":"text"},
+        {"t":2.2,"x":145,"y":158,"cursor":"auto"},
+    ]}
+    assert pointer_role_at(manifest,0.99)=="arrow"
+    assert pointer_role_at(manifest,1.099)=="arrow"
+    assert pointer_role_at(manifest,1.1)=="hand"
+    assert pointer_role_at(manifest,1.79)=="hand"
+    assert pointer_role_at(manifest,1.8)=="text"
+    assert pointer_role_at(manifest,2.2)=="arrow"
+    assert pointer_role_at({"pointer_samples":[{"t":.1,"role":"button"}]},1.)=="arrow"
+    assert pointer_role_at({"pointer_samples":[{"t":.1,"cursor":"url(fake.cur)"}]},1.)=="arrow"
+    assert pointer_role_at({"pointer_samples":[{"t":1.,"cursor":"pointer"},{"t":0.,"cursor":"text"}]},2.)=="arrow"
+
+
+def test_reference_hand_and_arrow_use_different_vectors_at_identical_verified_tip():
+    from recorded_pointer import draw_pointer
+    canvas=np.full((1080,1920,3),[28,30,33],dtype=np.uint8)
+    tip=(700.3,400.5)
+    arrow=canvas.copy();hand=canvas.copy()
+    draw_pointer(arrow,*tip,scale=.73,theme="founder-reference",role="arrow")
+    draw_pointer(hand,*tip,scale=.73,theme="founder-reference",role="hand")
+    assert not np.array_equal(arrow,hand)
+    assert np.array_equal(arrow[:340],canvas[:340])
+    assert np.array_equal(hand[:340],canvas[:340])
+    # Still one glyph, within the real cursor's small local hit area.
+    assert np.array_equal(arrow[470:],canvas[470:])
+    assert np.array_equal(hand[470:],canvas[470:])

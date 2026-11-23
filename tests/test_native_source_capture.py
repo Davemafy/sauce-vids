@@ -69,9 +69,11 @@ def test_unsupported_recordings_cannot_be_mislabeled():
         source_video_profile({'width':640,'height':360},{})
 
 
-def test_default_cursor_is_unchanged_for_existing_pilot():
+def test_new_source_capture_uses_the_owner_reference_cursor_by_default():
     with patch.dict(os.environ, {}, clear=True):
-        assert capture_cursor_style()=='circle'
+        assert capture_cursor_style()=='founder-reference'
+    # Old completed captures remain reproducible through explicit selection.
+    assert capture_cursor_style('circle')=='circle'
 
 
 def test_real_arrow_requires_explicit_opt_in():
@@ -105,3 +107,27 @@ def test_high_density_requires_source_viewport_evidence():
         source_video_profile({'width':1920,'height':1080},{
             'capture_quality':'high','source_dpr':2,
             'requested_video_size':{'width':1920,'height':1080}})
+
+
+def test_recorded_browser_cursor_follows_real_css_hover_with_precise_hotspots():
+    from backend.cursor_capture_js import CURSOR_STYLES,build_cursor_script
+    assert 'founder-reference' in CURSOR_STYLES
+    assert 'aero-prism' in CURSOR_STYLES
+    assert 'tabler-legacy' not in CURSOR_STYLES
+    for name in CURSOR_STYLES:
+        js=build_cursor_script(name)
+        assert 'getComputedStyle(el).cursor' in js
+        assert 'pointerover' in js
+        assert 'pointer-events:none' in js
+        assert 'sauce-motion-pointer' in js
+        assert 'images[role]' in js
+        assert 'event.clientX-dims.hotX' not in js # actual variable is point.x
+        assert 'point.x-dims.hotX' in js
+        assert 'window.__sauceGetPointer' in js
+        # It must not inject fake click markers or application submissions.
+        assert 'dispatchEvent' not in js
+        assert 'fetch(' not in js
+    assert capture_cursor_style('aero-prism')=='aero-prism'
+    from pytest import raises
+    with raises(ValueError):
+        build_cursor_script('unlicensed-proprietary-clone')

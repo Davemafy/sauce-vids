@@ -5,8 +5,16 @@ import s from "./url-flow.module.css";
 import {FilmLibrary,rememberFilm,recentFilmIds} from "./film-library";
 
 const api=(process.env.NEXT_PUBLIC_SAUCE_BASE_PATH||"")+"/api/studio/url";
+type CursorPack="founder-reference"|"studio-rounded"|"gloss-carbon"|"aero-prism"|"mint-studio";
+const cursorPacks:{id:CursorPack;label:string}[]=[
+ {id:"founder-reference",label:"Founder reference · black arrow / hover hand"},
+ {id:"studio-rounded",label:"Studio Rounded · white"},
+ {id:"gloss-carbon",label:"Gloss Carbon · graphite"},
+ {id:"aero-prism",label:"Aero Prism · iridescent"},
+ {id:"mint-studio",label:"Mint · classic"},
+];
 type Stage="queued"|"inspecting"|"directing"|"capturing"|"rendering"|"needs_access"|"needs_review"|"failed"|"needs_key";
-type Job={id:string;url:string;stage:Stage;status:string;reason?:string;error?:string;message?:string;created_at?:number;updated_at?:number;stage_started_at?:number;frames_rendered?:number;frames_total?:number;title?:string;ai_calls?:number;capture_mode?:"interactive"|"showcase";render_mode?:string;direction_source?:string;video_type?:string;narrated?:boolean;revision_of?:string;};
+type Job={id:string;url:string;stage:Stage;status:string;reason?:string;error?:string;message?:string;created_at?:number;updated_at?:number;stage_started_at?:number;frames_rendered?:number;frames_total?:number;title?:string;ai_calls?:number;capture_mode?:"interactive"|"showcase";render_mode?:string;direction_source?:string;video_type?:string;narrated?:boolean;revision_of?:string;cursor_pack?:CursorPack;};
 const steps:[Stage,string,string][]=[
  ["inspecting","Explore","Reading real page structure"],
  ["directing","Direct","Finding the story worth showing"],
@@ -41,6 +49,7 @@ export function UrlFlowScreen(){
  const [url,setUrl]=useState("");
  const [brief,setBrief]=useState("");
  const [audio,setAudio]=useState<"auto"|"clean"|"narrated">("auto");
+ const [cursorPack,setCursorPack]=useState<CursorPack>("founder-reference");
  const [code,setCode]=useState("");
  const [unlocked,setUnlocked]=useState(false);
  const [authLoading,setAuthLoading]=useState(true);
@@ -61,7 +70,11 @@ export function UrlFlowScreen(){
   if(response.status===401){setUnlocked(false);throw new Error("Pilot session expired");}
   if(!response.ok)throw new Error("Job status unavailable");
   const data=await response.json() as {job:Job};
-  if(data.job){setJob(data.job);setPollError(false);}
+  if(data.job){
+   setJob(data.job);setPollError(false);
+   if(data.job.cursor_pack&&cursorPacks.some(p=>p.id===data.job.cursor_pack))
+    setCursorPack(data.job.cursor_pack);
+  }
  },[]);
 
  useEffect(()=>{
@@ -115,7 +128,7 @@ export function UrlFlowScreen(){
    parsed.search="";parsed.hash="";
    const publicUrl=parsed.toString();
    const response=await fetch(api+"/jobs",{
-    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:publicUrl,brief:brief.trim(),audio}),
+    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:publicUrl,brief:brief.trim(),audio,cursorPack}),
    });
    const body=await response.json();
    if(!response.ok)throw Error(body.error||"Could not create film job");
@@ -123,7 +136,7 @@ export function UrlFlowScreen(){
    if(!/^[a-f0-9]{24}$/.test(id))throw Error("Invalid job identifier");
    setJobId(id);sessionStorage.setItem("sauce-url-job",id);
    rememberFilm(id);
-   setJob({id,url:publicUrl,stage:"queued",status:"queued",created_at:Date.now()/1000});
+   setJob({id,url:publicUrl,stage:"queued",status:"queued",created_at:Date.now()/1000,cursor_pack:cursorPack});
   }catch(e){setError(e instanceof Error?e.message:"Could not start this film");}
   finally{setSending(false);}
  }
@@ -213,8 +226,13 @@ export function UrlFlowScreen(){
         <option value="narrated">Require narration</option>
        </select>
       </label>
+      <label>Cursor style
+       <select value={cursorPack} onChange={e=>setCursorPack(e.target.value as CursorPack)} disabled={showProgress||!!jobId}>
+        {cursorPacks.map(style=><option key={style.id} value={style.id}>{style.label}</option>)}
+       </select>
+      </label>
      </div>
-     <p className={s.fieldNote}>Public websites only. No sign-ins or application submissions.</p>
+     <p className={s.fieldNote}>Public websites only. No sign-ins or application submissions. Cursor appearance is fixed when captured; a different style needs a new film.</p>
     </form>
     {!authLoading&&!unlocked&&<form onSubmit={authorize} className={s.access}>
      <div><strong>Unlock private pilot</strong><p>Rendering is currently reserved for invited testers.</p></div>

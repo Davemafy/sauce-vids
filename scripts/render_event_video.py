@@ -71,12 +71,12 @@ if args.film_plan:
     if (declared_cursor_pack is not None and args.cursor_pack is not None
             and declared_cursor_pack != args.cursor_pack):
         parser.error("--cursor-pack conflicts with film-plan cursorPack")
-    args.cursor_pack=declared_cursor_pack or args.cursor_pack or "mint-studio"
+    args.cursor_pack=declared_cursor_pack or args.cursor_pack or "founder-reference"
     args.presentation=FILM_PLAN_DATA.get("presentation","fullscreen")
     args.recorded_pointer=(FILM_PLAN_DATA.get("cursor")=="recorded" and "glassLoupe" not in FILM_PLAN_DATA)
 else:
     FILM_PLAN_DATA=None
-    args.cursor_pack=args.cursor_pack or "mint-studio"
+    args.cursor_pack=args.cursor_pack or "founder-reference"
 if args.validate_only and FILM_PLAN_DATA is None:
     parser.error("--validate-only requires --film-plan")
 if FILM_PLAN_DATA is not None and FILM_PLAN_DATA.get("audio",{}).get("mode")=="eventFoley" and args.music:
@@ -467,6 +467,8 @@ def compose_window(source,t,static=False):
     return stage
 
 def apply(source,t,static=False,plate_frame=None):
+    from recorded_pointer import pointer_role_at
+    pointer_role = pointer_role_at(MANIFEST,t) if POINTER is not None else "arrow"
     if STUDIO_STAGE is not None:
         from spatial_studio_stage import render_studio_stage
         if DOM_PLANE_GROUP is not None:
@@ -485,7 +487,7 @@ def apply(source,t,static=False,plate_frame=None):
                 mapped=cv2.perspectiveTransform(np.float32([[[px,py]]]),hom)[0,0]
                 draw_pointer(composed,float(mapped[0]),float(mapped[1]),
                              scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])),
-                             theme=args.cursor_pack)
+                             theme=args.cursor_pack,role=pointer_role)
             return composed
         if DOM_PLANE is not None:
             from live_dom_depth_plane import render_live_dom_plane
@@ -503,7 +505,7 @@ def apply(source,t,static=False,plate_frame=None):
                 projected=cv2.perspectiveTransform(np.float32([[[px,py]]]),hom)[0,0]
                 draw_pointer(composed,float(projected[0]),float(projected[1]),
                              scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])),
-                             theme=args.cursor_pack)
+                             theme=args.cursor_pack,role=pointer_role)
             return composed
         if STUDIO_STAGE.motion_style=="cinematic":
             # A genuine cursor is the sharp foreground instrument of action.
@@ -523,7 +525,7 @@ def apply(source,t,static=False,plate_frame=None):
                     np.float32([[[px,py]]]),H)[0,0]
                 draw_pointer(composed,float(mapped[0]),float(mapped[1]),
                              scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0])),
-                             theme=args.cursor_pack)
+                             theme=args.cursor_pack,role=pointer_role)
             return composed
         # Legacy source-projection is unchanged unless the cinematic profile
         # is explicitly selected; existing source-verified films are stable.
@@ -532,7 +534,7 @@ def apply(source,t,static=False,plate_frame=None):
             real=source.copy()
             px=float(np.interp(t,POINTER[:,0],POINTER[:,1]))
             py=float(np.interp(t,POINTER[:,0],POINTER[:,2]))
-            draw_pointer(real,px,py,scale=.73,theme=args.cursor_pack)
+            draw_pointer(real,px,py,scale=.73,theme=args.cursor_pack,role=pointer_role)
         else:
             real=source
         return render_studio_stage(STUDIO_STAGE,real,t)
@@ -543,7 +545,7 @@ def apply(source,t,static=False,plate_frame=None):
         stage=project_pointer(stage,POINTER,camera_matrix(t,static),t,
                               scale=(.73 if FILM_PLAN is not None else
                                      EDIT_CAMERA.get("cursor_scale",.85) if SLIDER_SHOT
-                                     else 1.6-.18*press),theme=args.cursor_pack)
+                                     else 1.6-.18*press),theme=args.cursor_pack,role=pointer_role)
     if args.result_focus and RESULT_CUT is not None and not static:
         elapsed_frames = round(t * FPS) - RESULT_CUT.frame
         if elapsed_frames > 0:

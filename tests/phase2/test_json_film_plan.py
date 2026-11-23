@@ -222,7 +222,7 @@ def test_all_cursor_styles_are_selectable_in_verified_film_plan(source):
         plan=compile_plan((source[0],source[1],chosen))
         assert plan.cursor_pack==name
         assert plan.cursor=="recorded"
-    assert compile_plan(source).cursor_pack=="mint-studio"
+    assert compile_plan(source).cursor_pack=="founder-reference"
 
 
 def test_film_plan_rejects_unregistered_cursor_styles_or_disabled_pointer(source):

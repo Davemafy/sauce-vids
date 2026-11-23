@@ -127,3 +127,21 @@ test("Finished film is available after the customer closes the tab",async({page,
  await expect(returnTab.getByRole("heading",{name:"Your first cut is ready."})).toBeVisible();
  await expect(returnTab.getByRole("link",{name:/Download MP4/})).toBeVisible();
 });
+
+test("Real cursor styles are available in Studio and forwarded with a new URL capture",async({page})=>{
+ await auth(page);
+ let requestBody:Record<string,unknown>|null=null;
+ await page.route("**/api/studio/url/jobs",route=>{
+  requestBody=route.request().postDataJSON() as Record<string,unknown>;
+  return route.fulfill({status:202,contentType:"application/json",body:JSON.stringify({jobId:id})});
+ });
+ await page.goto(prefix+"/studio");
+ const style=page.getByLabel("Cursor style");
+ await expect(style).toHaveValue("founder-reference");
+ await expect(style.locator("option")).toHaveCount(5);
+ await style.selectOption("gloss-carbon");
+ await page.getByLabel("Product website").fill("https://paldey.com/");
+ await page.getByRole("button",{name:/make film/i}).click();
+ await expect.poll(()=>requestBody?.cursorPack).toBe("gloss-carbon");
+ await expect(style).toBeDisabled();
+});

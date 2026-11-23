@@ -1,0 +1,43 @@
+# Sauce — owner's three real cursor-video references (2026-11-23)
+
+**Source material:** three owner-supplied MP4s analyzed directly, frame by frame. Raw videos stay with the user and are **not committed or redistributed**. These are actual visual references, not invented designs or accepted Sauce films. All implementation work is on GitHub `main` and the existing persistent Vultr worker.
+
+## Reference observations
+
+| Owner-uploaded source | Measured file | Actual evidence | Implementation implication |
+|---|---|---|---|
+| `1000419748.mp4` (clip 1) | 4.933s, 1280×720, 30fps | Small black arrow with a restrained edge over the genuine Connect Agent modal and Codex option, including a source-true enlarged UI crop at ~1.70s | Default should be an unobtrusive, readable arrow, *not* a crooked polygon or a generic UI icon |
+| `1000417059.mp4` (clip 2) | 5.550s, 1920×1080, 60fps | Google Sheets source. Black arrow over cell data, actual white hand with thick black outline at **Format** hover near 2.00s; dropdown menu is genuine. Cursor stays in front of recorded UI and remains readable through camera zoom | Browser's observed `getComputedStyle(target).cursor` must drive `arrow → hand`, with a distinct precise hotspot, only when it truly says `pointer` |
+| `1000417060.mp4` (clip 3) | 4.650s, 1920×1080, 60fps, HEVC | Dark pricing page, black arrow with bright white contour near slider ~1.10s; strong circular **glass loupe** around the UI. The white circle under the arrow is the application's real slider thumb, **not an independent cursor click pulse** | One high-contrast black/white arrow, source-verified slider result and lens as a separate optics effect, **never manufacture the original UI thumb** |
+
+**Correction to early visual descriptions:** clip 3's white slider thumb must remain an original source product pixel. Do not synthesize a circle/dot merely because the reference clip includes one. Large magnification belongs to Sauce's lens/stage, separate from real cursor roles.
+
+## Implementation in Sauce (no proprietary cursor tracing)
+
+- **Default `founder-reference` cursor pack:** original Sauce dark arrow with light rim, adapted CC0 Mint-origin white hover-hand with black keyline, and an I-beam for genuine CSS text interactions. Assets: `assets/cursors/founder-reference/{arrow,hand,text}.svg`, with provenance and documented source-art hotspots. The original user videos were not sampled into output assets. The outline-based hand is specifically grounded in clip 2; the arrow geometry follows the compact, bold film-language of clips 1 and 3.
+- **Other opt-in looks** from prior work remain available: `studio-rounded`, `gloss-carbon`, `aero-prism`, and `mint-studio` (original CC0 SVG). No random mix of cursor types within the same film; semantic hand and I-beam override decorative arrow choices only when real CSS evidence supports them. Legacy Tabler glyph stays explicitly accessible for old reference reproduction, never the recommended default.
+- **Actual live browser capture path:** `backend/cursor_capture_js.py` builds a single SVG presentation cursor with source hotspot and CSS-mode switching directly from *real* `pointermove`/`pointerover` events and computed `cursor: pointer|text|default`. It has `pointer-events:none`, one marker, no fake clicks/DOM changes, no remote assets, and no page submissions. `backend/live_capture.py` accepts `--cursor-pack` and defaults to `founder-reference` for new jobs. Browser captures use the same correct shape that will appear in their actual MP4.
+- **Actual source-true compositor path:** `scripts/recorded_pointer.py` accepts verified `cursor` metadata on individual `pointer_samples` and switches roles *only at/after the observed sample timestamp*. Recordings without such metadata keep a normal arrow (no guessed hover). `scripts/render_event_video.py` supports all packs and optional `cursorPack` in validated `sauce-film-plan-v1` JSON; clip source hashes, frame clock, result anchors and real pointer coordinates are unchanged.
+- **End-to-end private Studio:** `apps/web/app/studio/url-flow.tsx` adds a compact native **Cursor style** selector with the five nonlegacy choices. Selection passes through authenticated Next API → loopback `backend/sauce_api.py` → job's persisted `cursor_pack` and checkpoint → `backend/url_engine.py` → source capture and `backend/live_render.py`. Existing jobs/revisions retain their original capture style, including across reloads; one source job never silently changes recorded cursor geometry. No cosmetic selector disconnected from the real worker.
+
+## Verified actual video and browser behavior
+
+**New private MP4:** `.tmp-holdout-recode/founder-pointer-reference-20261123/founder-reference-1080p60.mp4`
+
+- New film SHA256 `1544a7310437eb3283d04bf4a2372528b0475d78db94ebeee8a45fb955e70240`; same genuine Recode source video SHA256 `1b7b3b58948601e81e7dc415167c9ca5e1a06d501eb518d764803aecc35aef77`; same hashed event manifest `1768f688da06e9b6d0916d1c6f4759f3c10750162b90cd9bacc74f4713d714a8`; model camera JSON SHA256 `8eaa0c912406d6fbb7578e2f9a4c191c9a3ed6509d10a4947fa856153b6ffadb`.
+- `ffprobe`: **1920×1080, H264/60fps, 294 frames, exactly 4.900 seconds**, full FFmpeg decode passes; unchanged verified editor action and UI pixel source. **This file only exercises the arrow** because the original Recode session has no verified hover-hand CSS-role observations. Never fake a hand in a recorded film.
+- Independent actual Chromium local semantic-UI test: CSS `default` → arrow; CSS `pointer` → white outlined hand; CSS `text` → I-beam. Browser checks measured *one* overlay, actual 24×28 / 31×31 / 30×30px cursor art, correct source-relative tips and zero script errors. These screenshots use a clearly labeled synthetic test fixture, **not a fake customer product demo**.
+- Owner-only seven-day review page: [watch real MP4 plus original CSS role crops](https://devmcp.davemafy.xyz/sauce-expiring-review/tweakcn-20261120/founder-refs-cursor-e6402d1ca5108c8fc6/index.html?md5=txBjifiK_eDcpVMxwNXUwg&expires=1796021075), expires **2026-11-30 06:44:35 UTC**. HTML, thumbnail and MP4 HTTP200; video byte-range HTTP206; downloaded remote MP4 SHA matched local. Chromium played and sought **2 signed MP4s per viewport** in desktop 1280×720 and mobile 390×844: **4/4 checks passed**, no page errors, no horizontal overflow. Phone player width 360px.
+- Scoped Python tests **112 passed, 3 skipped, 10 subtests passed**; broad unittest **278 run, 2 skipped, no failures**; `apps/web` TypeScript and Next production build PASS using existing Node22; Vitest **13 passed**; full Playwright Chrome E2E **16 passed** including actual Cursor style dropdown → POST body; final after selector-reconnect update, TypeScript and targeted E2E passed again.
+
+## Remaining limitations — no false quality/launch claims
+
+The *cursor* is visually closer to the references, and the actual source/film pipeline is wired; however the 4.9s Recode source is still a weak, phone-unreadable HTML-fill film with no second payoff, and the pointer track originally supplies only 12 coordinates and then parks. The white outlined hand has **real Chromium role visual proof**, but **not yet a customer product MP4** with a source-verified CSS hover transition. That is the next capture-specific validation if needed. These are not owner-approved premium films.
+
+No production service restarted or deployed. Source code and finite proof files are preserved. Do not claim the private `/studio` live URL changed before a separately verified deployment. No raw owner-reference videos, user accounts, HAR, API keys or private browser sessions were committed or hosted.
+
+### Final reconciliation with concurrent upstream main
+
+The cursor changes were reconstructed in a separate, clean **main-only checkout** at upstream GitHub commit `3d19b54c2ab55731c7a1907b7e1bed783e61d0e5`, rather than stashing or resetting another worker's dirty filesystem. Its independent new **cloud-shadow fixed browser stage** and **source-true film recut** were retained byte-for-byte. Our compositor patch applied on top without touching those separate `stagePreset` / stage-source consistency checks.
+
+On the merged checkout: targeted Python tests **74 passed, 10 subtests passed**; full Phase 2 Python suite **483 passed, 10 skipped, 21 subtests passed**; Python unittest discovery **278 run, 2 skipped, no failures**; Next.js typecheck and production build **PASS**, Vitest **13 passed**, full Chromium Playwright **16 passed** including cursor style selector round-trip. This additional suite confirms coexistence with the latest upstream stage and verified-film work. No production deployment or owner quality approval performed.

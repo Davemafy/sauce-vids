@@ -66,10 +66,11 @@ ARROW_CURSOR_JS=r"""(() => {
  window.__sauceGetPointer=()=>point;
 })();"""
 
-def capture_cursor_style():
- style=os.environ.get('SAUCE_CAPTURE_CURSOR','circle')
- if style not in ('circle','arrow'):
-  raise ValueError('Invalid SAUCE_CAPTURE_CURSOR (circle or arrow)')
+def capture_cursor_style(requested=None):
+ from backend.cursor_capture_js import CURSOR_STYLES
+ style=requested if requested is not None else os.environ.get('SAUCE_CAPTURE_CURSOR','founder-reference')
+ if style not in (*CURSOR_STYLES,'circle','arrow','tabler-legacy'):
+  raise ValueError('Invalid Sauce capture cursor style')
  return style
 
 def hash_file(path:Path):
@@ -358,9 +359,9 @@ def record_subjects(page, beats, video_begin):
   raise RuntimeError('Page no longer exposes three stable product subjects')
  return shots
 
-def capture(url:str,private:Path,report:dict,plan:dict):
+def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
  quality=capture_quality()
- cursor_style=capture_cursor_style()
+ cursor_style=capture_cursor_style(cursor_pack)
 
  ensure_video_helper()
  validate_public_url(url)
@@ -371,7 +372,11 @@ def capture(url:str,private:Path,report:dict,plan:dict):
  cursorless=(plan.get('mode')=='interactive' and len(selected)==1 and
              actions.get(selected[0],{}).get('kind')=='slider')
  beats=plan.get('beats',[]) if plan.get('mode')=='showcase' else []
- cursor_script=('' if cursorless or beats else ARROW_CURSOR_JS if cursor_style=='arrow' else CURSOR_JS)
+ from backend.cursor_capture_js import build_cursor_script
+ cursor_script=('' if cursorless or beats else
+                ARROW_CURSOR_JS if cursor_style in ('arrow','tabler-legacy') else
+                CURSOR_JS if cursor_style=='circle' else
+                build_cursor_script(cursor_style))
  events=[];moment=0.0
  with sync_playwright() as pw:
   b=pw.chromium.launch(headless=True,executable_path=CHROME,
@@ -570,6 +575,8 @@ if __name__=='__main__':
  ap.add_argument('--out',type=Path,required=True)
  ap.add_argument('--inspection',type=Path,required=True)
  ap.add_argument('--plan',type=Path,required=True)
+ from backend.cursor_capture_js import CURSOR_STYLES
+ ap.add_argument('--cursor-pack',choices=(*CURSOR_STYLES,'circle','arrow'),default=None)
  a=ap.parse_args()
  print(json.dumps(capture(a.url,a.out,json.loads(a.inspection.read_text()),
-  json.loads(a.plan.read_text()))),flush=True)
+  json.loads(a.plan.read_text()),cursor_pack=a.cursor_pack)),flush=True)

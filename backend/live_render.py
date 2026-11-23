@@ -59,16 +59,16 @@ def source_video_profile(stream:dict,receipt:dict):
          'source_fps':stream.get('r_frame_rate'),'filter':filter_graph}
 
 
-def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", audio="auto", edit_plan=None):
+def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", audio="auto", edit_plan=None, cursor_pack="founder-reference"):
  source_dir=Path(source_dir);out=Path(out)
  if edit_plan is None:
-  return _render(source_dir,out,title,story,mode,brief,audio,source_dir,None)
+  return _render(source_dir,out,title,story,mode,brief,audio,source_dir,None,cursor_pack)
  out.mkdir(parents=True,exist_ok=True)
  with TemporaryDirectory(prefix='.sauce-edit-',dir=out) as work:
-  return _render(source_dir,out,title,story,mode,brief,audio,Path(work),edit_plan)
+  return _render(source_dir,out,title,story,mode,brief,audio,Path(work),edit_plan,cursor_pack)
 
 
-def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan):
+def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pack="founder-reference"):
  receipt=json.loads((source_dir/'continuous-capture.json').read_text())
  src=source_dir/'continuous-source.webm'
  if not src.is_file() or file_digest(src)!=receipt['sha256']:
@@ -180,8 +180,14 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan):
  manifest.write_text(json.dumps({'source':safe_url(receipt['source_url']),
   'cursorless':cursorless,'events':events,'edit_camera':plan_camera,'capture_rect':{'width':1920,'height':1080},
   'pointer_samples':next((e['pointer_samples'] for e in events if e['kind']=='slider_change'), [])}))
+ from scripts.recorded_pointer import CURSOR_PACKS
+ # Legacy jobs have a cursor already baked into the browser's source pixels.
+ # The compositor does not understand their old 'circle'/'arrow' names, so
+ # map only that inactive overlay setting to a reproducible legacy glyph.
+ compositor_cursor=cursor_pack if cursor_pack in CURSOR_PACKS else 'tabler-legacy'
  command=[sys.executable,str(Path(__file__).resolve().parents[1]/'scripts/render_event_video.py'),
     '--video',str(prepared),'--manifest',str(manifest),'--output',str(composed),
+    '--cursor-pack',compositor_cursor,
     '--camera-profile','action-first','--presentation','window']
  if loupe:
   command+=['--glass-loupe']
@@ -244,6 +250,7 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan):
   'recorded_source_dpr':profile['source_dpr'],
   'native_1080p_source':profile['native_1080p'],
   'presentation_cursor':receipt.get('presentation_cursor','circle'),
+  'cursor_pack':cursor_pack,
   'continuous_motion':True,'source_verified':True,'replay_verified':False,
   'observed_actions':receipt['actions'],
   'master_dimensions':[1920,1080],'master_fps':60,'preview_dimensions':[1280,720],
@@ -268,11 +275,14 @@ if __name__=='__main__':
  p.add_argument('--mode',default='public_showcase')
  p.add_argument('--brief',default='')
  p.add_argument('--audio',choices=('auto','clean','narrated'),default='auto')
+ from backend.cursor_capture_js import CURSOR_STYLES
+ p.add_argument('--cursor-pack',choices=(*CURSOR_STYLES,'arrow','circle'),default='founder-reference')
  p.add_argument('--edit-plan',type=Path,help='Versioned JSON bound to the verified capture SHA-256')
  a=p.parse_args()
  try:
   print(json.dumps(render(a.source,a.out,a.title,a.story,a.mode,brief=a.brief,audio=a.audio,
-                          edit_plan=json.loads(a.edit_plan.read_text()) if a.edit_plan else None)),flush=True)
+                          edit_plan=json.loads(a.edit_plan.read_text()) if a.edit_plan else None,
+                          cursor_pack=a.cursor_pack)),flush=True)
  except subprocess.TimeoutExpired as exc:
   print(f'Render stage exceeded {exc.timeout}s',file=sys.stderr)
   raise SystemExit(124) from exc

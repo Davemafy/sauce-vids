@@ -164,7 +164,7 @@ def captured(folder:Path,url:str,actions:list[dict],*,tag:str='session'):
         raise RuntimeError('Browser capture contained no usable state sequence')
     return output
 
-def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto"):
+def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto", cursor_pack="founder-reference"):
     validate_public_url(url)
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
     private=folder/'private';private.mkdir(parents=True,exist_ok=True)
@@ -225,14 +225,14 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto"):
     planfile=private/'motion-plan.json'
     planfile.write_text(json.dumps(plan,indent=2))
     env=dict(os.environ,SAUCE_SAFE_PUBLIC_ONLY='1')
-    env.setdefault('SAUCE_CAPTURE_CURSOR','arrow')
+    env.setdefault('SAUCE_CAPTURE_CURSOR','founder-reference')
     env.setdefault('SAUCE_CAPTURE_QUALITY','high')
     def run_capture():
         with (private/'motion-capture.log').open('a') as log:
             result=subprocess.run([sys.executable,'-m','backend.live_capture',
               '--url',url,'--out',str(capture_dir),
               '--inspection',str(private/'inspection.json'),
-              '--plan',str(planfile)],cwd=ROOT,env=env,
+              '--plan',str(planfile),'--cursor-pack',cursor_pack],cwd=ROOT,env=env,
               stdout=log,stderr=subprocess.STDOUT,timeout=140)
         if result.returncode!=0:raise RuntimeError('Continuous browser capture failed')
     try:
@@ -254,7 +254,7 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto"):
         plan['mode']='showcase'
     checkpoint={'url':url,'title':plan['title'],'mode':plan['mode'],'ai_calls':calls,
                 'direction_source':source,'attempts':0,'subject_shots':bool(record.get('subject_shots')),
-                'cinematic_only':cinematic_only,
+                'cinematic_only':cinematic_only,'cursor_pack':cursor_pack,
                 'receipt_sha256':sha256((capture_dir/'continuous-capture.json').read_bytes()).hexdigest()}
     write_render_checkpoint(folder,checkpoint)
     return render_checkpoint(folder,checkpoint,stage,brief,audio)
@@ -268,6 +268,7 @@ def render_checkpoint(folder,checkpoint,stage,brief,audio):
              '--source',str(capture_dir),'--out',str(export),
              '--title',checkpoint['title'],'--mode',checkpoint['mode'],
              '--brief='+brief,'--audio',audio,
+             '--cursor-pack',checkpoint.get('cursor_pack','arrow'),
              '--story',('Actual public UI interaction' if checkpoint['mode']=='interactive'
                         else 'Public product-page reel' if checkpoint['subject_shots']
                         else 'Public website preview; private features not demonstrated')]

@@ -105,7 +105,7 @@ class FilmPlan:
     audio_file: Path|None
     camera_keys: tuple[CameraKey,...]
     source_size: tuple[int,int]
-    cursor_pack: str = "mint-studio"
+    cursor_pack: str = "founder-reference"
 
     def at(self,t,output_size,*,stretch=False):
         """Affine matrix in *source-pixel* coordinates; output 16:9."""
@@ -182,7 +182,7 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
     if data.get("cursor") not in ("recorded","none"):
         raise ValueError("Cursor mode must be recorded or none")
     from recorded_pointer import CURSOR_PACKS
-    cursor_pack=data.get("cursorPack", "mint-studio")
+    cursor_pack=data.get("cursorPack", "founder-reference")
     if cursor_pack not in CURSOR_PACKS:
         raise ValueError("Unrecognized source-timed cursor appearance")
     if data.get("cursor") == "none" and "cursorPack" in data:

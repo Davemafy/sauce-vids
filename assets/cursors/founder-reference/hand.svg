@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <title>Founder Reference Hand — CC0 Mint-derived vector, hotspot 10,2</title>
+  <desc>White hand with thick black outline, based on the CC0 Mint pointer silhouette and the provided Screen Studio hover-hand reference.</desc>
+  <path d="M 12 4 a 2.6 2.6 0 0 1 5.2 0 v8.4 h1.2 a 2.4 2.4 0 0 1 4.8 0 v1 h1 a 2.4 2.4 0 0 1 4.4 1.4 v6.6 a 6 6 0 0 1 -6 6 h-6.4 a 6 6 0 0 1 -5.6 -4 L 7 16.4 a 2.4 2.4 0 0 1 4.4 -1.8 l 0.6 1.2 Z" fill="#fefefe" stroke="#090b0d" stroke-width="2.7" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M 17.2 13 v7.2 M 23.1 14.2 v6.3 M 27.6 16.2 v5.2" fill="none" stroke="#15191f" stroke-width=".85" stroke-linecap="round" opacity=".5"/>
+</svg>
