@@ -104,9 +104,9 @@ def _real_result(page, control, before_state, after_state):
             for k in ("x","y","width","height")}
 
 
-def capture(url, inspection, observations, folder, *, display=":174", seconds=10.0):
-    if not 9.5<=seconds<=16 or not display.startswith(":") or not display[1:].isdigit():
-        raise ValueError("Bounded private 9.5-16s / numeric Xvfb display required")
+def capture(url, inspection, observations, folder, *, display=":174", seconds=6.5):
+    if not 6.<=seconds<=16 or not display.startswith(":") or not display[1:].isdigit():
+        raise ValueError("Bounded private 6-16s / numeric Xvfb display required")
     if not 160<=int(display[1:])<=220:
         raise ValueError("Private Xvfb display must be in 160..220")
     folder = Path(folder)
@@ -300,7 +300,7 @@ def main():
     p.add_argument("--inspection",required=True,type=Path)
     p.add_argument("--observations",required=True,type=Path)
     p.add_argument("--out",required=True,type=Path)
-    p.add_argument("--seconds",type=float,default=10.)
+    p.add_argument("--seconds",type=float,default=6.5)
     p.add_argument("--display",default=":174")
     args=p.parse_args()
     data=capture(args.url,args.inspection,args.observations,args.out,

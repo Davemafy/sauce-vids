@@ -54,12 +54,12 @@ def directed_plan(source, manifest):
     h=raw["capture_rect"]["height"]
     result=e["resultRect"]
     fraction=(result["width"]*result["height"])/(w*h)
-    if not (8.5<=duration<=16. and 0.035<=fraction<=0.48):
+    if not (6.<=duration<=16. and 0.035<=fraction<=0.48):
         # A full-screen theme change is a truthful overview, not a modal
         # cinematic closeup; never force a synthetic compact result region.
         return plan,{"strategy":"source-true-overview","resultFraction":round(fraction,5)}
     start=e["start"];observed=e["t"]
-    if (start<.7 or observed+4.1>=duration or
+    if (start<.7 or observed+2.75>=duration or
         start-.62<.40 or observed<=start):
         raise ValueError("No readable source-proven click/result/hold timeline")
     # Scale the entire physical browser and its genuine source pixel texture.
@@ -73,10 +73,10 @@ def directed_plan(source, manifest):
       {"at":_round(start-.12),"startAt":_round(start-.62),
        "scale":.96,"viewScale":1,
        "center":[.5,.5],"yaw":0,"pitch":0},
-      {"at":_round(observed+1.54),"startAt":_round(observed+.08),
+      {"at":_round(observed+.92),"startAt":_round(observed+.08),
        "scale":1.2,"viewScale":1.4,
        "focus":"event:0:result","yaw":0,"pitch":0},
-      {"at":_round(duration),"startAt":_round(duration-2.0),
+      {"at":_round(duration),"startAt":_round(duration-1.5),
        "scale":.88,"viewScale":1,
        "center":[.5,.5],"yaw":0,"pitch":0}
     ]

@@ -25,7 +25,7 @@ def direction(video:Path,manifest:Path):
     evidence=json.loads(Path(manifest).read_text())
     duration=packet["actualCapture"]["durationSeconds"]
     events=evidence.get("events",[])
-    if (not 1<=len(events)<=4 or not 8<=duration<=25 or
+    if (not 1<=len(events)<=4 or not (6<=duration<=25 if len(events)==1 else 8<=duration<=25) or
         evidence.get("cursorless") is not True or
         not packet["actualCapture"]["pointerProvenance"].get("recordedPointerTrackAvailable")):
         raise ValueError("Need 1..4 source-verified visible UI actions and original recorded pointer")

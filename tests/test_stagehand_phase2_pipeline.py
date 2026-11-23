@@ -48,6 +48,46 @@ class Phase2NativeDirectorTests(unittest.TestCase):
             self.assertTrue(changed["studioStage"]["motion"]["immersive"])
             self.assertEqual(changed["studioStage"]["motion"]["follow"]["eventIndices"],[0])
 
+    def test_six_and_half_second_causal_edit_and_readable_hold(self):
+        with tempfile.TemporaryDirectory() as td:
+            video,manifest=self.setup_temp(td)
+            info=json.loads(manifest.read_text())
+            info["duration"]=6.5
+            info["events"][0]["start"]=1.48
+            info["events"][0]["end"]=1.67
+            info["events"][0]["t"]=2.50
+            manifest.write_text(json.dumps(info))
+            baseline={"schema":"sauce-film-plan-v1","durationSeconds":6.5,
+                      "studioStage":{"camera":[],"payoff":{"mode":"detail"}}}
+            with patch("scripts.plan_stagehand_phase2.direction",return_value=baseline):
+                plan,meta=directed_plan(video,manifest)
+            keys=plan["studioStage"]["camera"]
+            self.assertEqual(meta["strategy"],"source-native-causal-detail")
+            self.assertGreater(keys[2]["startAt"],2.5)
+            self.assertLess(keys[2]["at"],keys[3]["startAt"]-.7)
+            self.assertEqual(keys[3]["at"],6.5)
+            self.assertEqual(keys[1]["center"],[.5,.5])
+
+    def test_short_one_action_source_valid_but_short_two_action_rejected(self):
+        import source_event_director
+        with tempfile.TemporaryDirectory() as td:
+            video,manifest=self.setup_temp(td)
+            record=json.loads(manifest.read_text())
+            record["duration"]=6.5
+            manifest.write_text(json.dumps(record))
+            packet={"actualCapture":{"durationSeconds":6.5,"nativeFps":60,
+                     "resolution":[2880,1800],
+                     "pointerProvenance":{"recordedPointerTrackAvailable":True}}}
+            with patch("film_director_capabilities.build_contract",return_value=packet):
+                plan=source_event_director.direction(video,manifest)
+            self.assertEqual(plan["durationSeconds"],6.5)
+            self.assertEqual(plan["audio"]["eventIndices"],[0])
+            record["events"].append(dict(record["events"][0],start=3.2,t=4.2))
+            manifest.write_text(json.dumps(record))
+            with patch("film_director_capabilities.build_contract",return_value=packet):
+                with self.assertRaises(ValueError):
+                    source_event_director.direction(video,manifest)
+
     def test_no_fake_compact_camera_for_whole_viewport_change(self):
         with tempfile.TemporaryDirectory() as td:
             video,manifest=self.setup_temp(td)

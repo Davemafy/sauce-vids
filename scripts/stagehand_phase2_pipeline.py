@@ -23,13 +23,13 @@ from plan_stagehand_phase2 import directed_plan,check_shell_coverage
 from quality_preview_supervisor import analyze
 
 
-def run(url, out, *, seconds=10., display=":178", stagehand_python=None):
+def run(url, out, *, seconds=6.5, display=":178", stagehand_python=None):
     validate_public_url(url)
     out=Path(out).resolve()
     if out.exists():
         raise ValueError("Preserve existing source/evidence: out must not exist")
-    if not 9.5<=seconds<=16.:
-        raise ValueError("Bounded 9.5..16 second source recording required")
+    if not 6.<=seconds<=16.:
+        raise ValueError("Bounded 6..16 second source recording required")
     out.mkdir(parents=True,mode=0o700)
     out.chmod(0o700)
     receipt={
@@ -149,7 +149,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--url",required=True)
     p.add_argument("--out",required=True,type=Path)
-    p.add_argument("--seconds",type=float,default=10.)
+    p.add_argument("--seconds",type=float,default=6.5)
     p.add_argument("--display",default=":178")
     p.add_argument("--stagehand-python")
     a=p.parse_args()
