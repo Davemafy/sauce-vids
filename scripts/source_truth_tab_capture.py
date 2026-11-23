@@ -15,6 +15,7 @@ from urllib.robotparser import RobotFileParser
 import cv2,numpy as np
 from playwright.sync_api import sync_playwright
 from capture_safety import validate_public_url,guard_route
+from session_capture import MOCKUP_SCROLLBAR_STYLE,install_presentation_cleanup
 
 FPS=60
 SIZE=(1440,900)
@@ -179,6 +180,7 @@ def _prepare_browser(page,url):
     if final.hostname!=asked.hostname or final.path.rstrip("/")!=asked.path.rstrip("/") or final.query:
         raise ValueError("Unexpected navigation/redirect outside requested public page")
     page.evaluate("document.fonts.ready")
+    page.add_style_tag(content=MOCKUP_SCROLLBAR_STYLE)
     page.wait_for_timeout(850)
     page.evaluate("window.scrollTo(0,0)")
     return page
@@ -207,6 +209,7 @@ def _new_context(browser,*,dpr=1):
         device_scale_factor=dpr,service_workers="block",accept_downloads=False,
         permissions=[],color_scheme="dark")
     context.route("**/*",guard_route)
+    install_presentation_cleanup(context)
     return context
 
 def discover(url,allowed_host,*,max_probes=9):
@@ -281,9 +284,11 @@ def record(url,plan,out,*,duration=16.):
                 device_scale_factor=2,service_workers="block",permissions=[],
                 accept_downloads=False,color_scheme="dark")
             context.route("**/*",guard_route)
+            install_presentation_cleanup(context)
             page=context.pages[0] if context.pages else context.new_page()
             if page.url!=url:_prepare_browser(page,url)
             page.evaluate("document.fonts.ready")
+            page.add_style_tag(content=MOCKUP_SCROLLBAR_STYLE)
             pre_roll=wait_for_real_initial_preview(page)
             (out/"pre-roll-source-evidence.json").write_text(
                 json.dumps(pre_roll,indent=2)+"\n")
@@ -319,7 +324,7 @@ def record(url,plan,out,*,duration=16.):
             command=["ffmpeg","-hide_banner","-loglevel","error","-y",
                      "-f","x11grab","-draw_mouse","0","-video_size","2880x1800",
                      "-framerate","60","-i",display,"-t",str(duration),
-                     "-c:v","libx264","-preset","ultrafast","-crf","18",
+                     "-c:v","libx264","-preset","ultrafast","-crf","14",
                      "-pix_fmt","yuv420p","-threads","4","-g","120","-an",
                      "-movflags","+faststart",str(video)]
             with (out/"record.log").open("w") as record_log:

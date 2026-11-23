@@ -495,6 +495,20 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
             f"Do not invent source coordinates or move the verified event.")
     if actual+0.001<visible:
         raise ValueError(f"Final studio payoff would be clipped: {actual:.3f} visible < {visible:.3f}")
+    if stage_preset=="cloud_shadow_v1" and mode=="overview":
+        # A window is not premium if the page's original heading/navigation
+        # is chopped off by a model zoom. Permit only small overview pushes;
+        # large authentic detail crops must explicitly select detail mode.
+        timeline=sorted({0.,duration,*[k.at for k in obj.camera],
+                         *[k.start_at for k in obj.camera]})
+        insufficient=[(at,obj.context_visibility(at)) for at in timeline
+                      if obj.context_visibility(at)<.935]
+        if insufficient:
+            at,fraction=min(insufficient,key=lambda row:row[1])
+            raise ValueError(
+                f"Locked cloud overview would crop original browser: "
+                f"{fraction:.3f} source-visible at {at:.3f}s; "
+                f"require >=0.935 or explicit detail mode")
     if mode=="overview" and obj.context_visibility(duration)+.001<context:
         raise ValueError(
             f"Final studio overview clips the real interface: "

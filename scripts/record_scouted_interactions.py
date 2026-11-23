@@ -13,6 +13,7 @@ from playwright.sync_api import sync_playwright
 from capture_safety import validate_public_url,guard_route
 from public_interaction_scout import JS,STATE,safe_action,diff_score,sha,CHROME,select_story_actions
 from basic_tour_discovery import settle_page
+from session_capture import MOCKUP_SCROLLBAR_STYLE,install_presentation_cleanup
 
 FPS=60
 CSS=(1440,900)
@@ -74,12 +75,18 @@ def capture(scout_file,folder,allowed_host,*,labels,seconds=12,display=":149"):
                     reduced_motion="reduce",accept_downloads=False,
                     service_workers="block",permissions=[])
                 ctx.route("**/*",guard_route)
+                install_presentation_cleanup(ctx)
                 page=ctx.pages[0] if ctx.pages else ctx.new_page()
                 if page.url!=url:
                     page.goto(url,wait_until="domcontentloaded",timeout=35000)
                 if (urlsplit(page.url).hostname or "").lower()!=host:
                     raise ValueError("Unexpected cross-host navigation")
                 settle_page(page)
+                # This recorder was missing the existing Sauce presentation
+                # cleanup. Apply BEFORE original screenshot or X11 capture.
+                # Scrollability and source CSS layout remain independently
+                # verified; the scrollbar chrome is not product content.
+                page.add_style_tag(content=MOCKUP_SCROLLBAR_STYLE)
                 measured=page.evaluate("()=>({width:innerWidth,height:innerHeight,dpr:devicePixelRatio})")
                 if measured!={"width":CSS[0],"height":CSS[1],"dpr":2}:
                     raise ValueError("Original browser DPR2 geometry not proven: "+str(measured))
@@ -115,7 +122,7 @@ def capture(scout_file,folder,allowed_host,*,labels,seconds=12,display=":149"):
                       "-f","x11grab","-draw_mouse","0",
                       "-video_size","2880x1800","-framerate","60","-i",display,
                       "-t",str(seconds),"-c:v","libx264","-preset","ultrafast",
-                      "-crf","17","-threads","4","-pix_fmt","yuv420p",
+                      "-crf","14","-threads","4","-pix_fmt","yuv420p",
                       "-g","120","-an","-movflags","+faststart",str(video)]
                 with (folder/"capture.log").open("w") as capture_log:
                     encoder=subprocess.Popen(argv,stdin=subprocess.DEVNULL,

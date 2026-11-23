@@ -41,7 +41,9 @@ def direction(video:Path,manifest:Path):
         return round(math.ceil(t*frame_rate-1e-9)/frame_rate,9)
     def bounded(v,l,h):return max(l,min(h,v))
     source_w,source_h=packet["actualCapture"]["resolution"]
-    keys=[{"at":0,"scale":.88,"center":[.5,.5],"yaw":-2,"pitch":1}]
+    # On the approved floating window, the real webpage already has a
+    # larger physical frame. Start with its entire UI, not an artistic crop.
+    keys=[{"at":0,"scale":.88,"center":[.5,.5],"yaw":0,"pitch":0}]
     for ix,e in enumerate(events):
         area=e["targetRect"]
         target_x=(area["x"]+area["width"]*.5)/source_w
@@ -49,23 +51,28 @@ def direction(video:Path,manifest:Path):
         start=native(e["start"]-.18)
         if start-keys[-1]["at"]<.4:
             raise ValueError("Actions too close for readable framing")
-        precenter=[round(bounded(.5+(.5-target_x)*.10,.44,.56),4),
-                   round(bounded(.5+(.5-target_y)*.09,.45,.56),4)]
+        precenter=[round(bounded(.5+(.5-target_x)*.016,.493,.507),4),
+                   round(bounded(.5+(.5-target_y)*.014,.493,.507),4)]
         keys.append({"at":start,
                      "startAt":native(max(keys[-1]["at"],start-.92)),
-                     "scale":.91,"center":precenter,"yaw":1,"pitch":-1})
+                     "scale":.885,"center":precenter,"yaw":0,"pitch":0})
         outcome=native(e["t"]+.33)
         if outcome<=start+.4 or outcome>=duration-.2:
             raise ValueError("Result cannot be held meaningfully")
         # Native result anchoring never starts before its confirmed source
         # evidence. The browser itself determines the result's geometry.
+        result=e["resultRect"]
+        result_fraction=result["width"]*result["height"]/(source_w*source_h)
+        # A source-spanning theme change is an overview; an actually
+        # observed compact dialog is a deliberate detail beat.
+        zoom=.895 if result_fraction>=.74 else .955
         keys.append({"at":outcome,"startAt":after_visible(e["t"]),
-                     "scale":1.01,"focus":f"event:{ix}:result",
+                     "scale":zoom,"focus":f"event:{ix}:result",
                      "yaw":0,"pitch":0})
     if keys[-1]["at"]>duration-1.8:
         raise ValueError("No source-verified final payoff hold")
     keys.append({"at":duration,"startAt":native(max(keys[-1]["at"],duration-1.12)),
-                 "scale":.87,"center":[.5,.5],"yaw":0,"pitch":0})
+                 "scale":.88,"center":[.5,.5],"yaw":0,"pitch":0})
     plan={
       "schema":"sauce-film-plan-v1",
       "sourceSha256":sha(video),"manifestSha256":sha(manifest),
@@ -82,7 +89,8 @@ def direction(video:Path,manifest:Path):
                      "intensity":.42,"transitionSeconds":.32},
          "depthPx":9,"reflection":.05,
          "payoff":{"region":f"event:{len(events)-1}:result",
-                   "mode":"overview","minVisible":.72,"minContextVisible":.68}
+                   "mode":("detail" if result_fraction<.74 else "overview"),
+                   "minVisible":.90,"minContextVisible":.68}
        }
     }
     return plan

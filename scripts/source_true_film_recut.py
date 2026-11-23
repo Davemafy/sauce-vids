@@ -140,7 +140,7 @@ def run(source,manifest,master,prior_receipt,film_plan,out,receipt_out):
         cmd=["ffmpeg","-hide_banner","-loglevel","error","-nostdin","-y",
              "-i",str(master),"-filter_complex",_filter(segments),
              "-map","[v]","-map","[a]","-r","60","-fps_mode","cfr",
-             "-c:v","libx264","-preset","fast","-crf","17","-pix_fmt","yuv420p",
+             "-c:v","libx264","-preset","medium","-crf","15","-pix_fmt","yuv420p",
              "-g","120","-c:a","aac","-ar","48000","-b:a","128k",
              "-movflags","+faststart",str(temp)]
         subprocess.run(cmd,capture_output=True,check=True,timeout=240)

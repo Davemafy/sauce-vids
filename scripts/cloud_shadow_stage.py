@@ -18,9 +18,11 @@ def window_geometry(source_size, output_size):
     sw, sh = source_size
     ow, oh = output_size
     aspect = sw / sh
-    w = min(ow * .76, oh * .76 * aspect)
+    # Larger hero: the stage remains visible, but captured text is no
+    # longer reduced to a small distant thumbnail.
+    w = min(ow * .875, oh * .875 * aspect)
     h = w / aspect
-    if h > oh * .76 + .001:
+    if h > oh * .875 + .001:
         raise ValueError("Impossible landscape stage geometry")
     x0 = round((ow - w) / 2)
     y0 = round((oh - h) / 2)
@@ -94,8 +96,23 @@ def render_cloud_stage(stage, source, t):
     sq = np.float32([[0, 0], [sw-1, 0], [sw-1, sh-1], [0, sh-1]])
     q = stage.quad(t)
     H = cv2.getPerspectiveTransform(sq, q)
-    rendered = cv2.warpPerspective(source, H, (ow, oh),
-                                   flags=cv2.INTER_LINEAR,
+    # Native source is usually DPR2 2880x1800. Perspective-resampling it
+    # straight to ~1500px throws away fine lettering without antialiasing.
+    # Pre-filter at the displayed screen resolution using INTER_AREA, then
+    # warp at <=1:1 scale. Keep original pixels, colors and frame clock.
+    q_w = float(np.linalg.norm(q[1] - q[0]))
+    q_h = float(np.linalg.norm(q[3] - q[0]))
+    scale = min(1., max(q_w/sw, q_h/sh)*1.10)
+    if scale < .85:
+        dw, dh = max(2, round(sw*scale)), max(2, round(sh*scale))
+        frame_for_warp = cv2.resize(source, (dw, dh),
+                                   interpolation=cv2.INTER_AREA)
+        points = np.float32([[0,0],[dw-1,0],[dw-1,dh-1],[0,dh-1]])
+        H = cv2.getPerspectiveTransform(points, q)
+    else:
+        frame_for_warp = source
+    rendered = cv2.warpPerspective(frame_for_warp, H, (ow, oh),
+                                   flags=cv2.INTER_CUBIC,
                                    borderMode=cv2.BORDER_CONSTANT)
     exposure = stage.shutter_times(t)
     if exposure is not None:

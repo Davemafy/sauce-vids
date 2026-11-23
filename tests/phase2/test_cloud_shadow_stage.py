@@ -28,9 +28,9 @@ def source(tmp_path):
     m={"duration":2.4,"events":[e],"capture_rect":{"width":320,"height":180}}
     p={"stagePreset":PRESET,
        "camera":[{"at":0,"scale":.79,"center":[.5,.5],"yaw":0,"pitch":0},
-                 {"at":1.4,"startAt":.85,"scale":.86,"center":[.5,.5],
+                 {"at":1.4,"startAt":.85,"scale":.80,"center":[.5,.5],
                   "yaw":0,"pitch":0},
-                 {"at":2.4,"startAt":1.8,"scale":.81,"center":[.5,.5],
+                 {"at":2.4,"startAt":1.8,"scale":.79,"center":[.5,.5],
                   "yaw":0,"pitch":0}],
        "lighting":{"eventIndex":0,"trigger":"verified"},
        "payoff":{"region":"event:0:result","mode":"overview","minVisible":.80}}
@@ -40,8 +40,8 @@ def source(tmp_path):
 def test_cloud_is_a_real_local_asset_and_fixed_rounded_card():
     assert CLOUD.is_file()
     x0,y0,x1,y1,r=window_geometry((2880,1800),(1920,1080))
-    assert 120<y0<200 and 280<x0<370
-    assert x1-x0>1200 and y1-y0>800
+    assert 55<y0<82 and 185<x0<225
+    assert x1-x0>1450 and y1-y0>925
     assert 16<=r<=25
     m=card_mask((2880,1800),(1920,1080))
     assert m[y0,x0]==0 and m[y0,x0+r+4]>250

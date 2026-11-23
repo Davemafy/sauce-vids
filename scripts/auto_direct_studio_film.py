@@ -382,6 +382,7 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
             # model; never forward arbitrary provider/site exception strings.
             if isinstance(exc,ValueError) and str(exc).startswith((
                 "Final studio overview clips the real interface:",
+                "Locked cloud overview would crop original browser:",
                 "Final studio payoff would be clipped:",
                 "Studio framing hides genuine action target:")):
                 feedback += " Exact source-frame camera constraint: " + str(exc)[:240]

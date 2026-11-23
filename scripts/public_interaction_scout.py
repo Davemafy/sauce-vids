@@ -14,6 +14,7 @@ import cv2,numpy as np
 from playwright.sync_api import sync_playwright
 from capture_safety import guard_route,validate_public_url
 from basic_tour_discovery import settle_page
+from session_capture import MOCKUP_SCROLLBAR_STYLE,install_presentation_cleanup
 
 CHROME="/opt/devmcp-browsers/chromium_headless_shell-1254/chrome-headless-shell-linux64/chrome-headless-shell"
 SELECTOR='button,[role="switch"],[role="tab"],input[type="checkbox"]'
@@ -122,12 +123,14 @@ def page_visit(browser,url,allowed_host):
         device_scale_factor=2,accept_downloads=False,service_workers="block",
         permissions=[],reduced_motion="reduce")
     context.route("**/*",guard_route)
+    install_presentation_cleanup(context)
     page=context.new_page()
     response=page.goto(url,wait_until="domcontentloaded",timeout=25000)
     if not response or response.status>=400 or (urlsplit(page.url).hostname or "").lower()!=allowed_host:
         context.close()
         raise ValueError("Denied navigation / failed original public site")
     settle_page(page)
+    page.add_style_tag(content=MOCKUP_SCROLLBAR_STYLE)
     return context,page
 
 def discover(url,allowed_host,*,max_probes=8,out:Path|None=None):

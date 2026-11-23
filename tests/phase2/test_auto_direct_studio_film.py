@@ -454,7 +454,7 @@ def test_unattended_director_retries_real_source_editorial_failures(
     # The rigid stage normalizes the first browser frame into its window;
     # the extreme first key now fails the genuine *ending* source-context
     # invariant instead, before audio preflight. Return safe camera feedback.
-    assert "Final studio overview clips" in seen[1]
+    assert "Locked cloud overview would crop original browser:" in seen[1]
     assert result["attempts"][0]["status"]=="error"
     assert result["outcome"]=="needs_review"
     assert result["creativeApproved"] is False

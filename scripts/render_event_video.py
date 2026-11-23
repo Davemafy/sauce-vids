@@ -695,7 +695,7 @@ def render(output,seconds=None,static=False):
     else:cmd+=["-an"]
     cmd+=["-t",str(frames/FPS),
        "-c:v","libx264","-pix_fmt","yuv420p","-profile:v","high",
-       "-level:v","4.2","-preset","veryfast","-crf","17",
+       "-level:v","4.2","-preset","medium","-crf","15",
        "-g","120","-threads","6","-movflags","+faststart",str(output)]
     encoder=subprocess.Popen(cmd,stdin=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=2*1024*1024)
     frame_size=INPUT_W*INPUT_H*3
