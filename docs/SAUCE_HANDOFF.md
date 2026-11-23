@@ -1,5 +1,15 @@
 # Sauce — living handoff for new agents and new chats
 
+
+## 2026-11-23 — Stagehand action pacing: native6.5s, source-true shorter Brimble film (HUMAN REVIEW)
+
+**Code on main:** [717003fdb6628425b3fd241a4e12b7ab8d1cc722](https://github.com/Davemafy/sauce-vids/commit/717003fdb6628425b3fd241a4e12b7ab8d1cc722). Owner judged the first actual Gemini-scouted Brimble demo too slow. Root cause was **source/editorial pacing**, not the Gemini model making per-frame motion. Scoped experimental single-action native60 recorder/pipeline and source-bound Phase2 director to default **6.5s**, preserving original source pixels, source mouse/timestamps, verified real DOM outcomes and strict camera/crop limits. Multi-action film minimum remains 8s. Added 2 native-short pacing/retained multi-action safety regressions; existing production Studio defaults unchanged, no new VM/branch/deployment. Full details [docs/SAUCE_STAGEHAND_FAST_PACING_20261123.md](SAUCE_STAGEHAND_FAST_PACING_20261123.md).
+
+**Real encoded 6.5s proof:** Original Chromium native 2880×1800 DPR2 60fps capture (390 source frames, 65 actual cursor points, genuine source-verified Brimble `Connect your agent` click and dialog) SHA256 **`859392c3594a71069806fc1b51fbb8cb487b04d581d6e57de4d3f33a304d5453`**. Exact source-timed film plan SHA `63abfa5d8a1339bb8cd2f1ea51f730f761254642dfc0c4f3ff9483dc12acb020`. Actual **6.500s H264 1920×1080 native60** plus **AAC 48kHz** encoded MP4 SHA256 **`5e5ef53e4bf7cd45be9916403841a9f1854e760eb58cb2966b36dd0b4097e787`**; strict full FFmpeg decode PASS. Camera target and complete result remain source-visible; original camera max motion **40.0809px/60fps frame** (safety bound 45). Fresh 6.5s contact viewed (0–6s). Signed [watch private 6.5s version](https://devmcp.davemafy.xyz/sauce-expiring-review/tweakcn-20261120/brimble-agent-paced-6p5s-20261123.mp4?md5=Y6vpRByYMC_jY7KBMUJKAg&expires=1795698563), expires ~72h; signed HTTP206/unsigned HTTP403. Actual desktop1280×720 and mobile390×844 Chromium playback/seek verified at t3.5s; 0 JS/media errors.
+
+**QA progression and creative limit:** Original **10s** film encoded-QA `REJECT`, repeated/static fraction 0.556. Newly captured **6.5s** version encoded-QA **`HUMAN_REVIEW_REQUIRED`, zero automatic findings**. Stage has no black-shell gap, and the dialog is substantially more readable; but this is still a single setup popup, *not a compelling deep-value product demonstration*. **Still zero owner-approved premium films**. Real full one-command Gemini→Stagehand→film wrapper remains **not independently verified end-to-end**; native components were genuinely run together manually. Continue higher-value true product discovery, not decorative camera noise. Tests: **301 unittest run, 2 skipped**, **510 Phase2 pytest passed, 10 skipped, 21 subtests** before merge; clean published checkout verification pending.
+
+
 ## 2026-11-23 — Existing Gemini key recovered; genuine Stagehand workflow and film proof (creative REJECT)
 
 **Code:** [GitHub main 06db7dc](https://github.com/Davemafy/sauce-vids/commit/06db7dce09d1732864159a43627eb262a1ab5bc3).
