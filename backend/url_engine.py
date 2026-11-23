@@ -181,9 +181,17 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto", cursor
     stage('inspecting')
     report=inspect(url,private)
     stage('directing')
-    # Original Sauce feedback remains useful as untrusted observations.
-    from backend.url2video import previous_feedback
-    plan,calls,source=direction(report,previous_feedback(folder.parent))
+    # Opt-in Stagehand can propose only a separately observed Sauce control ID.
+    # No model selector, unverified outcome or navigation reaches capture.
+    stagehand_plan = None
+    if os.getenv("SAUCE_STAGEHAND_DISCOVERY") == "1":
+        from backend.stagehand_discovery import run_stagehand_discovery
+        stagehand_plan = run_stagehand_discovery(report, private)
+    if stagehand_plan:
+        plan,calls,source = stagehand_plan,1,"stagehand-observed-id"
+    else:
+        from backend.url2video import previous_feedback
+        plan,calls,source = direction(report,previous_feedback(folder.parent))
     (folder/'direction.json').write_text(json.dumps({
        **plan,'ai_calls':calls,'direction_source':source},indent=2))
     if cinematic_only and plan['mode']!='interactive':
@@ -197,7 +205,7 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto", cursor
                         'title':plan['title'],'reason':'A selected control changed before recording'},report)
     # This opt-in probe runs before the expensive capture and only for
     # a vetted, non-submitting public control. Never a default or premium score.
-    if (os.getenv('SAUCE_VERIFY_VISIBLE_ACTION')=='1' or cinematic_only) and plan['mode']=='interactive':
+    if (os.getenv('SAUCE_VERIFY_VISIBLE_ACTION')=='1' or cinematic_only or stagehand_plan is not None) and plan['mode']=='interactive':
         from backend.source_action_preflight import probe_public_action
         try:
             proof=probe_public_action(
