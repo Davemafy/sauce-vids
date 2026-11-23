@@ -1,0 +1,33 @@
+# Sauce Cloud Shadow — native cobalt halftone and material shell (2026-11-23)
+
+**Scope:** Phase 2 visual-quality hardening, current GitHub `main` only; owner-only previews, no public launch. The exact reference is the **third uploaded image**, not a generated replacement. The **second uploaded image** informed the browser material treatment only. No fake desktop popups, cursor, titlebar or copied UI.
+
+## Source art and fixed stage
+
+- Current default of the existing `cloud_shadow_v1` renderer preset: `assets/stages/cloud_shadow_v2_1536x864.jpg`. Despite the original upload name `1000424654.png`, its *original encoded bytes are JPEG/JFIF*. The file is copied **byte-for-byte**: 1536×864, **604,915 bytes**, SHA-256 `287716a317cb18ea8678e6172628c78f0e37d30957801ee29c5fb4493cfde119`. Repo JPEG blob SHA `d0e5e89b4c2960061a79c20f13c73f1bc4d65020`.
+- The renderer checks the image's full dimensions and fails closed if downgraded to a 480×270 substitute. Native 1536×864 calls return source-decoded pixels, without procedural halftone dots, blur, newly painted cloud shapes or recoloring. 1080p output resamples the native asset from 1536×864 to 1920×1080 at 1.25×, instead of enlarging the former 480×270 at 4×. The earlier v1 JPEG is retained for provenance and historical tests but is **not the active backdrop**.
+- The physical floating browser remains centered at **1512×945 pixels** in the 1920×1080 output (~87.5% output height), with a rounded radius around 21px, physically restrained upper rim/highlight, and the existing soft elevation/contact shadows.
+- For source-verified `reference-spring`/immersive stage motion landed independently on current main, the new rim follows the transformed physical shell. The non-immersive standard camera is constrained to keep the real source quadrilateral covering the physical card, eliminating the prior black right/bottom interior gaps without inventing webpage pixels. The new mouse-follow/immersive camera modes remain separately controlled and unchanged by that bounded clamp.
+- Genuine Chromium original UI is projected into the rounded physical shell from original DPR2 frames using the existing `INTER_AREA` prefilter and `INTER_CUBIC` warp. No fake browser chrome or overlaid fabricated content. The already implemented scrollbar-cleanup, source-truth event admission, and anti-clipping overview floor stay enabled; no URL-specific capture logic was added.
+
+## Exact original inputs and comparison
+
+- Public first-party UI Colors, genuinely recorded browser source at 2880×1800 DPR2, native 60fps, 720 original frames, 92 real pointer samples, original hash `d764c4152b60097cf90cee3ef3f3cabe185c3947d54a9cfe7723312ece90535c`. Independent verified event manifest SHA-256 `ef14cc3778fd3f2f6646412765a4724f0ebc89975403b72758570a36d940c349`. Exact previous source and plan reused; no new fake interactions.
+- Previous 12s Cloud Shadow large-window film SHA-256 `35cd6f445b702684493c91baffc3f0fed45ac05203ae69f46f1e47704c121581`. Same-framed t0 browser interior: **mean absolute BGR delta 0.25/255** old vs new, consistent with H264 recompression rather than remade UI. Outside-card first-frame sky difference: mean BGR delta about **25.2/255**.
+- At t=8.4s (frame 504), the previous off-center modal focus exposed a visible **0-luminance** right-hand strip inside the browser (`x=1658..1698,y=180..850`). The bounded straight-on camera translation now fills this area with recorded page pixels, measured luminance ~**192.84**. The source and interaction timing remain unchanged. See full 1080p first and modal exports in the worker's private proof directory and the 6/12-second contact sheets.
+
+## Export and private review
+
+- Continuous 12s: **720 frames**, 1920×1080/60fps H264, AAC48kHz, 12.000s; full strict FFmpeg decode **PASS**. SHA-256 `59b9e53208870128793b756c47e495053715e4f75c3af0a36d2e3fa7098caed1`.
+- Native source-frame edit: **380 frames**, 1920×1080/60fps H264, AAC48kHz, 6.333333s; strict FFmpeg decode **PASS**. SHA-256 `5a244ea574c8971bd3aad5fc4f0f4d8d2c3c8c40756c0c35b15035ee20dea8b5`. Original-to-edited frame lineage across **46 sampled frames**: max grayscale MAE **0.2003/255**, median **0.1091/255**; source-frame uniqueness/order preserved. Beat cuts output frames **42 and 204**.
+- Actual action/audio correlation against original 12s, at new output press frames 66 and 228: **zero sample timing offset** on both, normalized correlations **0.998561/0.999839** at 48kHz.
+- [Owner-only 6.33-second Cloud Shadow preview](https://devmcp.davemafy.xyz/sauce-expiring-review/tweakcn-20261120/sauce-blue-cloud-1536x864-6s-20261123.mp4?md5=OYG2OU8vQsYZpBDLMRi7qA&expires=1795685001) and [owner-only 12-second master preview](https://devmcp.davemafy.xyz/sauce-expiring-review/tweakcn-20261120/sauce-blue-cloud-1536x864-12s-20261123.mp4?md5=77k3Oa8wpI67nE3bvoVO_A&expires=1795685001). Signed HTTP200/unsigned HTTP403; both expire ~72h from generation. Chromium video actual play+seek on desktop 1280×720 and mobile 390×844 **PASS** for both, with no page/media errors. No public product deployment.
+- Merged implementation also preserves current-main Stagehand public read-only discovery and recorded pointer spring/immersive modes; dedicated camera/motion + stage tests and full Phase 2 suite **525 passed, 10 skipped, 29 subtests passed** on the merged tree. GitHub commit and post-commit reproducer referenced in the living handoff.
+
+## Cold creative verdict — **STAGE IMPROVED / FILM REJECTED**
+
+Actual full 1080p opening and modal frames, 6s/12s contact sheets, the older film's same-frame comparison, browser playback and numerical pixel checks were inspected. The **stage** meets the owner's scoped request: actual native-resolution cobalt sky, unchanged source-true modern UI, large rounded separated browser, restrained glossy shell, no scrollbars, and a corrected black gap.
+
+However, **ZERO premium/owner creative approvals**. Real UI Colors footage is still editorially weak: static wide opening, dense contrast matrix with very small labels, its lower region clipped by the original source viewport, and insufficient visibly meaningful dynamic storytelling. Existing encoded QA explicitly **REJECTS** both: 12s `STATIC_OPENING_2S` (p80 delta 0.5), `REPEATED_OR_STATIC_FRAMES` (0.748); 6s `STATIC_OPENING_2S` (p80 0.136), `REPEATED_OR_STATIC_FRAMES` (0.823), and one `ABRUPT_CUT_CANDIDATE` (115.27 delta) corresponding to an intentionally source-verified timeline cut. General QA does not yet consume the beat cut map.
+
+The third-reference art's redistribution rights were not independently audited. Verify before commercially redistributing the asset. Keep source provenance and do not call the films publishable just because the stage and tests pass.

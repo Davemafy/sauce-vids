@@ -1,5 +1,6 @@
 """Cloud stage contract: fixed 16:9 backdrop and rounded source-true window."""
 from pathlib import Path
+import hashlib
 import sys
 
 import cv2
@@ -39,6 +40,15 @@ def source(tmp_path):
 
 def test_cloud_is_a_real_local_asset_and_fixed_rounded_card():
     assert CLOUD.is_file()
+    assert CLOUD.name=="cloud_shadow_v2_1536x864.jpg"
+    assert CLOUD.stat().st_size==604915
+    assert hashlib.sha256(CLOUD.read_bytes()).hexdigest()==(
+        "287716a317cb18ea8678e6172628c78f0e37d30957801ee29c5fb4493cfde119")
+    source=cv2.imread(str(CLOUD), cv2.IMREAD_COLOR)
+    assert source is not None and source.shape[:2] == (864,1536)
+    # At source-native dimensions the matte is literally the reference
+    # pixels, not synthesized halftone, additional blur or color grading.
+    np.testing.assert_array_equal(backdrop(1536,864),source)
     x0,y0,x1,y1,r=window_geometry((2880,1800),(1920,1080))
     assert 55<y0<82 and 185<x0<225
     assert x1-x0>1450 and y1-y0>925
@@ -54,6 +64,8 @@ def test_cloud_is_a_real_local_asset_and_fixed_rounded_card():
     assert cloud[0,0,0]>cloud[0,0,2]  # actual blue-sky palette
     assert np.array_equal(stage[0,0],cloud[0,0])
     assert np.mean(stage[y1+18,x0+60:x1-60]) < np.mean(cloud[y1+18,x0+60:x1-60])
+    # Shell's glossy rim is outside the card, never overlaid on real UI.
+    assert np.all(card_mask((2880,1800),(1920,1080))[y0+2,x0+2]==0)
 
 
 def test_fixed_shell_but_moving_inner_source_uses_original_pixels(source):
@@ -105,3 +117,25 @@ def test_spatial_plane_source_truth_is_not_overridden_by_cloud_lock():
     checked,_=normalize_generated_studio_plan(
         singular,enforce_cloud_stage=True)
     assert "stagePreset" not in checked["studioStage"]
+
+
+
+def test_focused_source_fills_rounded_window_without_exterior_gaps(source):
+    video,manifest,plan,original=source
+    focus={**plan,
+      "camera":[{"at":0,"scale":.88,"center":[.5,.5],"yaw":0,"pitch":0},
+                {"at":2.4,"startAt":1.1,"scale":.955,
+                 "center":[.42,.39],"yaw":0,"pitch":0}],
+      "payoff":{"region":"event:0:result","mode":"detail",
+                "minVisible":.65,"minContextVisible":.68}}
+    stage=load_studio_stage(focus,manifest,video,(320,180),(640,360),2.4,25)
+    x0,y0,x1,y1,_=window_geometry((320,180),(640,360))
+    for t in np.linspace(0,2.4,25):
+        q=stage.quad(float(t))
+        assert q[:,0].min()<=x0+.15
+        assert q[:,0].max()>=x1-.15
+        assert q[:,1].min()<=y0+.15
+        assert q[:,1].max()>=y1-.15
+    frame=render_studio_stage(stage,original,2.4)
+    assert frame[(y0+y1)//2,x1-5].min()>5
+    assert frame[y1-5,(x0+x1)//2].min()>5

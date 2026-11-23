@@ -1,5 +1,7 @@
 # Sauce — Cloud Shadow floating-window stage (2026-11-23)
 
+**Current stage update (2026-11-23):** This document records the historical 480×270 first-generation proof. The default asset is now the owner-provided, byte-verified **1536×864 cobalt halftone sky**, and the old JPEG is no longer the default. See [SAUCE_CLOUD_SHADOW_HIFI_20261123.md](SAUCE_CLOUD_SHADOW_HIFI_20261123.md) for active code, full-film proof URLs, tests and honest creative verdict.
+
 **Status:** Real owner-only 1080p/60 render verified. Cloud backdrop / fixed rounded floating window implemented as a renderer stage preset. This is **not** visual acceptance of the entire film or a public product deployment.
 
 ## Owner instruction and actual reference

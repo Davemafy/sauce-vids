@@ -451,14 +451,14 @@ def test_unattended_director_retries_real_source_editorial_failures(
          model="gemini-3-flash-preview",key="test-secret",
          model_call=model,validator=validate,max_attempts=3,render=True)
     assert len(seen)==2
-    # The rigid stage normalizes the first browser frame into its window;
-    # the extreme first key now fails the genuine *ending* source-context
-    # invariant instead, before audio preflight. Return safe camera feedback.
-    assert "Locked cloud overview would crop original browser:" in seen[1]
-    assert result["attempts"][0]["status"]=="error"
+    # The fixed stage now keeps source pixels inside the physical card, so
+    # the intentionally malformed first plan reaches the independent audio
+    # evidence gate instead of failing camera geometry. Reject unsafe audio.
+    assert "ACTION_FILM_WITHOUT_VERIFIED_AUDIO" in seen[1]
+    assert result["attempts"][0]["status"]=="editorial_preflight_reject"
     assert result["outcome"]=="needs_review"
     assert result["creativeApproved"] is False
-    assert not (out/"editorial-preflight-1.json").exists()  # stage rejected safely
+    assert (out/"editorial-preflight-1.json").exists()
     assert (out/"editorial-preflight-2.json").exists()
     assert not (out/"film-attempt-1-rejected.mp4").exists()
     assert (out/"film.mp4").exists()

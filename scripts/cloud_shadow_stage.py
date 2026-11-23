@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 
 PRESET = "cloud_shadow_v1"
-CLOUD = Path(__file__).resolve().parents[1] / "assets/stages/cloud_shadow_v1.jpg"
+CLOUD = Path(__file__).resolve().parents[1] / "assets/stages/cloud_shadow_v2_1536x864.jpg"
 
 
 def window_geometry(source_size, output_size):
@@ -35,19 +35,15 @@ def window_geometry(source_size, output_size):
 @lru_cache(maxsize=3)
 def backdrop(ow, oh):
     img = cv2.imread(str(CLOUD), cv2.IMREAD_COLOR)
-    if img is None or img.shape[0] < 150 or img.shape[1] < 300:
-        raise ValueError("Missing user-provided licensed blue cloud stage image")
-    # The actual user's blue halftone-cloud image is the stage texture.
-    # A subtle deterministic screenprint grain restores graphic detail lost
-    # when storing a compact asset, without inventing or painting product UI.
-    # The supplied reference carries dense halftone dots; first resolve
-    # subpixel source print noise so magnification does not expose JPEG blocks.
-    img = cv2.GaussianBlur(img, (0, 0), 1.45)
-    bg = cv2.resize(img, (ow, oh), interpolation=cv2.INTER_CUBIC).astype(np.float32)
-    yy, xx = np.ogrid[:oh, :ow]
-    screenprint = ((xx % 4 == 1) & (yy % 4 == 1)).astype(np.float32)
-    bg += screenprint[:, :, None] * 5.5
-    return np.uint8(np.clip(bg, 0, 255))
+    if img is None or img.shape[:2] != (864, 1536):
+        raise ValueError("Cloud Shadow requires the owner's genuine 1536x864 "
+                         "cobalt halftone reference; low-resolution substitutes "
+                         "are forbidden")
+    # Keep the exact owner-supplied print: no artificial halftone or blur.
+    if (ow, oh) == (1536, 864):
+        return img
+    mode = cv2.INTER_AREA if ow <= 1536 and oh <= 864 else cv2.INTER_CUBIC
+    return cv2.resize(img, (ow, oh), interpolation=mode)
 
 
 @lru_cache(maxsize=6)
@@ -135,9 +131,22 @@ def render_cloud_stage(stage, source, t):
         m=cv2.warpAffine(m,stage.view_transform(t),(ow,oh),
                          flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
     # Pixel mask respects rounded corners on every frame and on camera zooms.
-    border = cv2.dilate(m, np.ones((3, 3), np.uint8)) - m
-    board[border > 10] = np.clip(board[border > 10].astype(np.float32)*.5
-                                + np.array([237, 238, 248], np.float32)*.5, 0, 255).astype(np.uint8)
+    # The second reference specifies material only: an exterior highlight
+    # and gentle glazed rim, no invented titlebar, product content or cursor.
+    outer=cv2.dilate(m,np.ones((5,5),np.uint8))
+    edge=np.clip(outer.astype(np.int16)-m.astype(np.int16),0,255)
+    _, top, _, _, radius=window_geometry(stage.source_size,stage.output_size)
+    if stage.immersive:
+        transform=stage.view_transform(t)
+        top=float(transform[1,1]*top+transform[1,2])
+        radius=float(radius*transform[1,1])
+    ys=np.arange(oh,dtype=np.float32)[:,None]
+    upper=np.clip((top+radius*2.5-ys)/max(1.,radius*3.),0.,1.)
+    strength=(.20+.35*upper)*edge.astype(np.float32)/255.
+    board_f=board.astype(np.float32)
+    tint=np.array([239.,244.,252.],dtype=np.float32)
+    board=np.uint8(np.clip(board_f*(1.-strength[:,:,None])
+                           +tint*strength[:,:,None],0,255))
     alpha = m.astype(np.float32)[:, :, None] / 255
     return np.uint8(np.clip(board.astype(np.float32)*(1-alpha)
                             + rendered.astype(np.float32)*alpha, 0, 255))

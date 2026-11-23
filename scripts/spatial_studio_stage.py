@@ -357,7 +357,26 @@ class StudioStage:
         base=self.raw_quad(0)
         dst=np.float32([[x0,y0],[x1,y0],[x1,y1],[x0,y1]])
         M=cv2.getPerspectiveTransform(base,dst)
-        return cv2.perspectiveTransform(self.raw_quad(t)[None,:,:],M)[0]
+        q=cv2.perspectiveTransform(self.raw_quad(t)[None,:,:],M)[0]
+        # Guard the established rigid shell against exposing empty pixels
+        # under an off-center real-result focus. Do not interfere with the
+        # opt-in recorded-follow or immersive dolly motion system.
+        if (not self.immersive and self.mouse_follow is None and
+            abs(float(q[0,1]-q[1,1]))<.02 and
+            abs(float(q[1,0]-q[2,0]))<.02 and
+            abs(float(q[2,1]-q[3,1]))<.02 and
+            abs(float(q[3,0]-q[0,0]))<.02):
+            center=q.mean(axis=0)
+            w=float(q[:,0].max()-q[:,0].min())
+            h=float(q[:,1].max()-q[:,1].min())
+            fill=max(1.,(x1-x0)/max(w,.001),(y1-y0)/max(h,.001))
+            q=(q-center)*fill+center
+            dx=np.clip((x0+x1)/2-float(q[:,0].mean()),
+                       x1-float(q[:,0].max()),x0-float(q[:,0].min()))
+            dy=np.clip((y0+y1)/2-float(q[:,1].mean()),
+                       y1-float(q[:,1].max()),y0-float(q[:,1].min()))
+            q+=np.float32([dx,dy])
+        return q
 
     def quad(self,t):
         if self.stage_preset=="classic":

@@ -1,5 +1,7 @@
 # Sauce — scrollbar-free high-fidelity large cloud window (2026-11-23)
 
+**Current stage update (2026-11-23):** The former 480×270 cloud-art limitation documented below is resolved by the exact 1536×864 third user reference. This file remains historical evidence for the capture/scrollbar/87.5%-window fixes. See [SAUCE_CLOUD_SHADOW_HIFI_20261123.md](SAUCE_CLOUD_SHADOW_HIFI_20261123.md) for current stage asset, film hashes and remaining editorial defects.
+
 **Status:** isolated owner-only 1080p/60fps encoded film verified. This is a meaningful source-capture and framing repair, not a premium film or public self-service deployment.
 
 ## Cold review of the owner's actual uploaded movie
