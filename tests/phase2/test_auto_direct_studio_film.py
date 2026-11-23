@@ -82,11 +82,14 @@ def test_model_writes_incompatible_window_and_sauce_mechanically_corrects(source
     def valid(_,__,p,___):
         data=json.loads(p.read_text())
         assert data["presentation"]=="fullscreen"
-        assert data["studioStage"]==plan["studioStage"]
+        assert data["studioStage"]=={**plan["studioStage"],
+                                     "stagePreset":"cloud_shadow_v1"}
         return True,"source/manifest verified"
     receipt=run(src,manifest,tmp_path/"job",call,valid,max_attempts=1)
     assert receipt["outcome"]=="validated_not_rendered"
     assert receipt["attempts"][0]["mechanicalChanges"]==[
+      {"field":"studioStage.stagePreset","from":None,"to":"cloud_shadow_v1",
+       "reason":"Owner-locked sky, fixed rounded floating window and depth"},
       {"field":"presentation","from":"window","to":"fullscreen",
        "reason":"studioStage already owns the projected physical screen"}]
 
@@ -448,12 +451,14 @@ def test_unattended_director_retries_real_source_editorial_failures(
          model="gemini-3-flash-preview",key="test-secret",
          model_call=model,validator=validate,max_attempts=3,render=True)
     assert len(seen)==2
-    assert "UNRECOGNIZABLE_OPENING_CROP" in seen[1]
-    assert "ACTION_FILM_WITHOUT_VERIFIED_AUDIO" in seen[1]
-    assert result["attempts"][0]["status"]=="editorial_preflight_reject"
+    # The rigid stage normalizes the first browser frame into its window;
+    # the extreme first key now fails the genuine *ending* source-context
+    # invariant instead, before audio preflight. Return safe camera feedback.
+    assert "Final studio overview clips" in seen[1]
+    assert result["attempts"][0]["status"]=="error"
     assert result["outcome"]=="needs_review"
     assert result["creativeApproved"] is False
-    assert (out/"editorial-preflight-1.json").exists()
+    assert not (out/"editorial-preflight-1.json").exists()  # stage rejected safely
     assert (out/"editorial-preflight-2.json").exists()
     assert not (out/"film-attempt-1-rejected.mp4").exists()
     assert (out/"film.mp4").exists()

@@ -24,12 +24,28 @@ def _digest(data):
 
 def normalize_generated_studio_plan(raw, *, manifest=None, source_path=None,
                                     source_size=None, fps=None,
-                                    output_size=(1920,1080),manifest_path=None):
+                                    output_size=(1920,1080),manifest_path=None,
+                                    enforce_cloud_stage=False):
     if not isinstance(raw,dict):
         raise ValueError("Film plan must be an object")
     source=copy.deepcopy(raw)
     corrected=copy.deepcopy(raw)
     repairs=[]
+    if (enforce_cloud_stage and "studioStage" in corrected and
+            "domPlanes" not in corrected and "domPlane" not in corrected):
+        # Stage look is a controlled renderer preset, NOT generated art direction.
+        # The already-verified independently lifted DOM-plane mode is an
+        # incompatible special capture. Keep its proven compositor behavior
+        # until it has its own fixed-stage physical-window integration.
+        stage=corrected["studioStage"]
+        if not isinstance(stage,dict):
+            raise ValueError("Cannot enforce a fixed stage over invalid JSON")
+        previous=stage.get("stagePreset")
+        if previous!="cloud_shadow_v1":
+            stage["stagePreset"]="cloud_shadow_v1"
+            repairs.append({"field":"studioStage.stagePreset",
+                  "from":previous,"to":"cloud_shadow_v1",
+                  "reason":"Owner-locked sky, fixed rounded floating window and depth"})
     if "studioStage" not in corrected:
         return corrected,{"schema":"sauce-bounded-studio-repair-v1","sourcePlanSha256":_digest(source),
                           "repairedPlanSha256":_digest(corrected),"changes":repairs,

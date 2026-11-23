@@ -184,6 +184,7 @@ def make_plan(source,manifest,packet,profile):
       "audio":{"mode":"eventFoley","eventIndices":list(range(len(events))),
                "clickGain":.34,"motionGain":.17,"masterGain":.45},
       "studioStage":{
+        "stagePreset":"cloud_shadow_v1",
         "camera":keys,
         "material":{"color":[30,32,38],"grain":.12},
         "lighting":{"eventIndex":len(events)-1,"trigger":"verified",

@@ -264,7 +264,7 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
                 plan,manifest=json.loads(manifest.read_text()),
                 source_path=source,source_size=tuple(packet["actualCapture"]["resolution"]),
                 fps=packet["actualCapture"]["nativeFps"],
-                manifest_path=manifest)
+                manifest_path=manifest,enforce_cloud_stage=True)
             normalized=out/f"model-{i}-normalized.json"
             normalized.write_text(json.dumps(amended,indent=2)+"\n")
             (out/f"model-{i}-mechanical-repair.json").write_text(
@@ -378,6 +378,13 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
                     break
             feedback=("Previous attempt failed: "+type(exc).__name__+
                       ". Return complete valid JSON and preserve locked source hashes.")
+            # Only fixed internal camera validation messages may reach the
+            # model; never forward arbitrary provider/site exception strings.
+            if isinstance(exc,ValueError) and str(exc).startswith((
+                "Final studio overview clips the real interface:",
+                "Final studio payoff would be clipped:",
+                "Studio framing hides genuine action target:")):
+                feedback += " Exact source-frame camera constraint: " + str(exc)[:240]
         finally:
             (out/"unattended-receipt.json").write_text(json.dumps(result,indent=2)+"\n")
     return result

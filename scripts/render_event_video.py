@@ -175,6 +175,11 @@ if FILM_PLAN_DATA is not None:
             FILM_PLAN_DATA["domPlane"],MANIFEST,SRC,MANIFEST_PATH,
             source_size=(INPUT_W,INPUT_H),fps=FPS,duration=FILM_PLAN.duration)
 
+    if (STUDIO_STAGE is not None and
+            STUDIO_STAGE.stage_preset=="cloud_shadow_v1" and
+            (DOM_PLANE is not None or DOM_PLANE_GROUP is not None)):
+        raise ValueError("Locked cloud browser stage cannot silently mask "
+                         "independent genuine DOM spatial planes; reject mode.")
     if STUDIO_STAGE is not None and STUDIO_STAGE.shutter>0 and (
             DOM_PLANE is not None or DOM_PLANE_GROUP is not None):
         raise ValueError("Same-frame cinematic shutter does not yet support "
@@ -629,6 +634,7 @@ def diagnostics():
             "cameraKeys":len(STUDIO_STAGE.camera),
             "hardCutSourceFrames":list(hard_cut_frames),
             "motionProfile":STUDIO_STAGE.motion_style,
+            "stagePreset":STUDIO_STAGE.stage_preset,
             "sameSourceFrameShutter":STUDIO_STAGE.shutter,
             "cameraShutterFrames":sum(
                 STUDIO_STAGE.shutter_times((TRIM_FRAMES+i)/FPS) is not None
@@ -747,6 +753,7 @@ def render(output,seconds=None,static=False):
                 "contextVisibility":STUDIO_STAGE.context_visibility(FILM_PLAN.duration),
                 "payoffMode":STUDIO_STAGE.payoff_mode,
                 "motionProfile":STUDIO_STAGE.motion_style,
+                "stagePreset":STUDIO_STAGE.stage_preset,
                 "sameSourceFrameShutter":STUDIO_STAGE.shutter,
                 "sourcePixelsOnly":True}
         if DOM_PLANE_GROUP is not None:

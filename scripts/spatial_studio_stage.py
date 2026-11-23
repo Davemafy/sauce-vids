@@ -231,6 +231,7 @@ class StudioStage:
     motion_style:str
     shutter:float
     fps:float
+    stage_preset:str
 
     def pose(self,t):
         prev=self.camera[0]
@@ -278,7 +279,7 @@ class StudioStage:
         return tuple(int(round(k.at*fps))-trim_frames for k in self.camera
                      if k.cut and int(round(k.at*fps))>trim_frames)
 
-    def quad(self,t):
+    def raw_quad(self,t):
         scale,yaw,pitch,cx,cy=self.pose(t)
         width,height=self.output_size
         sw,sh=self.source_size
@@ -295,13 +296,33 @@ class StudioStage:
                               cy*height+plane_h*y*perspective/2])
         return np.float32(projected)
 
+    def quad(self,t):
+        if self.stage_preset=="classic":
+            return self.raw_quad(t)
+        from cloud_shadow_stage import window_geometry
+        x0,y0,x1,y1,_=window_geometry(self.source_size,self.output_size)
+        base=self.raw_quad(0)
+        dst=np.float32([[x0,y0],[x1,y0],[x1,y1],[x0,y1]])
+        # The physical card stays FIXED; actual product camera movement
+        # happens INSIDE its rounded viewport, never moving the stage shell.
+        M=cv2.getPerspectiveTransform(base,dst)
+        return cv2.perspectiveTransform(self.raw_quad(t)[None,:,:],M)[0]
+
+    def canvas_region(self):
+        ow,oh=self.output_size
+        if self.stage_preset=="classic":
+            return np.float32([[0.,0.],[ow,0.],[ow,oh],[0.,oh]])
+        from cloud_shadow_stage import window_geometry
+        x0,y0,x1,y1,_=window_geometry(self.source_size,self.output_size)
+        return np.float32([[x0,y0],[x1,y0],[x1,y1],[x0,y1]])
+
     def context_visibility(self,t):
         # Fraction of the entire real interface still visible in the ending.
         q=self.quad(t)
         ow,oh=self.output_size
         area=abs(cv2.contourArea(q))
         if area<1:return 0.
-        bounds=np.float32([[0.,0.],[ow,0.],[ow,oh],[0.,oh]])
+        bounds=self.canvas_region()
         common,_=cv2.intersectConvexConvex(q,bounds)
         return max(0.,min(1.,float(common)/area))
 
@@ -323,8 +344,8 @@ class StudioStage:
         polygon=np.rint(pts).astype(np.float32)
         area=abs(cv2.contourArea(polygon))
         if area<1:return 0.
-        box=np.array([[[0.,0.]],[[ow,0.]],[[ow,oh]],[[0.,oh]]],dtype=np.float32)
-        clip,_=cv2.intersectConvexConvex(polygon,box.reshape(-1,2))
+        box=self.canvas_region()
+        clip,_=cv2.intersectConvexConvex(polygon,box)
         return max(0.,min(1.,float(clip)/area))
 
     def point_visible(self,t,source_x,source_y,margin=14):
@@ -333,12 +354,20 @@ class StudioStage:
             [0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]]),self.quad(t))
         projected=cv2.perspectiveTransform(
             np.float32([[[source_x,source_y]]]),matrix)[0,0]
-        return bool(margin<=projected[0]<=ow-margin and
-                    margin<=projected[1]<=oh-margin)
+        frame=self.canvas_region()
+        return bool(frame[0,0]+margin<=projected[0]<=frame[1,0]-margin and
+                    frame[0,1]+margin<=projected[1]<=frame[2,1]-margin)
 
 
 def load_studio_stage(data,manifest,source_path,source_size,output_size,duration,fps):
-    _fields(data,("camera","material","depthPx","reflection","lighting","payoff","motion"),"studioStage")
+    _fields(data,("camera","material","depthPx","reflection","lighting","payoff","motion","stagePreset"),"studioStage")
+    stage_preset=data.get("stagePreset","classic")
+    if stage_preset not in ("classic","cloud_shadow_v1"):
+        raise ValueError("Only approved rigid Sauce stage presets are supported")
+    if stage_preset=="cloud_shadow_v1":
+        from cloud_shadow_stage import backdrop
+        # Fail closed rather than silently substituting a generic gradient.
+        backdrop(*output_size)
     motion=_fields(data.get("motion",{}),("profile","shutter"),"studioStage.motion")
     profile=motion.get("profile","classic")
     if profile not in ("classic","cinematic"):
@@ -450,7 +479,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
     visible=_number(payoff.get("minVisible",.82),"studioStage.payoff.minVisible",.6,1)
     obj=StudioStage(tuple(parsed),rgb,grain,depth,reflection,index,intensity,seconds,
                     onset,pi,pp[2],visible,mode,context,source_size,output_size,duration,box,
-                    profile,shutter,fps)
+                    profile,shutter,fps,stage_preset)
     actual=obj.visibility(duration)
     # The visible click/drag location, not just the broad source window, must
     # be on screen at the moment the user acts. This fail-closed gate catches
@@ -491,6 +520,9 @@ def render_studio_stage(stage,frame,t):
     ow,oh=stage.output_size
     if frame.shape[:2]!=(sh,sw):
         raise ValueError("Studio source video dimensions mismatch manifest")
+    if stage.stage_preset=="cloud_shadow_v1":
+        from cloud_shadow_stage import render_cloud_stage
+        return render_cloud_stage(stage,frame,t)
     board=_matte(ow,oh,stage.color,stage.grain).copy()
     onset=stage.onset["time"]
     power=_eased((t-onset)/stage.light_seconds)*stage.light_intensity
