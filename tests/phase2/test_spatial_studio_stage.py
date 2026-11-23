@@ -391,3 +391,83 @@ def test_native_60fps_cut_decimal_json_snaps_to_exact_source_frame(tmp_path):
     not_aligned["camera"][2].update(at=.52,startAt=.52)
     with pytest.raises(ValueError,match="native source frame"):
         load_studio_stage(not_aligned,m,source,(320,180),(640,360),2.4,60)
+
+
+def test_verified_mouse_follow_pushes_into_physical_window_with_source_safe_return(capture):
+    """Owner reference: cursor follow and a real camera push, never fake UI."""
+    _,src,m=capture
+    m['pointer_samples']=[
+        {'t':.10,'x':160.,'y':90.},
+        {'t':.40,'x':160.,'y':90.},
+        {'t':.52,'x':174.,'y':82.},
+        {'t':.64,'x':207.,'y':52.},
+        {'t':.76,'x':264.,'y':28.},
+        {'t':.82,'x':278.,'y':22.},
+        {'t':1.09,'x':274.,'y':22.},
+        {'t':1.53,'x':270.,'y':24.},
+        {'t':2.0,'x':160.,'y':90.},
+    ]
+    cfg=plan(appearance=False)
+    cfg['camera'][2]['startAt']=1.41  # genuine result confirmed at 1.40s
+    cfg['payoff']['mode']='detail'  # physical camera explicitly crops interface
+    cfg['stagePreset']='cloud_shadow_v1'
+    cfg['motion']={
+        'profile':'reference-spring','shutter':.2,'immersive':True,
+        'follow':{'mode':'source-cursor-spring','eventIndices':[0],
+                  'responseSeconds':.37,'strength':.21,
+                  'deadzone':.1,'maxOffset':.04,'beforeSeconds':.4,
+                  'afterSeconds':.6}}
+    for k,scale in zip(cfg['camera'],(1.,1.07,1.23,1.)):
+        k['viewScale']=scale
+    # Real result may only be revealed from its verified source clock.
+    stage=load(cfg,m,src)
+    assert stage.immersive and stage.mouse_follow is not None
+    assert stage.view_scale(0)==1.
+    assert stage.view_scale(1.7)>1.20
+    assert stage.view_scale(2.4)==1.
+    assert stage.mouse_follow.offset(.1)==(0.,0.)
+    # The original physical screen window really moves under the camera.
+    wide=stage.quad(0);close=stage.quad(1.7)
+    assert np.linalg.norm(close[0]-wide[0])>10
+    assert np.isfinite(close).all()
+    assert stage.region_visibility(m['events'][0]['start'],(15,28,58,19))>=.8
+    frame=np.full((180,320,3),205,dtype=np.uint8)
+    snapshot=frame.copy()
+    result=render_studio_stage(stage,frame,1.7)
+    assert result.shape==(360,640,3)
+    np.testing.assert_array_equal(frame,snapshot)
+
+
+def test_default_cloud_stage_output_remains_byte_identical_without_optin(capture):
+    _,src,m=capture
+    cfg=plan(appearance=False);cfg['stagePreset']='cloud_shadow_v1'
+    cfg['camera'][2]['startAt']=1.41  # verified source result
+    cfg['payoff']['mode']='detail'
+    stage=load(cfg,m,src)
+    assert stage.mouse_follow is None and not stage.immersive
+    assert stage.view_scale(.3)==1.
+    assert stage.view_scale(2.)==1.
+    m2={**m,'pointer_samples':[{'t':.2,'x':1,'y':2}]}
+    old=load(cfg,m2,src)
+    f=np.full((180,320,3),214,dtype=np.uint8)
+    np.testing.assert_array_equal(render_studio_stage(stage,f,1.7),
+                                  render_studio_stage(old,f,1.7))
+
+
+def test_reference_camera_disallows_immersive_without_source_pointer(capture):
+    _,src,m=capture
+    cfg=plan(appearance=False);cfg['stagePreset']='cloud_shadow_v1'
+    cfg['camera'][2]['startAt']=1.41  # verified source result
+    cfg['payoff']['mode']='detail'
+    cfg['motion']={'profile':'reference-spring','immersive':True,'follow':{
+        'mode':'source-cursor-spring','eventIndices':[0]}}
+    cfg['camera'][1]['viewScale']=1.15
+    with pytest.raises(ValueError,match='pointer track'):
+        load(cfg,m,src)
+    # An arbitrary 1.8× card push cannot be requested on old classic films.
+    cfg=plan(appearance=False);cfg['stagePreset']='cloud_shadow_v1'
+    cfg['camera'][2]['startAt']=1.41  # verified source result
+    cfg['payoff']['mode']='detail'
+    cfg['camera'][1]['viewScale']=1.2
+    with pytest.raises(ValueError,match='requires opted-in'):
+        load(cfg,m,src)

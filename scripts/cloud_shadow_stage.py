@@ -93,6 +93,13 @@ def render_cloud_stage(stage, source, t):
     if source.shape[:2] != (sh, sw):
         raise ValueError("Cloud stage cannot use a fabricated source dimension")
     board = stage_plate(stage.source_size, stage.output_size).copy()
+    if stage.immersive:
+        # Camera approaches the physical object, not a scaled already-low-res
+        # screenshot. Background and original soft shadows move together;
+        # source UI is separately reprojected from ORIGINAL native DPR2.
+        view=stage.view_transform(t)
+        board=cv2.warpAffine(board,view,(ow,oh),flags=cv2.INTER_CUBIC,
+                             borderMode=cv2.BORDER_REFLECT_101)
     sq = np.float32([[0, 0], [sw-1, 0], [sw-1, sh-1], [0, sh-1]])
     q = stage.quad(t)
     H = cv2.getPerspectiveTransform(sq, q)
@@ -124,6 +131,9 @@ def render_cloud_stage(stage, source, t):
         rendered = ((a.astype(np.uint16) + 4*rendered.astype(np.uint16)
                      + b.astype(np.uint16) + 3) // 6).astype(np.uint8)
     m = card_mask(stage.source_size, stage.output_size)
+    if stage.immersive:
+        m=cv2.warpAffine(m,stage.view_transform(t),(ow,oh),
+                         flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
     # Pixel mask respects rounded corners on every frame and on camera zooms.
     border = cv2.dilate(m, np.ones((3, 3), np.uint8)) - m
     board[border > 10] = np.clip(board[border > 10].astype(np.float32)*.5

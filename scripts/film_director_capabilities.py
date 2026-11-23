@@ -41,6 +41,7 @@ def source_pointer_capabilities(raw,size):
               isinstance(e.get("pointer_samples"),list) and len(e["pointer_samples"])>=2
               for e in raw.get("events",[]))
     return {"recordedPointerTrackAvailable":bool(ordered),
+            "sourceCursorSpringAvailable":bool(ordered and len(samples)>=3),
             "eventLocalPointerSamplesPresent":bool(event_samples),
             "allowedCursorModesForStudio":["none","recorded"] if ordered else ["none"]}
 
@@ -242,6 +243,22 @@ def build_contract(source,manifest,brief):
               "shadow/reflection, native-frame source-true editorial camera hard cuts (camera cut=true, "
               "startAt=at, at aligned to source FPS, maximum 3, >=0.35s apart), "
               "overview/detail payoff clipping guard",
+            **({"sourceCursorSpringCamera":
+                 "OPTIONAL: studioStage.motion.profile=reference-spring plus "
+                 "motion.follow={mode:source-cursor-spring,eventIndices:[verified source indices],"
+                 "responseSeconds:.39,strength:.22,deadzone:.10,maxOffset:.055}; "
+                 "spring drives the view from actual time-stamped browser cursor samples "
+                 "ONLY near verified actions, never fakes a cursor path. "
+                 "motion.immersive=true is available only with cloud_shadow_v1 "
+                 "and permits source-safe physical camera viewScale 1..1.8 "
+                 "on studioStage.camera keys. Increase viewScale after a real "
+                 "recorded mouse approach or verified result, use sufficient "
+                 "transition time to pass the 45px/frame source-motion gate, "
+                 "then return to viewScale=1 with at least a brief wide hold. "
+                 "The source UI is reprojected from native capture; verified "
+                 "clicks and majority of resultRect MUST stay on-screen. "
+                 "Prefer a moderate close-up rather than clipping the product."}
+               if pointer["sourceCursorSpringAvailable"] else {}),
             "glassLoupe":"optional event-driven optical magnifier; do not use merely for decoration",
             "composition":"optional frozen genuine-UI pixel isolation, not live DOM layering",
             **({"domPlane":"OPTIONAL: independently animate one REAL DOM foreground from genuine "
@@ -292,7 +309,15 @@ def build_contract(source,manifest,brief):
                 "ONLY at native frame aligned times with startAt=at. Candidate click/result "
                 "native-frame cut timestamps are supplied per genuine verified event. "
                 "Protect action target, preserve legible final payoff and do not require "
-                "hard cuts where an authentic slow hold is more cinematic.",
+                "hard cuts where an authentic slow hold is more cinematic. "
+                "When actualCapture.pointerProvenance.sourceCursorSpringAvailable is true, "
+                "you may opt in to studioStage.motion.profile=reference-spring "
+                "and motion.follow for causal critically-damped mouse following; "
+                "to move INTO the physical floating window use the original "
+                "cloud_shadow_v1 stage plus motion.immersive=true and per-key "
+                "viewScale 1..1.8, maintaining source-verified geometry. "
+                "Never fake cursor movement, paint substitute UI or use a large "
+                "zoom where the resulting modal/label becomes illegible.",
             "domPlanes":"Only when actualCapture.verifiedLiveDomPlaneGroup exists; "
                 "SOURCE-TRUE HERO GRAMMAR: After verified result, optionally "
                 "detach each genuine DOM card and hold it at heroCenter [x,y] "

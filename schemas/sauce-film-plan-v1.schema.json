@@ -440,6 +440,12 @@
               "cut": {
                 "type": "boolean",
                 "description": "Explicit native-frame editorial camera cut. When true, startAt=at. Never changes genuine source pixels."
+              },
+              "viewScale": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1.8,
+                "description": "Opt-in physical camera dolly of source-true floating window, not an invented browser zoom. Requires motion.profile=reference-spring and motion.immersive=true."
               }
             }
           }
@@ -527,6 +533,86 @@
               "type": "number",
               "minimum": 0.65,
               "maximum": 1
+            }
+          }
+        },
+        "stagePreset": {
+          "enum": [
+            "classic",
+            "cloud_shadow_v1"
+          ]
+        },
+        "motion": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "profile": {
+              "enum": [
+                "classic",
+                "cinematic",
+                "reference-spring"
+              ]
+            },
+            "shutter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.75
+            },
+            "immersive": {
+              "type": "boolean"
+            },
+            "follow": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "eventIndices"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "source-cursor-spring"
+                },
+                "eventIndices": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 12,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "responseSeconds": {
+                  "type": "number",
+                  "minimum": 0.18,
+                  "maximum": 0.95
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": 0.04,
+                  "maximum": 0.45
+                },
+                "deadzone": {
+                  "type": "number",
+                  "minimum": 0.03,
+                  "maximum": 0.23
+                },
+                "maxOffset": {
+                  "type": "number",
+                  "minimum": 0.008,
+                  "maximum": 0.075
+                },
+                "beforeSeconds": {
+                  "type": "number",
+                  "minimum": 0.25,
+                  "maximum": 1.15
+                },
+                "afterSeconds": {
+                  "type": "number",
+                  "minimum": 0.25,
+                  "maximum": 1.2
+                }
+              }
             }
           }
         }
