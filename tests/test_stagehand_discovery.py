@@ -37,8 +37,28 @@ class StagehandBridgeTests(unittest.TestCase):
     def test_rejects_unsafe_and_unknown_controls(self):
         self.assertIsNone(choose_observed_action(self.report, self.hint("Click Delete all")))
         self.assertIsNone(choose_observed_action(self.report, self.hint("Purchase premium")))
-        self.assertEqual(choose_observed_action(
-            self.report, self.hint("Send", "Try demo"))["action_ids"], ["a2"])
+        # A navigation link is not a product-state change; reject it even
+        # when its observed label was supplied by a model.
+        self.assertIsNone(choose_observed_action(self.report, self.hint("Send", "Try demo")))
+
+    def test_capture_accepts_www_alias_not_a_foreign_origin(self):
+        from backend.live_capture import same_canonical_public_origin
+        self.assertTrue(same_canonical_public_origin(
+            "https://brimble.io/", "https://www.brimble.io/"))
+        self.assertTrue(same_canonical_public_origin(
+            "https://www.heroui.com/", "https://heroui.com/"))
+        self.assertFalse(same_canonical_public_origin(
+            "https://brimble.io/", "https://evil.brimble.io/"))
+        self.assertFalse(same_canonical_public_origin(
+            "https://brimble.io/", "http://brimble.io/"))
+        self.assertFalse(same_canonical_public_origin(
+            "https://brimble.io/", "https://evil.com/"))
+
+    def test_canonical_apex_and_www_redirects_only(self):
+        from scripts.stagehand_public_discovery import first_party_hosts
+        self.assertEqual(first_party_hosts("https://www.heroui.com/"),
+                         ["heroui.com", "www.heroui.com"])
+        self.assertNotIn("evil.heroui.com", first_party_hosts("https://heroui.com"))
 
     def test_rejects_wrong_url_schema_and_oversized_hints(self):
         self.assertIsNone(choose_observed_action(self.report, self.hint("Try demo", url="https://evil.test/")))

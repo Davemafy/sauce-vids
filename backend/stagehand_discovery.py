@@ -27,7 +27,8 @@ def choose_observed_action(report: dict, observations: dict):
         return None
     source = report.get("url", "")
     controls = [c for c in report.get("controls", [])
-                if isinstance(c, dict) and c.get("text") and allowed(c, source)]
+                if isinstance(c, dict) and c.get("text") and allowed(c, source)
+                and c.get("kind") in ("button", "tab", "slider")]
     for hint in hints:
         if not isinstance(hint, dict):
             continue
@@ -43,6 +44,14 @@ def choose_observed_action(report: dict, observations: dict):
         if len(candidates) != 1:
             continue
         candidate = candidates[0]
+        # A label that is also present on another inspected safe control is
+        # inherently ambiguous even if the other control is navigation.
+        duplicates = [c for c in report.get("controls", [])
+                      if c is not candidate and isinstance(c, dict)
+                      and c.get("text") and allowed(c, source)
+                      and _canonical(c["text"]) == _canonical(candidate["text"])]
+        if duplicates:
+            continue
         if not re.fullmatch(r"a\d{1,3}", candidate.get("id", "")):
             continue
         return normalize({

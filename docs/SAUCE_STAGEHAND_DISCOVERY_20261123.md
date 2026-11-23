@@ -33,3 +33,7 @@ Set SAUCE_STAGEHAND_DISCOVERY=1 and SAUCE_STAGEHAND_PYTHON to the absolute path 
 The authenticated Vultr worker process currently exposes **no Gemini or Browserbase key**. Therefore AI Stagehand observe DID NOT RUN; there is no observed model ranking or new Stagehand-led MP4. All three public-site tests were real browser/SDK smoke, not AI discovery. The end-to-end pipeline guard is mock-tested only. With an existing inference credential, next run should actually observe three real products, choose verified interactions, render source-true 1080p/60 MP4, inspect frames and reject unsaleable films. Do not confuse this SDK integration with a full autonomous agent, production deployment, or approved film.
 
 No new VM, branch, paid service signup, sign-in to third-party sites, user content publication, or secret/media commit.
+
+## Credential and live experiment correction
+
+The absence of GEMINI_API_KEY in the isolated development shell was **not** an absence of configured owner credentials. The active Sauce service already loads the owner key from protected systemd environment configuration; see [the subsequent verified live Stagehand experiment](SAUCE_STAGEHAND_LIVE_20261123.md). Real Gemini observe, genuine two-source action proofs, full exported MP4s, and an explicit creative REJECT are documented there.

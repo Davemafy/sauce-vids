@@ -13,6 +13,17 @@ from scripts.session_contract import safe_url
 from .shot_scorer import crop_for_subject
 from .product_explorer import CHROME,known_dialog_opener,allowed,JS,TAB_TARGET_JS
 
+
+def same_canonical_public_origin(original, current):
+ """Accept only a strict apex/www redirect, never a foreign host or downgrade."""
+ a,b=urlsplit(original),urlsplit(current)
+ if a.scheme!='https' or b.scheme!='https' or a.port not in (None,443) or b.port not in (None,443):
+  return False
+ ah=(a.hostname or '').lower().removeprefix('www.')
+ bh=(b.hostname or '').lower().removeprefix('www.')
+ return bool(ah and ah==bh)
+
+
 CURSOR_JS=r"""(() => {
  if(window.__saucePointerInstalled)return;
  window.__saucePointerInstalled=true;
@@ -453,7 +464,7 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
       click_time=time.monotonic()-video_begin
       loc.click(timeout=3500)
       page.wait_for_timeout(950)
-      if urlsplit(page.url).netloc.lower()!=urlsplit(url).netloc.lower():
+      if not same_canonical_public_origin(url,page.url):
        raise RuntimeError('Unsafe navigation outside original product')
       if dialog_opener:
        if page.url!=before or dialogs.count()!=1:
