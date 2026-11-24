@@ -9,9 +9,12 @@ def main():
     a=argparse.ArgumentParser();a.add_argument('--source',type=Path,required=True);a.add_argument('--sha256',required=True);a.add_argument('--at',type=float,required=True);a.add_argument('--out',type=Path,required=True)
     a.add_argument('--bulge',type=float,default=0.)
     a.add_argument('--polished',action='store_true')
+    a.add_argument('--clear-shoulder',action='store_true')
     a.add_argument('--manifest',type=Path)
     a.add_argument('--manifest-sha256')
     x=a.parse_args()
+    if x.clear_shoulder and (x.polished or not 0<x.bulge<=.12):raise ValueError('Clear shoulder requires sag in (0,.12] and no legacy polished mode')
+    mode=2 if x.clear_shoulder else int(x.polished)
     if not 0<=x.bulge<=.30:raise ValueError('Bulge outside optical study bounds')
     if bool(x.manifest)!=bool(x.manifest_sha256):raise ValueError('Require pinned cursor manifest')
     if hashlib.sha256(x.source.read_bytes()).hexdigest()!=x.sha256:raise ValueError('Source hash mismatch')
@@ -39,10 +42,10 @@ def main():
         renderer=page.evaluate('window.renderer')
         if not renderer:raise ValueError('Missing shader renderer')
         if pointer:
-            pointer['projection']=page.evaluate('d=>window.projectSource(...d)',[pointer['source'],sw,sh,x.bulge])
+            pointer['projection']=page.evaluate('d=>window.projectSource(...d)',[pointer['source'],sw,sh,x.bulge,mode])
             if not pointer['projection']['visible'] or pointer['projection']['residual']>1e-6:raise ValueError('Optical cursor projection failed')
         for black,name in ((True,'black'),(False,'cloud')):
-            png=page.evaluate('async d=>window.study(d[0],d[1],d[2],d[3],d[4])',[uri(raw,'png'),uri(sky,'webp'),black,x.bulge,x.polished])
+            png=page.evaluate('async d=>window.study(d[0],d[1],d[2],d[3],d[4])',[uri(raw,'png'),uri(sky,'webp'),black,x.bulge,mode])
             data=base64.b64decode(png.split(',',1)[1])
             if pointer:
                 from recorded_pointer import draw_reference_pointer
@@ -51,5 +54,5 @@ def main():
                 data=cv2.imencode('.png',frame)[1].tobytes()
             (x.out/(name+'.png')).write_bytes(data)
         b.close()
-    (x.out/'receipt.json').write_text(json.dumps({'renderer':renderer,'sourceSha256':x.sha256,'at':x.at,'bulge':x.bulge,'pointer':pointer,'polished':x.polished,'researchOnly':True,'ownerApproved':False},indent=2))
+    (x.out/'receipt.json').write_text(json.dumps({'renderer':renderer,'sourceSha256':x.sha256,'at':x.at,'bulge':x.bulge,'pointer':pointer,'polished':x.polished,'clearShoulder':x.clear_shoulder,'researchOnly':True,'ownerApproved':False},indent=2))
 if __name__=='__main__':main()

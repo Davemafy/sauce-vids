@@ -1,5 +1,10 @@
 # Sauce — living handoff for new agents and new chats
 
+## 2026-11-24 — Clear-shoulder material revision (still-only research)
+
+Owner identified CRT-like distortion, milky glare, weak glass depth and clipped right-hand card in polished study. Recovered clean main `ead2a18`, preserved existing dirty research workspace and concurrent customer work. Added explicit `--clear-shoulder` mode to existing shader study, legacy modes retained. Sag .16 to .096 (40% less), local refraction depth .010 times shoulder falloff, neutral directional area lights confined to rolled shoulders, no large top smear or neon. Real UI mapped with .965 inset; shared inverse cursor projection updated and actual WebGL marker tests include edge positions. Two actual still iterations on same verified tweakcn native source SHA `0b8259e42f326451c308e476fa415f1986d3f2e759c3a8ea0788c65e1a01d1f2` at 4.75s. Independently inspected raw decoded frame: rightmost card already clipped in capture, cannot recover missing content in compositing; capture viewport/layout needs correction. Final cloud PNG SHA `e3b78ce73af33365507609e2dbe24f6bb6b10a424c9446e54c6f0830c336cf22`, 1920x1080 review JPEG SHA `410c05737def76f25f0f0ea47b305d0037ec468dc935a231d9e6101f9895a079`, private signed review HTTP206 / unsigned403. Actual final still inspected: less distorted, no large white smear, subdued shoulder highlights; material remains dark and may still read as plastic, not exact reference or approved. 5 optical tests passed, diff clean. Private artifacts `.sauce-stagehand-private/clear-shoulder-v2-20261124/`. No new video, no fresh source capture, no default/production change, no premium approval. Continue from still material gate before full export.
+
+
 
 ## 2026-11-24 — Fresh URL-only customer film: better directed modal, source-aligned QA
 

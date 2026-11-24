@@ -33,6 +33,10 @@ vec2 bend(vec2 p){
   return q;
 }
 vec3 panel(vec2 p){
+  if(polished==2) {
+    p/= .965;
+    if(any(greaterThan(abs(p),vec2(1.))))return vec3(.0025);
+  }
   vec2 t=clamp(p*.5+.5,vec2(.001),vec2(.999));
   return lin(texture(displayTex,vec2(t.x,1.-t.y)).rgb);
 }
@@ -41,27 +45,33 @@ void main(){
   vec2 world=(uv-.5)*2.*aspect;
   vec2 q=bend(world/halfSize);
   vec2 phys=q*halfSize;
-  float d=box(phys,halfSize,.112);
+  float radius=polished==2?.085:.112;
+  float d=box(phys,halfSize,radius);
   float a=1.-smoothstep(-.001,.001,d);
   vec3 bg=blackStage==1?vec3(.001):lin(texture(skyTex,vec2(uv.x,1.-uv.y)).rgb);
   bg*=1.-.30*exp(-pow(max(d,0.)/.055,2.));
   // A convex dielectric face with a rolled shoulder. Height and normal
   // derive from one continuous surface, not a painted rectangular border.
-  vec2 g=vec2(box(phys+vec2(.001,0),halfSize,.112)-box(phys-vec2(.001,0),halfSize,.112),
-              box(phys+vec2(0,.001),halfSize,.112)-box(phys-vec2(0,.001),halfSize,.112));
+  vec2 g=vec2(box(phys+vec2(.001,0),halfSize,radius)-box(phys-vec2(.001,0),halfSize,radius),
+              box(phys+vec2(0,.001),halfSize,radius)-box(phys-vec2(0,.001),halfSize,radius));
   vec2 n2=normalize(g+vec2(.0000001));
   float shoulder=exp(min(d,0.)/.045);
   // z(q) is a convex glass sag plus rolled shoulder. Its slope
   // defines the normal used by the dielectric ray calculation.
   vec2 slope=sag>0.?3.0*sag*q/halfSize:.21*q;
+  if(polished==2){
+    shoulder=exp(min(d,0.)/.062);
+    slope*=.45;
+  }
   vec3 n=normalize(vec3(slope+n2*shoulder*3.1,1.));
   vec3 V=vec3(0,0,1);
   float F=.04+.96*pow(1.-max(dot(n,V),0.),5.);
   // Snell refraction through a thin clear cover at three refractive indices.
   vec3 rr=refract(-V,n,1./1.505),rg=refract(-V,n,1./1.515),rb=refract(-V,n,1./1.532);
-  vec2 dr=rr.xy/max(-rr.z,.1)*.022/halfSize;
-  vec2 dg=rg.xy/max(-rg.z,.1)*.022/halfSize;
-  vec2 db=rb.xy/max(-rb.z,.1)*.022/halfSize;
+  float opticalDepth=polished==2?.010*shoulder:.022;
+  vec2 dr=rr.xy/max(-rr.z,.1)*opticalDepth/halfSize;
+  vec2 dg=rg.xy/max(-rg.z,.1)*opticalDepth/halfSize;
+  vec2 db=rb.xy/max(-rb.z,.1)*opticalDepth/halfSize;
   vec3 center=panel(q+dg);
   vec3 transmitted=vec3(panel(q+dr).r,center.g,panel(q+db).b);
   // A neutral emissive display, with exposure lift restricted to dark
@@ -95,6 +105,24 @@ void main(){
     vec3 sheen=vec3(.86,.92,1.)*(upper*.28+side*.15+broad*.032+rolled*.085);
     light=transmitted*(1.-min(F*.38,.24))*(1.-bottom*.15)
        +sheen+halo*.25+vec3(.92,.96,1.)*edge*.12;
+  }
+  if(polished==2){
+    vec2 r=reflected.xy;
+    // Two area-light reflections, localized to the rolled optical shoulder.
+    float roll=exp(min(d,0.)/.040);
+    float topBox=exp(-pow((r.x+.22)/.58,6.)-pow((r.y-.72)/.19,4.));
+    float sideBox=exp(-pow((r.x-.72)/.17,4.)-pow((r.y-.04)/.54,6.));
+    float upper=topBox*roll*.46;
+    float side=sideBox*roll*.36;
+    float grazing=pow(roll,1.4)*(.20+.80*max(n2.y,0.));
+    float depth=exp(min(d,0.)/.055)*smoothstep(-.2,.95,-q.y);
+    // A broad reflected strip at the shoulder normal, with a narrow
+    // bright crest and smooth falloff into the transparent center.
+    float crest=exp(-pow((d+.010)/.008,2.));
+    float directional=clamp(.48+.43*n2.y+.15*n2.x,.12,.92);
+    float shoulderLight=crest*directional*.075;
+    vec3 optical=vec3(.88,.94,1.)*(upper+side+grazing*.09+shoulderLight);
+    light=transmitted*(1.-min(F*.22,.12))*(1.-depth*.10)+optical;
   }
   vec3 result=mix(bg,light,a);
   // Spectral meniscus and broad optical bloom cross the silhouette,
@@ -133,21 +161,21 @@ if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw Err
 gl.bindFramebuffer(gl.FRAMEBUFFER,null);
 function tex(img,i,name){gl.activeTexture(gl.TEXTURE0+i);let t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,img);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.generateMipmap(gl.TEXTURE_2D);gl.uniform1i(gl.getUniformLocation(prog,name),i);}
 async function img(s){let i=new Image();i.src=s;await i.decode();return i}
-window.study=async (source,sky,black,bulge=0,polished=false)=>{gl.useProgram(prog);const s=await img(source);tex(s,0,'displayTex');tex(await img(sky),1,'skyTex');let h=bulge>0?.79:.86;gl.uniform1f(gl.getUniformLocation(prog,'sag'),bulge);gl.uniform1i(gl.getUniformLocation(prog,'polished'),polished?1:0);gl.uniform2f(gl.getUniformLocation(prog,'halfSize'),h*s.width/s.height,h);gl.uniform1i(gl.getUniformLocation(prog,'blackStage'),black?1:0);gl.viewport(0,0,1920,1080);gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.useProgram(postProg);gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,hdr);gl.uniform1i(gl.getUniformLocation(postProg,"hdr"),2);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.finish();if(gl.getError()!==gl.NO_ERROR)throw Error('GL draw failed');return document.querySelector('canvas').toDataURL('image/png')};
+window.study=async (source,sky,black,bulge=0,polished=false)=>{gl.useProgram(prog);const s=await img(source);tex(s,0,'displayTex');tex(await img(sky),1,'skyTex');let h=polished===2?.84:bulge>0?.79:.86;gl.uniform1f(gl.getUniformLocation(prog,'sag'),bulge);gl.uniform1i(gl.getUniformLocation(prog,'polished'),Number(polished));gl.uniform2f(gl.getUniformLocation(prog,'halfSize'),h*s.width/s.height,h);gl.uniform1i(gl.getUniformLocation(prog,'blackStage'),black?1:0);gl.viewport(0,0,1920,1080);gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.useProgram(postProg);gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,hdr);gl.uniform1i(gl.getUniformLocation(postProg,"hdr"),2);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.finish();if(gl.getError()!==gl.NO_ERROR)throw Error('GL draw failed');return document.querySelector('canvas').toDataURL('image/png')};
 // Numerically invert the SAME green-channel texture map as the shader.
-window.projectSource=(point,sw,sh,sag)=>{
+window.projectSource=(point,sw,sh,sag,polished=0)=>{
   if(!(sag>0 && sag<=.30))throw Error('Unsupported convex sag');
-  const h=.79,b=[h*sw/sh,h],r=.112;
+  const h=polished===2?.84:.79,b=[h*sw/sh,h],r=polished===2?.085:.112;
   const box=p=>{let x=Math.abs(p[0])-b[0]+r,y=Math.abs(p[1])-b[1]+r;return Math.hypot(Math.max(x,0),Math.max(y,0))+Math.min(Math.max(x,y),0)-r;};
-  const target=[2*point[0]/sw-1,1-2*point[1]/sh];
+  const target=[2*point[0]/sw-1,1-2*point[1]/sh].map(x=>x*(polished===2?.965:1));
   function sample(q){
     let p=q.map((x,i)=>x*b[i]),d=box(p),g=[box([p[0]+.001,p[1]])-box([p[0]-.001,p[1]]),box([p[0],p[1]+.001])-box([p[0],p[1]-.001])].map(x=>x+1e-7);
-    let l=Math.hypot(...g),shoulder=Math.exp(Math.min(d,0)/.045);
-    let n=q.map((x,i)=>3*sag*x/b[i]+g[i]/l*shoulder*3.1).concat(1);
+    let l=Math.hypot(...g),shoulder=Math.exp(Math.min(d,0)/(polished===2?.062:.045));
+    let n=q.map((x,i)=>3*sag*x/b[i]*(polished===2?.45:1)+g[i]/l*shoulder*3.1).concat(1);
     l=Math.hypot(...n);n=n.map(x=>x/l);
     let eta=1/1.515,dot=-n[2],k=Math.sqrt(1-eta*eta*(1-dot*dot));
     let ray=n.map((x,i)=>eta*(i===2?-1:0)-(eta*dot+k)*x);
-    return q.map((x,i)=>x+ray[i]/Math.max(-ray[2],.1)*.022/b[i]);
+    return q.map((x,i)=>x+ray[i]/Math.max(-ray[2],.1)*(polished===2?.010*shoulder:.022)/b[i]);
   }
   let q=target.slice();
   for(let i=0;i<20;i++){
