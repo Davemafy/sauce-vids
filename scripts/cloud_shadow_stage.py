@@ -193,7 +193,13 @@ def render_cloud_stage(stage, source, t):
     ow, oh = stage.output_size
     if source.shape[:2] != (sh, sw):
         raise ValueError("Cloud stage cannot use a fabricated source dimension")
-    board = stage_plate(stage.source_size, stage.output_size).copy()
+    if stage.stage_preset=="cloud_glass_v1":
+        from cloud_glass_object_stage import stage_plate as physical_plate
+        from cloud_glass_object_stage import card_mask as aperture_mask
+    else:
+        physical_plate=stage_plate
+        aperture_mask=card_mask
+    board = physical_plate(stage.source_size, stage.output_size).copy()
     if stage.immersive:
         # Camera approaches the physical object, not a scaled already-low-res
         # screenshot. Background and original soft shadows move together;
@@ -231,13 +237,9 @@ def render_cloud_stage(stage, source, t):
                                  (ow, oh), flags=cv2.INTER_LINEAR)
         rendered = ((a.astype(np.uint16) + 4*rendered.astype(np.uint16)
                      + b.astype(np.uint16) + 3) // 6).astype(np.uint8)
-    m = card_mask(stage.source_size, stage.output_size)
-    if stage.immersive:
-        m=cv2.warpAffine(m,stage.view_transform(t),(ow,oh),
-                         flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
-    # The thick glass shell, refraction and specular highlights are in
-    # stage_plate(), beneath the genuine browser mask (never over UI).
-    m = card_mask(stage.source_size,stage.output_size)
+    # Both approved cloud materials stay behind the exact original
+    # browser aperture, even when its physical camera moves.
+    m = aperture_mask(stage.source_size,stage.output_size)
     if stage.immersive:
         m=cv2.warpAffine(m,stage.view_transform(t),(ow,oh),
                          flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
