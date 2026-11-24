@@ -11,6 +11,8 @@ from scripts.live_edit_plan import parse_live_edit
 from scripts.slider_framing import slider_framing
 from scripts.session_contract import safe_url
 from backend.price_narration import render_narration
+from backend.native60_capture import source_video_filename
+from backend.licensed_music_bed import licensed_music_from_env,add_music_to_master
 
 sys.path.insert(0,str(Path(__file__).parents[1]/'scripts'))
 from produce_cinematic_demo import verify_mp4,build_web_player
@@ -31,13 +33,13 @@ def evaluate_encoded_customer_film(master:Path,source_dir:Path,receipt:dict,dura
  from scripts.quality_preview_supervisor import analyze
  if (receipt.get("continuous_recording") is not True or
      not isinstance(receipt.get("sha256"),str) or
-     receipt["sha256"]!=file_digest(Path(source_dir)/"continuous-source.webm")):
+     receipt["sha256"]!=file_digest(Path(source_dir)/source_video_filename(receipt))):
   raise ValueError("Unverified original continuous source")
  record=Path(source_dir)/"continuous-capture.json"
  if not record.is_file():
   raise ValueError("Missing real capture receipt")
  quality=analyze(Path(master),evidence={
-   "source_path":str(Path(source_dir)/"continuous-source.webm"),
+   "source_path":str(Path(source_dir)/source_video_filename(receipt)),
    "source_sha256":receipt["sha256"],
    "event_manifest_path":str(record),
    "event_manifest_sha256":file_digest(record),
@@ -71,6 +73,16 @@ def source_video_profile(stream:dict,receipt:dict):
   raise RuntimeError('Recorded footage differs from verified capture size')
  quality=receipt.get('capture_quality','standard')
  dpr=receipt.get('source_dpr',1)
+ native_proof=receipt.get('native_source_capture')
+ if native_proof is not None:
+  if (not isinstance(native_proof,dict) or
+      native_proof.get('source_capture_method')!='x11grab60-original-browser' or
+      native_proof.get('source_fps')!='60/1' or
+      receipt.get('video')!='continuous-source.mp4' or
+      stream.get('r_frame_rate')!='60/1' or
+      not isinstance(native_proof.get('viewport_match_error'),(int,float)) or
+      not 0<=native_proof['viewport_match_error']<=11):
+   raise RuntimeError('Native60 browser recording provenance mismatch')
  if quality=='high' and (size!=[1920,1080] or dpr!=2):
   raise RuntimeError('High-density source proof mismatch')
  # Playwright pads a 1920x1080 record_video frame if the captured CSS
@@ -128,7 +140,7 @@ def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", a
 
 def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pack="founder-reference"):
  receipt=json.loads((source_dir/'continuous-capture.json').read_text())
- src=source_dir/'continuous-source.webm'
+ src=source_dir/source_video_filename(receipt)
  if not src.is_file() or file_digest(src)!=receipt['sha256']:
   raise RuntimeError('Continuous browser evidence missing or modified')
  evidence=probe(src)
@@ -261,15 +273,25 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
   shutil.copyfile(work/'SHOTCANDY-LICENSE.txt',out/'SHOTCANDY-LICENSE.txt')
  composed.replace(master)
  verify_mp4(master,1920,1080,60)
+ # Opt-in, source/license-verified real music. Never synthesize empty audio,
+ # change the source cursor, or mix over source-grounded speech.
+ music=None
+ if audio=='auto' and not any(
+     e.get('kind')=='slider_change' and e.get('price_change') for e in events):
+  music=licensed_music_from_env()
+  if music:
+   add_music_to_master(master,music,duration)
+   verify_mp4(master,1920,1080,60)
  if subjects:
   stream=next(s for s in probe(master)['streams'] if s['codec_type']=='video')
   if int(stream.get('nb_frames',0))!=total:
    raise RuntimeError('Encoded subject reel does not match its planned frame count')
  preview=out/'preview.mp4'
  subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-nostdin',
-  '-i',str(master),'-map','0:v:0',
+  '-i',str(master),'-map','0:v:0','-map','0:a:0?',
   '-vf','scale=1280:720:flags=lanczos,fps=30',
-  '-an','-c:v','libx264','-preset','medium','-crf','18',
+  '-c:a','aac','-ar','48000','-b:a','128k',
+  '-c:v','libx264','-preset','medium','-crf','18',
   '-pix_fmt','yuv420p','-movflags','+faststart',str(preview)],
   check=True,timeout=110)
  verify_mp4(preview,1280,720,30)
@@ -297,6 +319,8 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
   'verified_camera_shots':metrics['zoom_shots'],
   'subject_shot_count':len(subjects),
   'verified_glass_shots':metrics['glass_loupe_shots'],'source_url':safe_url(receipt['source_url']),
+  'licensed_music':music.public_receipt() if music else None,
+  'music_only':bool(music),
   'title':title,'description':story,'film_mode':mode,'duration_seconds':round(duration,2),
   'discarded_initial_loading_seconds':round(initial_trim,2),
   'discarded_before_action_seconds':round(trim-initial_trim,2),
@@ -309,11 +333,18 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
   'presentation_cursor':receipt.get('presentation_cursor','circle'),
   'cursor_pack':cursor_pack,
   'continuous_motion':True,'source_verified':True,'replay_verified':False,
+  'native60_source_verified':bool(profile['source_fps']=='60/1' and
+                                  receipt.get('native_source_capture')),
+  'source_capture_method':('x11grab60-original-browser'
+       if receipt.get('native_source_capture') else 'playwright-video-helper'),
   'observed_actions':receipt['actions'],
   'master_dimensions':[1920,1080],'master_fps':60,'preview_dimensions':[1280,720],
   'preview_fps':30,'narrated':narration is not None,'clean_preview':bool(narration),'limitations':[
    'A continuous Chromium recording is actual UI motion, not a deterministic DOM replay.',
-   'Master 60fps resamples the browser recorder frame rate; it does not create new UI frames.',
+   ('Native 60Hz X11 source captures original Chrome compositing frames; '
+   'static source frames may remain unchanged and no animation is invented.'
+   if receipt.get('native_source_capture')
+   else 'Master 60fps resamples the browser recorder frame rate; it does not create new UI frames.'),
    'Controls behind authentication and sensitive form submission are not explored.']}
  if plan:
   result['edit_plan']={'schema':edit_plan['schema'],

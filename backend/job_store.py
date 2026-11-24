@@ -141,7 +141,8 @@ def load_render_checkpoint(folder: Path, url: str):
         record = json.loads(receipt)
         if record.get("continuous_recording") is not True:
             return None
-        with (motion / "continuous-source.webm").open("rb") as source:
+        from backend.native60_capture import source_video_filename
+        with (motion / source_video_filename(record)).open("rb") as source:
             if file_digest(source, "sha256").hexdigest() != record["sha256"]:
                 return None
         return data

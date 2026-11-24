@@ -394,6 +394,16 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
              actions.get(selected[0],{}).get('kind')=='slider')
  beats=plan.get('beats',[]) if plan.get('mode')=='showcase' else []
  from backend.cursor_capture_js import build_cursor_script
+ from backend.native60_capture import Native60Recorder,capture_mode,FULL_CHROME
+ native_mode=capture_mode()=='x11grab60'
+ if native_mode and quality['quality']!='high':
+  raise RuntimeError('Native60 requires full-width DPR2 high quality capture')
+ native_recorder=Native60Recorder(private) if native_mode else None
+ if native_recorder:
+  try:native_recorder.start_display()
+  except BaseException:
+   native_recorder.close()
+   raise
  passive_showcase=plan.get('mode')=='showcase' and not beats
  pace=plan.get('showcase_pace','balanced') if passive_showcase else 'balanced'
  pacing={'balanced':(500,360,1000,1.),'brisk':(180,240,650,1.15),
@@ -406,19 +416,30 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
                 build_cursor_script(cursor_style))
  events=[];moment=0.0
  with sync_playwright() as pw:
-  b=pw.chromium.launch(headless=True,executable_path=CHROME,
-   args=['--no-sandbox','--disable-dev-shm-usage'])
+  browser_args=(native_recorder.launch_arguments() if native_recorder
+                else ['--no-sandbox','--disable-dev-shm-usage'])
+  try:
+   b=pw.chromium.launch(
+    headless=not native_mode,
+    executable_path=str(FULL_CHROME if native_recorder else CHROME),
+    env=native_recorder.browser_environment() if native_recorder else None,
+    args=browser_args)
+  except BaseException:
+   if native_recorder:native_recorder.close()
+   raise
   try:
    folder=private/'live-video';folder.mkdir(exist_ok=True)
-   context=b.new_context(viewport=quality['viewport'],
-    device_scale_factor=quality['dpr'],record_video_dir=str(folder),
-    record_video_size=quality['video_size'],service_workers='block')
+   kwargs={'viewport':quality['viewport'],'device_scale_factor':quality['dpr'],
+           'service_workers':'block'}
+   if not native_recorder:
+    kwargs.update(record_video_dir=str(folder),record_video_size=quality['video_size'])
+   context=b.new_context(**kwargs)
    context.route('**/*',guard_route)
    if passive_showcase:
     from scripts.session_capture import install_presentation_cleanup
     install_presentation_cleanup(context)
    if cursor_script:context.add_init_script(cursor_script)
-   video_begin=time.monotonic()
+   video_begin=time.monotonic()  # Legacy recorder starts before navigation.
    page=context.new_page()
    response=page.goto(url,wait_until='domcontentloaded',timeout=30000)
    if response and response.status>=400:raise RuntimeError('Source page returned HTTP '+str(response.status))
@@ -438,8 +459,16 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
           e.style.setProperty('visibility','hidden','important');
       }
     }""")
-   video=page.video
-   if video is None:raise RuntimeError('Browser video recording unavailable')
+   if native_recorder:
+    # Two independently read real browser frames align page pixels to the
+    # full X11 window. The capture excludes browser chrome and is rejected
+    # rather than guessed when the geometry differs.
+    native_recorder.calibrate(page)
+    video_begin=native_recorder.start_recording()
+    video=None
+   else:
+    video=page.video
+    if video is None:raise RuntimeError('Browser video recording unavailable')
    start=time.monotonic()
    lead_in=max(0,start-video_begin)
    page.mouse.move(930,530)
@@ -630,9 +659,13 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
    page.wait_for_timeout(final_ms)
    length=time.monotonic()-start
    context.close()
-   source=Path(video.path())
-   output=private/'continuous-source.webm'
-   shutil.copy2(source,output)
+   native_proof=native_recorder.stop_recording() if native_recorder else None
+   if native_recorder:
+    output=native_proof['source_path']
+   else:
+    source=Path(video.path())
+    output=private/'continuous-source.webm'
+    shutil.copy2(source,output)
    receipt={'continuous_recording':True,'video':output.name,
       'sha256':hash_file(output),'duration_wall_s':round(length,3),
       'lead_in_seconds':round(lead_in,3),
@@ -643,9 +676,17 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
       'requested_video_size':quality['video_size'],
       'viewport_css_size':quality['viewport'],
       'cursorless':cursorless,'presentation_cursor':'composited-arrow' if cursorless else 'hidden' if beats or passive_showcase else cursor_style}
+   if native_proof:
+    # FPS is the actual recorded source stream, not the export bitrate or
+    # postproduced frame rate. Original source hashes remain authoritative.
+    receipt['native_source_capture']={
+      k:v for k,v in native_proof.items() if k!='source_path'}
    (private/'continuous-capture.json').write_text(json.dumps(receipt,indent=2))
    return receipt
-  finally:b.close()
+  finally:
+   try:b.close()
+   finally:
+    if native_recorder:native_recorder.close()
 
 if __name__=='__main__':
  import argparse

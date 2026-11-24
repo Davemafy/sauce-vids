@@ -270,8 +270,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json(409,{"error":"Verified capture unavailable for revision"})
                 motion=OUT/revision_id/"private"/"motion"
                 motion.mkdir(mode=0o700,parents=True,exist_ok=True)
-                for filename in ("continuous-capture.json","continuous-source.webm"):
-                    shutil.copyfile(OUT/source_id/"private"/"motion"/filename,motion/filename)
+                from backend.native60_capture import source_video_filename
+                origin=OUT/source_id/"private"/"motion"
+                capture_receipt=json.loads((origin/"continuous-capture.json").read_text())
+                files=("continuous-capture.json",source_video_filename(capture_receipt))
+                for filename in files:
+                    shutil.copyfile(origin/filename,motion/filename)
                 write_render_checkpoint(OUT/revision_id,{**checkpoint,"attempts":0})
                 now=time.time()
                 JOBS[revision_id]={"id":revision_id,"revision_of":source_id,
