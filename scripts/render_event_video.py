@@ -63,6 +63,7 @@ parser.add_argument("--cloud-overview",action="store_true",
                     help="Fixed Cloud Shadow stage for passive public showcases")
 parser.add_argument("--physical-cover-bake",type=Path,help="Opt-in calibrated Cycles cover material study")
 parser.add_argument("--physical-cover-sha256",help="Exact SHA256 of the calibration asset")
+parser.add_argument("--motion-glass-study",action="store_true",help="Opt-in camera-travel convex cover research")
 args=parser.parse_args()
 if bool(args.physical_cover_bake)!=bool(args.physical_cover_sha256):
     parser.error("Physical cover requires both calibration and hash")
@@ -88,6 +89,8 @@ if args.film_plan:
 else:
     FILM_PLAN_DATA=None
     args.cursor_pack=args.cursor_pack or "founder-reference"
+if args.motion_glass_study and (FILM_PLAN_DATA is None or args.physical_cover_bake):
+    parser.error("Motion glass requires a verified film plan and no other optical study")
 if args.physical_cover_bake and FILM_PLAN_DATA is None:
     parser.error("Physical cover requires a verified film plan")
 if args.validate_only and FILM_PLAN_DATA is None:
@@ -152,6 +155,7 @@ ISOLATION=None
 STUDIO_STAGE=None
 DOM_PLANE=None
 DOM_PLANE_GROUP=None
+MOTION_GLASS=None
 if FILM_PLAN_DATA is not None:
     from film_plan import load_film_plan, load_window
     FILM_PLAN=load_film_plan(FILM_PLAN_DATA, MANIFEST,SRC,MANIFEST_PATH,(INPUT_W,INPUT_H),
@@ -175,6 +179,13 @@ if FILM_PLAN_DATA is not None:
             FILM_PLAN_DATA["studioStage"],MANIFEST,SRC,(INPUT_W,INPUT_H),
             (1920,1080),FILM_PLAN.duration,FPS)
 
+    if args.motion_glass_study:
+        if (STUDIO_STAGE is None or STUDIO_STAGE.stage_preset!="cloud_window_clearface_v1"
+                or REFERENCE_POINTER is None or ISOLATION is not None
+                or "domPlanes" in FILM_PLAN_DATA or "domPlane" in FILM_PLAN_DATA):
+            raise ValueError("Motion glass study requires single-plane clearface and reference pointer")
+        from motion_glass import MotionGlass
+        MOTION_GLASS=MotionGlass(STUDIO_STAGE,MANIFEST)
     if args.physical_cover_bake:
         if (STUDIO_STAGE is None or STUDIO_STAGE.stage_preset!="cloud_window_clearface_v1"
                 or REFERENCE_POINTER is None or ISOLATION is not None
@@ -507,7 +518,7 @@ def apply(source,t,static=False,plate_frame=None):
     if STUDIO_STAGE is not None:
         from spatial_studio_stage import render_studio_stage
         if REFERENCE_POINTER is not None:
-            composed=render_studio_stage(STUDIO_STAGE,source,t)
+            composed=MOTION_GLASS.render(source,t) if MOTION_GLASS is not None else render_studio_stage(STUDIO_STAGE,source,t)
             if t>=float(POINTER[0,0]):
                 px,py=REFERENCE_POINTER.at(t)
                 sw,sh=STUDIO_STAGE.source_size
@@ -518,6 +529,8 @@ def apply(source,t,static=False,plate_frame=None):
                 if STUDIO_STAGE.stage_preset=="cloud_luminous_display_v1":
                     from luminous_display_stage import project_point
                     mapped=project_point(STUDIO_STAGE,t,px,py)
+                if MOTION_GLASS is not None:
+                    mapped=MOTION_GLASS.project(mapped,t)
                 draw_reference_pointer(composed,float(mapped[0]),float(mapped[1]),
                     scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0]))*REFERENCE_POINTER.scale(t),
                     theme=args.cursor_pack,role=pointer_role)
@@ -691,8 +704,8 @@ def diagnostics():
             "hardCutSourceFrames":list(hard_cut_frames),
             "motionProfile":STUDIO_STAGE.motion_style,
             "stagePreset":STUDIO_STAGE.stage_preset,
-            "sameSourceFrameShutter":STUDIO_STAGE.shutter,
-            "cameraShutterFrames":sum(
+            "sameSourceFrameShutter":0. if MOTION_GLASS is not None else STUDIO_STAGE.shutter,
+            "cameraShutterFrames":0 if MOTION_GLASS is not None else sum(
                 STUDIO_STAGE.shutter_times((TRIM_FRAMES+i)/FPS) is not None
                 for i in range(frames))}
         if POINTER is not None:
@@ -790,6 +803,8 @@ def render(output,seconds=None,static=False):
             "render_seconds":round(time.monotonic()-start,2),
             "full_decode_verified":True,"static":static,
             "video":video}
+    if MOTION_GLASS is not None:
+        record["motionGlassStudy"]=MOTION_GLASS.receipt()
     if args.physical_cover_bake:
         record["physicalCoverStudy"]={"calibrationSha256":args.physical_cover_sha256,"method":"cycles-black-white-transfer","perFrameRayTracing":False,"creativeApproval":False}
     if FILM_PLAN is not None:
@@ -812,7 +827,7 @@ def render(output,seconds=None,static=False):
                 "payoffMode":STUDIO_STAGE.payoff_mode,
                 "motionProfile":STUDIO_STAGE.motion_style,
                 "stagePreset":STUDIO_STAGE.stage_preset,
-                "sameSourceFrameShutter":STUDIO_STAGE.shutter,
+                "sameSourceFrameShutter":0. if MOTION_GLASS is not None else STUDIO_STAGE.shutter,
                 "sourcePixelsOnly":STUDIO_STAGE.stage_preset not in ("cloud_window_fullglass_v1","cloud_window_clearface_v1","cloud_luminous_display_v1"),
                 "opticalSurfaceCoating":STUDIO_STAGE.stage_preset in ("cloud_window_fullglass_v1","cloud_window_clearface_v1","cloud_luminous_display_v1")}
         if DOM_PLANE_GROUP is not None:
