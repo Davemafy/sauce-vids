@@ -471,3 +471,24 @@ def test_reference_camera_disallows_immersive_without_source_pointer(capture):
     cfg['camera'][1]['viewScale']=1.2
     with pytest.raises(ValueError,match='requires opted-in'):
         load(cfg,m,src)
+
+
+def test_centered_clearface_dolly_preserves_complete_browser(capture):
+    _,src,m=capture
+    cfg=plan(appearance=False)
+    cfg["stagePreset"]="cloud_window_clearface_v1"
+    cfg["motion"]={"profile":"cinematic","immersive":True,"shutter":0}
+    cfg["camera"]=[
+        {"at":0,"scale":.88,"center":[.5,.5],"viewScale":1.},
+        {"at":1.1,"startAt":.2,"scale":.88,"center":[.5,.5],"viewScale":1.075},
+        {"at":2.4,"startAt":1.7,"scale":.88,"center":[.5,.5],"viewScale":1.}]
+    stage=load_studio_stage(cfg,m,src,(320,180),(1920,1080),2.4,25)
+    assert all(stage.context_visibility(i/25)>.999 for i in range(61))
+    assert stage.view_scale(1.1)==pytest.approx(1.075)
+    cfg["camera"][1]["viewScale"]=1.2
+    with pytest.raises(ValueError,match="Centered clearface"):
+        load_studio_stage(cfg,m,src,(320,180),(1920,1080),2.4,25)
+    cfg["camera"][1]["viewScale"]=1.075
+    cfg["camera"][1]["center"]=[.52,.5]
+    with pytest.raises(ValueError,match="Centered clearface"):
+        load_studio_stage(cfg,m,src,(320,180),(1920,1080),2.4,25)

@@ -1,6 +1,6 @@
 """Opt-in, bounded public SVG drawing research. Not a customer release path."""
 from __future__ import annotations
-import argparse,json,os,time,subprocess,tempfile,re,hashlib,sys
+import argparse,json,os,time,subprocess,tempfile,re,hashlib,sys,math
 from pathlib import Path
 from urllib.parse import urljoin
 import cv2,numpy as np
@@ -38,6 +38,25 @@ def crop(im,r):
 def change(a,b):return float(np.mean(np.max(cv2.absdiff(a,b),axis=2)>25))
 
 
+def drawing_path(width,height,count=84):
+    """A recognizable continuous heart, sampled by arc length in real pixels.
+
+    Shape is an authored demo gesture, never a generated SVG or screenshot.
+    Fit to a measured empty surface, leaving an ample safe border.
+    """
+    require(width>=400 and height>=300 and 48<=count<=100,"Invalid drawing geometry")
+    t=np.linspace(0,2*np.pi,513)
+    x=16*np.sin(t)**3
+    y=-(13*np.cos(t)-5*np.cos(2*t)-2*np.cos(3*t)-np.cos(4*t))
+    x-=.5*(x.max()+x.min());y-=.5*(y.max()+y.min())
+    factor=min(.68*width/np.ptp(x),.72*height/np.ptp(y))
+    px=.5*width+factor*x;py=.5*height+factor*y
+    lengths=np.r_[0,np.cumsum(np.hypot(np.diff(px),np.diff(py)))]
+    distance=np.linspace(0,lengths[-1],count+1)
+    return list(zip(np.interp(distance,lengths,px)/width,
+                    np.interp(distance,lengths,py)/height))
+
+
 def capture(origin,u,out,display):
     require(__debug__,'Optimized Python disables research assertions')
     require(focused_route_allowed(u,origin),'Unsafe source route')
@@ -69,9 +88,9 @@ def capture(origin,u,out,display):
        def paths():return loc.evaluate("e=>[...e.querySelectorAll('path')].map(p=>p.getAttribute('d'))")
        initial=paths();require(len(initial)==0, 'Drawing surface is not empty')
        require(page.url==u,'Unexpected route before gesture')
-       pts=[(.24,.63),(.30,.39),(.41,.31),(.50,.53),(.60,.68),(.71,.45),(.78,.34)]
+       pts=drawing_path(b['width'],b['height'])
        point=lambda pt:(b['x']+b['width']*pt[0],b['y']+b['height']*pt[1])
-       pos=[b['x']+b['width']*.13,b['y']+b['height']*.77];page.mouse.move(*pos)
+       pos=[b['x']+b['width']*.39,b['y']+b['height']*.24];page.mouse.move(*pos)
        page.screenshot(path=str(out/'before.png'),animations='disabled')
        page.wait_for_timeout(250);page.screenshot(path=str(out/'steady.png'),animations='disabled')
        steady=cv2.imread(str(out/'steady.png'));assert change(crop(cv2.imread(str(out/'before.png')),rect),crop(steady,rect))<.002
@@ -89,11 +108,13 @@ def capture(origin,u,out,display):
          v=k/n;q=v*v*(3-2*v) if ease else v
          move(sx+(tx-sx)*q,sy+(ty-sy)*q);time.sleep(max(0,start2+sec*v-time.monotonic()))
        try:
-        move(*pos);wait(.22);travel(point(pts[0]),.63,True);wait(.94);move(*pos)
-        require(page.evaluate('''([id,points])=>{const e=document.getElementById(id);return !!e&&points.every(([x,y])=>{const hit=document.elementFromPoint(x,y);return !!hit&&e.contains(hit)&&!hit.closest('a,button,form,[role=dialog]')})}''',[surface['id'],[point((a[0]+(z[0]-a[0])*i/10,a[1]+(z[1]-a[1])*i/10)) for a,z in zip(pts,pts[1:]) for i in range(11)]]),'Drawing path occluded');page.mouse.down();down=now()
+        move(*pos);wait(.12);travel(point(pts[0]),.57,True);wait(.83);move(*pos)
+        require(page.evaluate('''([id,points])=>{const e=document.getElementById(id);return !!e&&points.every(([x,y])=>{const hit=document.elementFromPoint(x,y);return !!hit&&e.contains(hit)&&!hit.closest('a,button,form,[role=dialog]')})}''',[surface['id'],[point(pt) for pt in pts]]),'Drawing path occluded');page.mouse.down();down=now()
         label='Freehand SVG stroke';events.append({'kind':'pointerdown','actionKind':'draw_stroke','label':label,'t':down,'targetRect':rect})
         try:
-         for pt in pts[1:]:travel(point(pt),.19)
+         started=time.monotonic()
+         for i,pt in enumerate(pts[1:],1):
+          move(*point(pt));time.sleep(max(0,started+2.15*i/(len(pts)-1)-time.monotonic()))
         finally:page.mouse.up()
         up=now();events.append({'kind':'pointerup','label':label,'t':up});page.wait_for_timeout(280)
         assert page.url==u and not visible_authentication_barrier(page)
@@ -101,7 +122,7 @@ def capture(origin,u,out,display):
         page.screenshot(path=str(out/'after.png'),animations='disabled');after=cv2.imread(str(out/'after.png'));delta=change(crop(steady,rect),crop(after,rect));assert delta>.004
         confirmed=now();assert confirmed<duration-2.0
         events.append({'kind':'verified_result','label':label,'t':confirmed,'resultRect':rect,'evidence':'Observed SVG path count increased and real drawing-surface pixels changed; local public freehand stroke'})
-        wait(4.8);travel(point((.85,.78)),.4,True);wait(6.1)
+        wait(4.35);travel(point((.85,.78)),.52,True);wait(6.1)
         enc.wait(timeout=20);assert enc.returncode==0
        finally:
         if enc.poll() is None:enc.terminate();enc.wait(timeout=10)

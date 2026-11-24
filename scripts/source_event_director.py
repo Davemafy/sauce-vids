@@ -93,6 +93,24 @@ def direction(video:Path,manifest:Path):
                    "minVisible":.90,"minContextVisible":.68}
        }
     }
+    if len(events)==1 and events[0]["kind"]=="draw_stroke":
+        e=events[0]
+        # Preserve the complete drawing surface during the actual stroke.
+        rise_start=after_visible(max(.18,e["start"]-.55))
+        rise_end=native(min(e["end"],e["start"]+.8))
+        release_start=after_visible(e["t"]+.35)
+        if rise_end>rise_start+.4 and release_start<duration-1.0:
+            def wide(at,view,start=None):
+                k={"at":at,"scale":.88,"viewScale":view,
+                   "center":[.5,.5],"yaw":0,"pitch":0}
+                if start is not None:k["startAt"]=start
+                return k
+            plan["studioStage"]["camera"]=[
+                wide(0,1.),wide(rise_end,1.075,rise_start),
+                wide(native(duration-.35),1.,release_start),
+                wide(duration,1.)]
+            plan["studioStage"]["motion"]={"profile":"cinematic","immersive":True,"shutter":0}
+            plan["studioStage"]["payoff"].update(mode="overview",minVisible=.99,minContextVisible=.99)
     return plan
 
 

@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.public_drawing_gesture import select_drawing_route, run, render_admitted
+from backend.public_drawing_gesture import select_drawing_route, run, render_admitted, drawing_path
 
 
 class PublicDrawingGestureTests(unittest.TestCase):
@@ -13,6 +13,15 @@ class PublicDrawingGestureTests(unittest.TestCase):
         self.page={"url":self.url+"drawing","title":"Freehand SVG drawing tool",
                    "text":"Pick a brush and start drawing"}
         self.research={"requested_url":self.url,"pages":[self.page]}
+
+    def test_drawing_is_closed_bounded_and_sized_in_actual_surface(self):
+        for width,height in [(1083,609),(400,300),(1400,350)]:
+            pts=drawing_path(width,height)
+            self.assertEqual(len(pts),85)
+            self.assertAlmostEqual(pts[0][0],pts[-1][0])
+            self.assertAlmostEqual(pts[0][1],pts[-1][1])
+            self.assertTrue(all(.15<=x<=.85 and .13<=y<=.87 for x,y in pts))
+            self.assertGreater(max(y for x,y in pts)-min(y for x,y in pts),.35)
 
     @patch("backend.public_drawing_gesture.validate_public_url")
     def test_observed_unique_route(self, validate):

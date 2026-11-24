@@ -294,7 +294,7 @@ class StudioStage:
         # source event. In a true close-up, keep the *upper* result controls
         # legible, instead of enlarging the modal until its header vanishes.
         # Never focus on that region BEFORE its recorded appearance.
-        if (self.immersive and t>=self.onset["time"] and
+        if (self.immersive and self.motion_style=="reference-spring" and t>=self.onset["time"] and
                 zoom>1.03 and self.result_rect is not None):
             x,y,w,h=self.result_rect
             sw,sh=self.source_size
@@ -473,7 +473,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
         raise ValueError("Recorded pointer following requires reference-spring motion profile")
     immersive=motion.get("immersive",False)
     if type(immersive) is not bool or (immersive and
-                                      (profile!="reference-spring" or
+                                      (profile not in ("reference-spring","cinematic") or
                                        stage_preset not in ("cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1","cloud_window_clearface_v1","cloud_luminous_display_v1"))):
         raise ValueError("Physical window push needs cloud stage and verified spring camera")
     shutter=_number(motion.get("shutter",0.),"studioStage.motion.shutter",0,.75)
@@ -588,6 +588,20 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
     visible=_number(payoff.get("minVisible",.82),"studioStage.payoff.minVisible",.6,1)
     # Only a source-bound observed pointer+verified event can authorize this
     # additional small camera displacement. Existing films remain unchanged.
+    # Non-follow immersion is restricted to a centered, complete clearface overview.
+    if immersive and profile=="cinematic":
+        if (stage_preset!="cloud_window_clearface_v1" or mode!="overview"
+                or abs(parsed[0].view_scale-1.)>1e-6
+                or any(k.cut or abs(k.scale-parsed[0].scale)>1e-6
+                       or abs(k.center_x-.5)>1e-6 or abs(k.center_y-.5)>1e-6
+                       or abs(k.yaw)>1e-6 or abs(k.pitch)>1e-6
+                       or k.focus!="wide" or k.view_scale>1.075 for k in parsed)):
+            raise ValueError("Centered clearface overview dolly requires constant source geometry and viewScale <=1.075")
+        from cloud_window_sky_stage import window_geometry
+        x0,y0,x1,y1,_=window_geometry(source_size,output_size)
+        max_view=max(k.view_scale for k in parsed)
+        if max_view*(x1-x0)>output_size[0]-24 or max_view*(y1-y0)>output_size[1]-24:
+            raise ValueError("Overview dolly would clip the complete source aperture")
     follower=(build_follow(manifest,source_size,duration,fps,motion["follow"])
               if profile=="reference-spring" else None)
     obj=StudioStage(tuple(parsed),rgb,grain,depth,reflection,index,intensity,seconds,
