@@ -13,6 +13,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 import cv2
 import numpy as np
 from scripts.capture_safety import validate_public_url, guard_route
@@ -194,7 +195,8 @@ def visible_result_box(page,control):
 
 
 def probe_public_action(url: str, report: dict, control_id: str,
-                        private_dir: Path, *, browser_executable: str | None = None) -> dict:
+                        private_dir: Path, *, browser_executable: str | None = None,
+                        local_only: bool = False) -> dict:
     """Trigger one preapproved, non-submitting action in a disposable browser.
 
     Sensitive forms, cross-origin links, login and paid actions are excluded
@@ -234,12 +236,25 @@ def probe_public_action(url: str, report: dict, control_id: str,
         try:
             context=b.new_context(viewport={'width':1280,'height':720},
                                   service_workers='block')
-            context.route('**/*',guard_route)
+            def same_route(target):
+                a,b=urlsplit(url),urlsplit(target)
+                return ((a.scheme,a.netloc.lower(),a.path.rstrip('/')) ==
+                        (b.scheme,b.netloc.lower(),b.path.rstrip('/'))
+                        and not b.query and not b.username and not b.password)
+            def route_guard(route):
+                request=route.request
+                if local_only and request.is_navigation_request():
+                    if not same_route(request.url):
+                        return route.abort("blockedbyclient")
+                return guard_route(route)
+            context.route('**/*',route_guard)
             page=context.new_page()
             response=page.goto(url,wait_until='domcontentloaded',timeout=28000)
             if response and response.status>=400:
                 raise RuntimeError('Original public site was not accessible')
             validate_public_url(page.url)
+            if local_only and not same_route(page.url):
+                raise ValueError('Unexpected source route')
             page.wait_for_timeout(550)
             locator=page.locator(c['selector'])
             if locator.count()!=1 or not locator.is_visible():
@@ -265,6 +280,8 @@ def probe_public_action(url: str, report: dict, control_id: str,
             locator.click(timeout=4200)
             page.wait_for_timeout(750)
             validate_public_url(page.url)
+            if local_only and not same_route(page.url):
+                raise ValueError('Action left the verified public route')
             after_state=_fingerprint(page.evaluate(FINGERPRINT_JS))
             after_box=locator.bounding_box()
             after_scroll=page.evaluate('({x:scrollX,y:scrollY})')

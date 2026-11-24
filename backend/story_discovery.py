@@ -12,7 +12,8 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit, unquote, urljoin
+from urllib.robotparser import RobotFileParser
 from urllib.request import Request, urlopen
 
 from backend.product_explorer import CHROME, JS, SAFE_LABEL, UNSAFE_LABEL, UNSAFE_PATH
@@ -32,6 +33,59 @@ NAV_PRIORITY = re.compile(
     r"platform|product|how it works)\b", re.I
 )
 SCHEMA = "sauce-grounded-storyboard-v1"
+
+# Opt-in route exploration: rank actual public links, never guess paths.
+PRODUCT_ROUTE = re.compile(r"(?i)(?:^|[ /_-])(?:editor|playground|sandbox|demo|examples?|components?|community|templates?|tools?|workspace|app|try)(?:$|[ /_-])")
+NON_PRODUCT_ROUTE = re.compile(r"(?i)(?:^|[ /_-])(?:pricing|privacy|terms|blog|legal|contact|careers|docs|documentation|changelog)(?:$|[ /_-])")
+ROUTE_BLOCK = re.compile(r"(?i)(?:^|/)(?:api|auth|login|log-in|sign-in|signin|sign-up|signup|register|account|checkout|payment|billing|admin|logout|signout|callback|token|session|delete|purchase|download)(?:/|$)")
+
+def focused_route_allowed(href, origin):
+    """Reject sensitive, encoded or malformed paths, even after a redirect."""
+    if not public_same_origin(href, origin):
+        return False
+    u = urlsplit(href)
+    path = unquote(u.path or "/")
+    return not ("%" in path or "\\" in path or "//" in path or
+                any(p in (".", "..") for p in path.split("/")) or
+                UNSAFE_PATH.search(path) or ROUTE_BLOCK.search(path))
+
+def focused_routes(controls, origin):
+    """Rank observed public hrefs; preserve source order for equal evidence."""
+    routes = {}
+    for index, c in enumerate(controls):
+        if c.get("kind") != "link" or not c.get("href"):
+            continue
+        href, label = c["href"], str(c.get("text", ""))
+        if not focused_route_allowed(href, origin) or UNSAFE_LABEL.search(label):
+            continue
+        u = urlsplit(href)
+        path = unquote(u.path or "/")
+        detail = bool(re.search(r"/(?:examples?|demos?|playground|components?|editor)/[^/]+",path,re.I))
+        if NON_PRODUCT_ROUTE.search(path) and not detail:
+            continue
+        route = urlunsplit((u.scheme, u.netloc, u.path or "/", "", ""))
+        if route == urlunsplit((*urlsplit(origin)[:2],urlsplit(origin).path or "/", "", "")):
+            continue
+        score = 3*bool(PRODUCT_ROUTE.search(path)) + 2*bool(PRODUCT_ROUTE.search(label)) + 3*detail
+        if score and (route not in routes or score > routes[route][0]):
+            routes[route] = (score,index)
+    return sorted(routes,key=lambda route:(-routes[route][0],routes[route][1]))[:8]
+
+def route_robots_allowed(context, url):
+    """Require robots permission before focused route exploration."""
+    robot = context.new_page()
+    try:
+        response = robot.goto(urljoin(url,"/robots.txt"),wait_until="domcontentloaded",timeout=12000)
+        if response and response.status == 404:
+            return True
+        if not response or response.status != 200 or not public_same_origin(robot.url,url):
+            return False
+        parser = RobotFileParser()
+        parser.parse(robot.locator("body").inner_text(timeout=3000)[:160000].splitlines())
+        return parser.can_fetch("SauceBasicPreviewBot/0.1",url)
+    finally:
+        robot.close()
+
 
 
 def _clean_text(text: str, limit=7000) -> str:
@@ -78,7 +132,7 @@ def action_policy(control: dict, page_url: str) -> dict:
 
 
 def discover_public_product(url: str, private_dir: str | Path, *, max_pages=4,
-                            max_controls=48, max_text=7000) -> dict:
+                            max_controls=48, max_text=7000, route_focus=False) -> dict:
     """Navigate only to observed same-origin public links; never press buttons."""
     from playwright.sync_api import sync_playwright
     if type(max_pages) is not int or not 1 <= max_pages <= 5:
@@ -98,13 +152,30 @@ def discover_public_product(url: str, private_dir: str | Path, *, max_pages=4,
             context = browser.new_context(
                 viewport={"width": 1440, "height": 900},
                 device_scale_factor=2, service_workers="block")
-            context.route("**/*", guard_route)
-            while queue and len(pages) < max_pages:
+            def focused_guard(route):
+                req = route.request
+                if route_focus and req.is_navigation_request():
+                    if not focused_route_allowed(req.url, url):
+                        return route.abort("blockedbyclient")
+                return guard_route(route)
+            context.route("**/*", focused_guard if route_focus else guard_route)
+            while queue and len(pages) < max_pages and len(seen) < max_pages * 2:
                 target = queue.pop(0)
                 if target in seen or not public_same_origin(target, url):
                     continue
                 seen.add(target)
                 validate_public_url(target)
+                if route_focus:
+                    if not focused_route_allowed(target,url):
+                        failures.append("unsafe route rejected")
+                        continue
+                    try:
+                        if not route_robots_allowed(context,target):
+                            failures.append("robots denied: " + target)
+                            continue
+                    except Exception as exc:
+                        failures.append("robots unavailable: " + target)
+                        continue
                 page = context.new_page()
                 try:
                     response = page.goto(target, wait_until="domcontentloaded",
@@ -112,7 +183,7 @@ def discover_public_product(url: str, private_dir: str | Path, *, max_pages=4,
                     if response and response.status >= 400:
                         failures.append(f"HTTP {response.status} at {target}")
                         continue
-                    if not public_same_origin(page.url, url):
+                    if not public_same_origin(page.url, url) or (route_focus and not focused_route_allowed(page.url,url)):
                         failures.append("Redirected outside observed public origin")
                         continue
                     page.wait_for_timeout(900)
@@ -152,6 +223,22 @@ def discover_public_product(url: str, private_dir: str | Path, *, max_pages=4,
                         "controls": controls,
                         "screenshot": str(capture)
                     })
+                    if route_focus:
+                        routes = focused_routes(data.get("controls", []),url)
+                        # A catalog's concrete child examples outrank generic
+                        # sibling pages already waiting in the frontier.
+                        prefix = urlsplit(target).path.rstrip("/") + "/"
+                        children = [r for r in routes if target != url and
+                                    urlsplit(r).path.startswith(prefix)]
+                        for route in reversed(children):
+                            if route not in seen:
+                                if route in queue:
+                                    queue.remove(route)
+                                queue.insert(0,route)
+                        for route in routes:
+                            if route not in seen and route not in queue:
+                                queue.append(route)
+                        continue
                     choices = [c for c in controls
                                if c["policy"]["class"] == "read_only_navigation"
                                and c.get("href")
@@ -180,6 +267,8 @@ def discover_public_product(url: str, private_dir: str | Path, *, max_pages=4,
         "research_limits": {"max_pages": max_pages,
                             "max_controls_per_page": max_controls,
                             "max_text_chars_per_page": max_text},
+        "route_focus": bool(route_focus), "attempted_routes": len(seen),
+        "failures": failures[:10],
         "creative_approved": False
     }
     (root / "research.json").write_text(json.dumps(report, indent=2) + "\n")
