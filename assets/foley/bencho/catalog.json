@@ -1,0 +1,109 @@
+{
+  "upstream": "84dfcee170171257a28631402d37ff34900bc773",
+  "license": "MIT",
+  "sampleRate": 48000,
+  "peak": 0.55,
+  "aliases": {
+    "click_crisp": "tick",
+    "whoosh_soft": "glide",
+    "pop_glass": "plop"
+  },
+  "sounds": {
+    "paid": {
+      "samples": 27840,
+      "sha256": "10ab8782be6fda0886a9f8b5f26352c89ded489e45cc994acd00c5eb569069a9"
+    },
+    "landed": {
+      "samples": 36240,
+      "sha256": "91d854e0c255b0354e3a47abe9cd4074f0fdc4da8d143011325643e2de15ac5f"
+    },
+    "plop": {
+      "samples": 4128,
+      "sha256": "153ba960106ff5283c97f89359a33b8410cd08bc8587613c739cd05190a897e7"
+    },
+    "beacon": {
+      "samples": 30096,
+      "sha256": "275e50fa4073a7ca75c167053f08a3c3566d4dd9ea8c643d1b2d93f05f0f6140"
+    },
+    "drift": {
+      "samples": 13200,
+      "sha256": "ff10f8e8adbde0f514e1d631010f9132059b6958f3009d4658505f545abbf006"
+    },
+    "hush": {
+      "samples": 5424,
+      "sha256": "7fae51160f6c1e576e41e40890b784983e3454a2ef365ac9cbaf208f0371498e"
+    },
+    "wisp": {
+      "samples": 3024,
+      "sha256": "c24a92e611333a4cc683b74940cbd5902ae81977c40ff3a28c43443554cfdec9"
+    },
+    "sigh": {
+      "samples": 2544,
+      "sha256": "31b64448f2b346d9f07bc11b9f31cfbd306350f803d974a22c6b8ed561d31e0b"
+    },
+    "perk": {
+      "samples": 18480,
+      "sha256": "d48d30b666ff6e2619d59d11668fab8a679d56bee635d652b519c2a0589de840"
+    },
+    "purr": {
+      "samples": 18000,
+      "sha256": "45912874b150aab84f17fccd6f1c8b577591a646f05eb0da12022ed2c9cf5d6b"
+    },
+    "lull": {
+      "samples": 11472,
+      "sha256": "804f69c66aa9d1109fe6b69692ad7ff8bba040948cd87328d96adf778e7242a8"
+    },
+    "whisk": {
+      "samples": 7440,
+      "sha256": "5f6a4d400eaf0075df463d4d79cfdc8b469a04e5c988f58e34359b87575f1bca"
+    },
+    "buzz": {
+      "samples": 2352,
+      "sha256": "34d45860ada16e815e2e012f7e5a2a6edf6412b43402a0c90ae95b5642ede962"
+    },
+    "bump": {
+      "samples": 6960,
+      "sha256": "45af01905c19658fdb23f46e3a62e4961a2639eb481128bf5cc7c79832f65edc"
+    },
+    "float": {
+      "samples": 16656,
+      "sha256": "3513ac7829443b2b9bd4fa4161b02f9a2351efb718beea0410a0501ea3683b29"
+    },
+    "glide": {
+      "samples": 11040,
+      "sha256": "0e1d60503f791750d83bcf53a5c1bb165cbfe2e1cbe8037e9c03205df2c85e50"
+    },
+    "step": {
+      "samples": 16128,
+      "sha256": "cfc96a4edcfbe01299a77155b4b59c80716d7f9787318e2623db6b8d37ec33c8"
+    },
+    "wander": {
+      "samples": 16848,
+      "sha256": "b910c766f58fbe4016d784d7e6e4564e37c1510792a33c28532756b94ce5f9d2"
+    },
+    "tick": {
+      "samples": 8400,
+      "sha256": "8791e6b8ce44a3e6bbd3742c84016f7219160eb9ce454271f7599e464112a0bd"
+    },
+    "latch": {
+      "samples": 5520,
+      "sha256": "9fd722774ca1ef4bf140fbb6313f2a12c2ec45a65fb6c1ad1f2bdcf4e7ae05d2"
+    },
+    "hail": {
+      "samples": 18480,
+      "sha256": "2436e8e6f6153d84095200be81da289b132e5b71db2be3c3ab76d75d973d91ba"
+    },
+    "drape": {
+      "samples": 11520,
+      "sha256": "38d0d4e301c92c101eee446af61de780d5acf033b93b539c8fe061a74cf942aa"
+    },
+    "boot": {
+      "samples": 18480,
+      "sha256": "0634acf1b6b850391e7dad8982ebf3570aa1c2895a20fa59411fa05cacd9eb8f"
+    },
+    "drone": {
+      "samples": 15312,
+      "sha256": "4ee21ee843e639464e3f56c7bb02517a62b78a22bab9c3a7bc534edfdc4a4908"
+    }
+  }
+}

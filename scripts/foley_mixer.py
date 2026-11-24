@@ -1,6 +1,6 @@
 """48 kHz sample-accurate Foley for Sauce's versioned FoleyPlan.
 
-No remote assets or implicit soundtrack. Local WAV/OGG samples may replace the
+No remote assets or implicit soundtrack. Local WAV/OGG/FLAC samples may replace the
 three deliberately subtle, reproducible NumPy/SciPy synths. This module NEVER
 reads screenshots, clipboard contents, input text or the user's raw session.
 """
@@ -57,7 +57,7 @@ def _sample_asset(sound:str,asset_dir:Path|None)->np.ndarray|None:
     root=Path(asset_dir).resolve()
     if not root.is_dir():raise FileNotFoundError(root)
     # Fixed allowlist, never paths or filenames originating in the trace.
-    candidate=next((root/(sound+ext) for ext in ('.wav','.ogg')
+    candidate=next((root/(sound+ext) for ext in ('.wav','.ogg','.flac')
                     if (root/(sound+ext)).is_file()),None)
     if candidate is None:return None
     if candidate.resolve().parent!=root:raise ValueError('Unsafe Foley asset path')

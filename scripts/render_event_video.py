@@ -33,6 +33,7 @@ parser.add_argument("--film-plan",type=Path,help="Validated source-true creative
 parser.add_argument("--validate-only",action="store_true",help="Check source, keyframes and motion without exporting frames")
 parser.add_argument("--output",type=Path,help="Output MP4 path (default: alongside the manifest)")
 parser.add_argument("--music",type=Path,help="Optional licensed audio recording")
+parser.add_argument("--foley-bank",choices=["bencho","procedural"],default="bencho",help="Licensed Bencho cues or legacy procedural sounds for eventFoley")
 parser.add_argument("--preview",type=float)
 parser.add_argument("--seconds",type=float)
 parser.add_argument("--static",action="store_true")
@@ -372,8 +373,10 @@ if FILM_PLAN_DATA is not None and FILM_PLAN_DATA.get("audio",{}).get("mode")=="e
                 "muted":False,"duckIntervals":[],"cues":cues}
     if not args.validate_only:
         FILM_FOLEY=WORKDIR/"source-verified-event-foley.wav"
-        FOLEY_RECEIPT=render_foley_plan(audio_plan,FILM_FOLEY,
+        bank=Path(__file__).resolve().parents[1]/"assets"/"foley"/"bencho" if args.foley_bank=="bencho" else None
+        FOLEY_RECEIPT=render_foley_plan(audio_plan,FILM_FOLEY,asset_dir=bank,
                                 target_duration_ms=FILM_PLAN.duration*1000)
+        FOLEY_RECEIPT["sound_bank"]=args.foley_bank
         (WORKDIR/"source-verified-foley-receipt.json").write_text(
              json.dumps({"verifiedSourceEvents":event_receipts,
                          **FOLEY_RECEIPT},indent=2))
