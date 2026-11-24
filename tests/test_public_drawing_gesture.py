@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.public_drawing_gesture import select_drawing_route, run, render_admitted, drawing_path
+from backend.public_drawing_gesture import select_drawing_route, run, render_admitted, drawing_path, layout, layout_ok
 
 
 class PublicDrawingGestureTests(unittest.TestCase):
@@ -22,6 +22,32 @@ class PublicDrawingGestureTests(unittest.TestCase):
             self.assertAlmostEqual(pts[0][1],pts[-1][1])
             self.assertTrue(all(.15<=x<=.85 and .13<=y<=.87 for x,y in pts))
             self.assertGreater(max(y for x,y in pts)-min(y for x,y in pts),.35)
+
+    def test_layout_rejects_hidden_or_covered_controls(self):
+        self.assertTrue(layout_ok({"controls":18,"offscreen":0,"occluded":0}))
+        self.assertFalse(layout_ok({"controls":17,"offscreen":6,"occluded":0}))
+        self.assertFalse(layout_ok({"controls":18,"offscreen":0,"occluded":1}))
+        self.assertFalse(layout_ok({"controls":2,"offscreen":0,"occluded":0}))
+
+    def test_browser_layout_measures_offscreen_and_overlay(self):
+        from playwright.sync_api import sync_playwright
+        from backend.product_explorer import CHROME
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(executable_path=CHROME,headless=True,args=["--no-sandbox"])
+            try:
+                page=browser.new_page(viewport={"width":800,"height":600})
+                page.set_content("""<main><svg id="surface" width="400" height="300"></svg>
+                   <input type="range" style="position:absolute;left:20px;top:320px;width:100px;height:25px">
+                   <button style="position:absolute;left:20px;top:365px;width:100px;height:40px">Brush</button>
+                   <button style="position:absolute;left:20px;top:640px;width:100px;height:40px">Preset</button>
+                   </main>""")
+                first=layout(page,{"id":"surface"})
+                self.assertEqual(first["offscreen"],1)
+                page.set_viewport_size({"width":800,"height":720})
+                self.assertTrue(layout_ok(layout(page,{"id":"surface"})))
+                page.evaluate("""()=>{const o=document.createElement('div');o.style='position:fixed;left:0;bottom:0;width:100%;height:100px;background:black;z-index:100';document.body.append(o)}""")
+                self.assertEqual(layout(page,{"id":"surface"})["occluded"],1)
+            finally:browser.close()
 
     @patch("backend.public_drawing_gesture.validate_public_url")
     def test_observed_unique_route(self, validate):

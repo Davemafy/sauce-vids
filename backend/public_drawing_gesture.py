@@ -10,6 +10,7 @@ from scripts.capture_safety import guard_route,validate_public_url
 from backend.source_action_preflight import visible_authentication_barrier
 from scripts.session_capture import MOCKUP_SCROLLBAR_STYLE
 from backend.outcome_editorial_gate import evaluate
+from backend.product_explorer import CHROME
 
 def require(value,message):
     if not value: raise ValueError(message)
@@ -57,6 +58,64 @@ def drawing_path(width,height,count=84):
                     np.interp(distance,lengths,py)/height))
 
 
+
+# Measure the editor's actual control visibility, including sticky overlays.
+LAYOUT_JS="""id=>{
+ const surface=document.getElementById(id);
+ if(!surface)return null;
+ let root=surface.parentElement;
+ while(root&&root!==document.body&&!root.querySelector('input[type=range]'))root=root.parentElement;
+ if(!root||root===document.body)return null;
+ const rows=[...root.querySelectorAll('button,input,select,[role=button]')]
+ .filter(e=>e.checkVisibility()&&!e.disabled&&e.type!=='hidden')
+ .map(e=>{
+   const r=e.getBoundingClientRect();
+   const inside=r.x>=0&&r.y>=0&&r.right<=innerWidth&&r.bottom<=innerHeight;
+   const points=[[.5,.5],[.15,.15],[.85,.15],[.15,.85],[.85,.85]];
+   const covered=inside&&!points.every(([x,y])=>{const hit=document.elementFromPoint(r.x+r.width*x,r.y+r.height*y);return hit&&(e===hit||e.contains(hit))});
+   return {inside,covered,w:r.width,h:r.height};
+ }).filter(r=>r.w>=8&&r.h>=8);
+ return {controls:rows.length,offscreen:rows.filter(r=>!r.inside).length,
+         occluded:rows.filter(r=>r.covered).length};
+}"""
+
+def layout(page,surface):
+    result=page.evaluate(LAYOUT_JS,surface["id"])
+    require(result is not None and result["controls"]>=3,"No measurable editor controls")
+    return result
+
+def layout_ok(result):
+    return result["controls"]>=3 and result["offscreen"]==0 and result["occluded"]==0
+
+def choose_viewport(origin,u):
+    require(focused_route_allowed(u,origin),"Unsafe source route")
+    trials=[]
+    with sync_playwright() as pw:
+        browser=pw.chromium.launch(executable_path=CHROME,headless=True,args=["--no-sandbox"])
+        try:
+            c=browser.new_context(viewport={"width":1440,"height":900},
+                                  service_workers="block",accept_downloads=False,permissions=[])
+            def route(r):
+                if r.request.is_navigation_request() and r.request.url not in (u,urljoin(u,"/robots.txt")):
+                    return r.abort("blockedbyclient")
+                return guard_route(r)
+            c.route("**/*",route);c.route_web_socket("**/*",lambda ws:ws.close())
+            require(route_robots_allowed(c,u),"Robots disallows route")
+            page=c.new_page();res=page.goto(u,wait_until="domcontentloaded",timeout=25000)
+            require(res and res.status==200 and page.url==u,"Unexpected layout route")
+            page.wait_for_timeout(1000)
+            for width,height in ((1440,900),(1600,1100),(1600,1160),(1600,1240)):
+                page.set_viewport_size({"width":width,"height":height})
+                page.wait_for_timeout(250)
+                surfaces=page.evaluate(SURFACE_JS)
+                if len(surfaces)!=1:continue
+                row=layout(page,surfaces[0]);trials.append({"width":width,"height":height,**row})
+                # Reserve extra footer room for newly revealed result controls.
+                if layout_ok(row) and height>=1160:
+                    return width,height,trials
+        finally:browser.close()
+    raise ValueError("No complete supported editor viewport: "+str(trials))
+
 def capture(origin,u,out,display):
     require(__debug__,'Optimized Python disables research assertions')
     require(focused_route_allowed(u,origin),'Unsafe source route')
@@ -65,12 +124,15 @@ def capture(origin,u,out,display):
     require(not Path('/tmp/.X11-unix/X'+display[1:]).exists(),'Display already in use')
     old_display=os.environ.get('DISPLAY')
     out.mkdir(mode=0o700,parents=True,exist_ok=False)
-    duration=6.5
-    x=subprocess.Popen(['Xvfb',display,'-screen','0','2880x1800x24','-nolisten','tcp','-ac'],stdout=subprocess.DEVNULL,stderr=(out/'xvfb.log').open('w'))
+    width,height,trials=choose_viewport(origin,u)
+    pixel_width,pixel_height=width*2,height*2
+    (out/'layout.json').write_text(json.dumps({"trials":trials,"chosen":[width,height]},indent=2))
+    duration=7.5
+    x=subprocess.Popen(['Xvfb',display,'-screen','0',f'{pixel_width}x{pixel_height}x24','-nolisten','tcp','-ac'],stdout=subprocess.DEVNULL,stderr=(out/'xvfb.log').open('w'))
     try:
      time.sleep(.6);require(x.poll() is None,'Display unavailable');os.environ['DISPLAY']=display
      with sync_playwright() as pw,tempfile.TemporaryDirectory() as profile:
-      c=pw.chromium.launch_persistent_context(profile,headless=False,executable_path='/opt/continuity-remote/chromium/chrome',args=['--no-sandbox','--disable-dev-shm-usage','--window-position=0,0','--window-size=1440,900','--force-device-scale-factor=2','--app=about:blank'],viewport={'width':1440,'height':900},device_scale_factor=2,service_workers='block',accept_downloads=False,permissions=[])
+      c=pw.chromium.launch_persistent_context(profile,headless=False,executable_path='/opt/continuity-remote/chromium/chrome',args=['--no-sandbox','--disable-dev-shm-usage','--window-position=0,0',f'--window-size={width},{height}','--force-device-scale-factor=2','--app=about:blank'],viewport={'width':width,'height':height},device_scale_factor=2,service_workers='block',accept_downloads=False,permissions=[])
       try:
        def route(r):
         if r.request.is_navigation_request() and r.request.url not in (u,urljoin(u,'/robots.txt')):return r.abort('blockedbyclient')
@@ -81,21 +143,33 @@ def capture(origin,u,out,display):
        page=c.pages[0];res=page.goto(u,wait_until='domcontentloaded',timeout=25000);assert res.status==200 and page.url==u
        cdp=c.new_cdp_session(page);window=cdp.send('Browser.getWindowForTarget')['windowId'];cdp.send('Browser.setWindowBounds',{'windowId':window,'bounds':{'windowState':'fullscreen'}})
        page.wait_for_timeout(6000);page.add_style_tag(content=MOCKUP_SCROLLBAR_STYLE)
-       assert page.evaluate('()=>[innerWidth,innerHeight,devicePixelRatio]')==[1440,900,2]
+       assert page.evaluate('()=>[innerWidth,innerHeight,devicePixelRatio]')==[width,height,2]
        assert not visible_authentication_barrier(page)
        ss=page.evaluate(SURFACE_JS);require(len(ss)==1, 'No unique visible drawing surface')
        surface=ss[0];b=surface['box'];rect=native(b);loc=page.locator('[id='+json.dumps(surface['id'])+']');assert loc.count()==1
        def paths():return loc.evaluate("e=>[...e.querySelectorAll('path')].map(p=>p.getAttribute('d'))")
        initial=paths();require(len(initial)==0, 'Drawing surface is not empty')
+       before_layout=layout(page,surface)
+       require(layout_ok(before_layout),'Editor controls obstructed before recording')
+       # Real local color preparation, never fabricated pixels or a claimed event.
+       palette=page.evaluate("""()=>[...document.querySelectorAll('[style]')].map(e=>{
+        const r=e.getBoundingClientRect(),bg=getComputedStyle(e).backgroundColor;
+        return {x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height,bg,
+          safe:e.checkVisibility()&&!e.closest('a,button,form,[role=dialog]')&&e.classList.contains('swatch')&&e.hasAttribute('@click')&&document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===e};
+       }).filter(e=>e.safe&&e.w>=20&&e.w<=100&&e.h>=20&&e.h<=100&&e.bg==='rgb(179, 51, 26)')""")
+       if len(palette)==1:
+        sw=palette[0];page.mouse.click(sw["x"],sw["y"]);page.wait_for_timeout(200)
+        require(page.url==u and not visible_authentication_barrier(page),'Unsafe palette outcome')
+        require(paths()==initial,'Palette unexpectedly modified drawing')
        require(page.url==u,'Unexpected route before gesture')
-       pts=drawing_path(b['width'],b['height'])
+       pts=drawing_path(b['width'],b['height'],count=64)
        point=lambda pt:(b['x']+b['width']*pt[0],b['y']+b['height']*pt[1])
        pos=[b['x']+b['width']*.39,b['y']+b['height']*.24];page.mouse.move(*pos)
        page.screenshot(path=str(out/'before.png'),animations='disabled')
        page.wait_for_timeout(250);page.screenshot(path=str(out/'steady.png'),animations='disabled')
        steady=cv2.imread(str(out/'steady.png'));assert change(crop(cv2.imread(str(out/'before.png')),rect),crop(steady,rect))<.002
        video=out/'source.mp4';samples=[];events=[]
-       enc=subprocess.Popen(['ffmpeg','-v','error','-y','-f','x11grab','-draw_mouse','0','-video_size','2880x1800','-framerate','60','-i',display,'-t',str(duration),'-c:v','libx264','-preset','ultrafast','-crf','14','-pix_fmt','yuv420p','-threads','4','-an','-movflags','+faststart',str(video)],stderr=(out/'record.log').open('w'))
+       enc=subprocess.Popen(['ffmpeg','-v','error','-y','-f','x11grab','-draw_mouse','0','-video_size',f'{pixel_width}x{pixel_height}','-framerate','60','-i',display,'-t',str(duration),'-c:v','libx264','-preset','ultrafast','-crf','14','-pix_fmt','yuv420p','-threads','4','-an','-movflags','+faststart',str(video)],stderr=(out/'record.log').open('w'))
        start=time.monotonic()
        def now():return round(time.monotonic()-start,6)
        def move(a,b):
@@ -114,20 +188,24 @@ def capture(origin,u,out,display):
         try:
          started=time.monotonic()
          for i,pt in enumerate(pts[1:],1):
-          move(*point(pt));time.sleep(max(0,started+2.15*i/(len(pts)-1)-time.monotonic()))
+          move(*point(pt));time.sleep(max(0,started+1.6*i/(len(pts)-1)-time.monotonic()))
         finally:page.mouse.up()
         up=now();events.append({'kind':'pointerup','label':label,'t':up});page.wait_for_timeout(280)
         assert page.url==u and not visible_authentication_barrier(page)
         final=paths();assert len(final)>len(initial)
         page.screenshot(path=str(out/'after.png'),animations='disabled');after=cv2.imread(str(out/'after.png'));delta=change(crop(steady,rect),crop(after,rect));assert delta>.004
         confirmed=now();assert confirmed<duration-2.0
+        after_layout=layout(page,surface)
+        (out/'layout.json').write_text(json.dumps({"trials":trials,"chosen":[width,height],
+            "before":before_layout,"after":after_layout,"palettePrepared":len(palette)==1},indent=2))
+        require(layout_ok(after_layout),'Editor controls obstructed after drawing')
         events.append({'kind':'verified_result','label':label,'t':confirmed,'resultRect':rect,'evidence':'Observed SVG path count increased and real drawing-surface pixels changed; local public freehand stroke'})
-        wait(4.35);travel(point((.85,.78)),.52,True);wait(6.1)
+        wait(5.05);travel(point((.85,.78)),.52,True);wait(7.1)
         enc.wait(timeout=20);assert enc.returncode==0
        finally:
         if enc.poll() is None:enc.terminate();enc.wait(timeout=10)
        meta=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','stream=width,height,avg_frame_rate,nb_frames','-of','json',str(video)]))['streams'][0]
-       assert (meta['width'],meta['height'],meta['avg_frame_rate'],int(meta['nb_frames']))==(2880,1800,'60/1',390)
+       assert (meta['width'],meta['height'],meta['avg_frame_rate'],int(meta['nb_frames']))==(pixel_width,pixel_height,'60/1',450)
        # Match independent browser stills to decoded video frames: no chrome displacement.
        cap=cv2.VideoCapture(str(video))
        def read(t):
@@ -135,7 +213,7 @@ def capture(origin,u,out,display):
        def mae(a,b):return float(np.mean(np.abs(cv2.resize(a,(480,300)).astype(float)-cv2.resize(b,(480,300)).astype(float))))
        first=read(.35);late=read(confirmed+.25);assert mae(first,steady)<4 and mae(late,after)<4,(mae(first,steady),mae(late,after))
        decoded_delta=change(crop(first,rect),crop(late,rect));assert decoded_delta>.004;cap.release()
-       raw={'schema':'sauce-native-draw-research-v1','source':u,'capture':'Chromium X11 native DPR2 60fps','source_sha256':sha(video),'cursorless':True,'capture_rect':{'width':2880,'height':1800},'frameCount':390,'events':events,'pointer_samples':samples,'before_paths':len(initial),'after_paths':len(final),'surface_pixel_change':delta,'decoded_surface_pixel_change':decoded_delta,'creativeApproved':False}
+       raw={'schema':'sauce-native-draw-research-v1','source':u,'capture':'Chromium X11 native DPR2 60fps','source_sha256':sha(video),'cursorless':True,'capture_rect':{'width':pixel_width,'height':pixel_height},'frameCount':450,'events':events,'pointer_samples':samples,'before_paths':len(initial),'after_paths':len(final),'surface_pixel_change':delta,'decoded_surface_pixel_change':decoded_delta,'creativeApproved':False}
        (out/'original-source-events.json').write_text(json.dumps(raw,indent=2));print(json.dumps({k:v for k,v in raw.items() if k!='pointer_samples'},indent=2),flush=True)
       finally:c.close()
     finally:
@@ -210,7 +288,7 @@ def render_admitted(out,music_root=None):
     from scripts.quality_preview_supervisor import analyze
     quality=analyze(final,{"source_path":str(source),"source_sha256":result["source_sha256"],
                      "event_manifest_path":str(manifest),"event_manifest_sha256":result["manifest_sha256"]},
-                     seconds=6.5)
+                     seconds=json.loads(manifest.read_text())["duration"])
     (film/"quality.json").write_text(json.dumps(quality,indent=2)+"\n")
     result.update(film_path=str(final),film_sha256=sha(final),plan_sha256=sha(plan),
                   direction_source="deterministic-source-event",quality=quality["verdict"])

@@ -106,7 +106,7 @@ def direction(video:Path,manifest:Path):
                 if start is not None:k["startAt"]=start
                 return k
             plan["studioStage"]["camera"]=[
-                wide(0,1.),wide(rise_end,1.075,rise_start),
+                wide(0,1.),wide(rise_end,1.035,rise_start),
                 wide(native(duration-.35),1.,release_start),
                 wide(duration,1.)]
             plan["studioStage"]["motion"]={"profile":"cinematic","immersive":True,"shutter":0}
