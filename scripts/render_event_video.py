@@ -61,7 +61,11 @@ parser.add_argument("--presentation",choices=["window","fullscreen"],default="wi
 parser.add_argument("--stage-image",type=Path,help="Operator-supplied backdrop for the window presentation")
 parser.add_argument("--cloud-overview",action="store_true",
                     help="Fixed Cloud Shadow stage for passive public showcases")
+parser.add_argument("--physical-cover-bake",type=Path,help="Opt-in calibrated Cycles cover material study")
+parser.add_argument("--physical-cover-sha256",help="Exact SHA256 of the calibration asset")
 args=parser.parse_args()
+if bool(args.physical_cover_bake)!=bool(args.physical_cover_sha256):
+    parser.error("Physical cover requires both calibration and hash")
 if args.cloud_overview and (args.film_plan or args.stage_image or args.presentation!="window"
         or args.glass_loupe or args.slider_framing or args.recorded_pointer
         or args.anchored_result_cut or args.verified_workflow_editorial or args.guided_result
@@ -84,6 +88,8 @@ if args.film_plan:
 else:
     FILM_PLAN_DATA=None
     args.cursor_pack=args.cursor_pack or "founder-reference"
+if args.physical_cover_bake and FILM_PLAN_DATA is None:
+    parser.error("Physical cover requires a verified film plan")
 if args.validate_only and FILM_PLAN_DATA is None:
     parser.error("--validate-only requires --film-plan")
 if FILM_PLAN_DATA is not None and FILM_PLAN_DATA.get("audio",{}).get("mode")=="eventFoley" and args.music:
@@ -168,6 +174,16 @@ if FILM_PLAN_DATA is not None:
         STUDIO_STAGE=load_studio_stage(
             FILM_PLAN_DATA["studioStage"],MANIFEST,SRC,(INPUT_W,INPUT_H),
             (1920,1080),FILM_PLAN.duration,FPS)
+
+    if args.physical_cover_bake:
+        if (STUDIO_STAGE is None or STUDIO_STAGE.stage_preset!="cloud_window_clearface_v1"
+                or REFERENCE_POINTER is None or ISOLATION is not None
+                or "domPlanes" in FILM_PLAN_DATA or "domPlane" in FILM_PLAN_DATA
+                or (INPUT_W,INPUT_H)!=(2880,1800)):
+            raise ValueError("Physical cover study requires the calibrated single-plane native display and reference pointer")
+        import cloud_window_clearface_stage as cover
+        from physical_cover_calibration import CoverCalibration
+        cover.CALIBRATION=CoverCalibration(args.physical_cover_bake,args.physical_cover_sha256)
 
     if STUDIO_STAGE is not None and STUDIO_STAGE.stage_preset=="cloud_luminous_display_v1":
         if REFERENCE_POINTER is None or "domPlanes" in FILM_PLAN_DATA or "domPlane" in FILM_PLAN_DATA:
@@ -774,6 +790,8 @@ def render(output,seconds=None,static=False):
             "render_seconds":round(time.monotonic()-start,2),
             "full_decode_verified":True,"static":static,
             "video":video}
+    if args.physical_cover_bake:
+        record["physicalCoverStudy"]={"calibrationSha256":args.physical_cover_sha256,"method":"cycles-black-white-transfer","perFrameRayTracing":False,"creativeApproval":False}
     if FILM_PLAN is not None:
         record["film_plan"]={"schema":"sauce-film-plan-v1",
             "planSha256":__import__("hashlib").sha256(args.film_plan.read_bytes()).hexdigest(),

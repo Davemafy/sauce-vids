@@ -11,6 +11,7 @@ import numpy as np
 from cloud_window_sky_stage import sky_background, window_geometry as sky_geometry, _rounded_mask
 
 PRESET = "cloud_window_clearface_v1"
+CALIBRATION = None  # explicit, process-local opt-in for renderer studies
 
 def window_geometry(source_size,output_size):
     x0,y0,x1,y1,_=sky_geometry(source_size,output_size)
@@ -76,6 +77,8 @@ def coat_glass_face(projected,source_size,output_size,view=None):
     """Apply one optical cover after projection; the opaque display stays opaque."""
     if projected.shape!=(output_size[1],output_size[0],3):
         raise ValueError("Glass needs genuine projected display dimensions")
+    if CALIBRATION is not None:
+        return CALIBRATION.apply(projected,source_size,output_size,view)
     field=optical_field(source_size,output_size)
     if view is not None:
         field=cv2.warpAffine(field,view,output_size,flags=cv2.INTER_LINEAR,
