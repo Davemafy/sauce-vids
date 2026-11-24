@@ -545,7 +545,8 @@
             "classic",
             "cloud_shadow_v1",
             "cloud_window_sky_v1",
-            "cloud_window_fullglass_v1"
+            "cloud_window_fullglass_v1",
+            "cloud_window_volume_v1"
           ]
         },
         "motion": {

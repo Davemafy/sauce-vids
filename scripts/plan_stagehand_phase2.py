@@ -120,6 +120,8 @@ def check_shell_coverage(plan, source, manifest):
          duration,fps)
     if stage.stage_preset=="cloud_shadow_v1":
         from cloud_shadow_stage import window_geometry
+    elif stage.stage_preset=="cloud_window_volume_v1":
+        from cloud_window_volume_stage import window_geometry
     elif stage.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1"):
         from cloud_window_sky_stage import window_geometry
     else:

@@ -83,7 +83,7 @@ class Phase2NativeDirectorTests(unittest.TestCase):
             self.assertEqual(plan["durationSeconds"],6.5)
             self.assertEqual(plan["audio"]["eventIndices"],[0])
             self.assertEqual(plan["audio"]["clickGain"],0.)
-            self.assertEqual(plan["studioStage"]["stagePreset"],"cloud_window_fullglass_v1")
+            self.assertEqual(plan["studioStage"]["stagePreset"],"cloud_window_volume_v1")
             record["events"].append(dict(record["events"][0],start=3.2,t=4.2))
             manifest.write_text(json.dumps(record))
             with patch("film_director_capabilities.build_contract",return_value=packet):

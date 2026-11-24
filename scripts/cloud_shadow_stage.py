@@ -196,6 +196,9 @@ def render_cloud_stage(stage, source, t):
     if stage.stage_preset=="cloud_glass_v1":
         from cloud_glass_object_stage import stage_plate as physical_plate
         from cloud_glass_object_stage import card_mask as aperture_mask
+    elif stage.stage_preset=="cloud_window_volume_v1":
+        from cloud_window_volume_stage import physical_plate, card_mask as aperture_mask
+        from cloud_window_sky_stage import sky_background
     elif stage.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1"):
         from cloud_window_sky_stage import physical_plate, card_mask as aperture_mask
         from cloud_window_sky_stage import sky_background, fullglass_plate, coat_glass_face
@@ -207,7 +210,7 @@ def render_cloud_stage(stage, source, t):
     board = physical_plate(stage.source_size, stage.output_size).copy()
     if stage.immersive:
         view=stage.view_transform(t)
-        if stage.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1"):
+        if stage.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1"):
             # Cloud environment is stationary; only the glossy window,
             # its real shadow and real Chromium capture move with camera.
             sky=sky_background(stage.output_size).astype(np.float32)
@@ -284,6 +287,8 @@ def render_cloud_overview(source, output_size=(1920,1080), *,
         if stage_preset=="cloud_window_fullglass_v1":
             from cloud_window_sky_stage import fullglass_plate, coat_glass_face
             plate=fullglass_plate
+    elif stage_preset=="cloud_window_volume_v1":
+        from cloud_window_volume_stage import window_geometry as geometry, physical_plate as plate, card_mask as masker
     elif stage_preset=="cloud_shadow_v1":
         geometry,plate,masker=window_geometry,stage_plate,card_mask
     else:

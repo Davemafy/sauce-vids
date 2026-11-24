@@ -189,3 +189,23 @@ def test_fullglass_stage_is_explicit_and_supported(actual_source_fixture):
     np.testing.assert_array_equal(out[0,0],sky_background((640,360))[0,0])
     normalized,_=normalize_generated_studio_plan({"studioStage":cfg},enforce_cloud_stage=True)
     assert normalized["studioStage"]["stagePreset"]==FULL_GLASS_PRESET
+
+
+def test_volume_shell_has_opaque_display_and_wider_cloud_body(actual_source_fixture):
+    from cloud_window_volume_stage import PRESET as VOLUME, card_mask as aperture, object_mask as shell
+    path,frame,manifest,cfg=actual_source_fixture
+    cfg["stagePreset"]=VOLUME
+    size=(640,360)
+    stage=load_studio_stage(cfg,manifest,path,(320,180),size,2.4,25)
+    output=render_studio_stage(stage,frame,0)
+    q=stage.quad(0)
+    H=cv2.getPerspectiveTransform(np.float32([[0,0],[319,0],[319,179],[0,179]]),q)
+    expected=cv2.warpPerspective(frame,H,size,flags=cv2.INTER_CUBIC)
+    inner=aperture((320,180),size)
+    np.testing.assert_array_equal(output[inner==255],expected[inner==255])
+    outer=shell((320,180),size)
+    exposed=(outer>245)&(inner==0)
+    assert exposed.mean()>.11
+    assert inner.mean()/255>.68
+    assert np.std(output[exposed].astype(float))>15
+    np.testing.assert_array_equal(output[0,0],sky_background(size)[0,0])
