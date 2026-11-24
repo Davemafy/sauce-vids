@@ -27,6 +27,58 @@ def frames(path, seconds, fps=10, *, start=0.):
     return np.frombuffer(data,dtype=np.uint8).reshape(-1,90,160).astype(np.int16)
 
 
+def terminal_frames(path,stream,*,count=8):
+    """Read the exact last source-rate encoded frames, not sparse 10fps QA.
+
+    One full-rate final black flash is invisible to the old 10fps downsample
+    but remains painfully visible to a viewer. FFmpeg's select filter keeps
+    only the original terminal frames; no timing interpolation or fabrication.
+    """
+    count=int(count)
+    try:
+        frame_count=int(stream.get("nb_frames",0))
+    except (TypeError,ValueError):
+        frame_count=0
+    if count<4 or not count<=frame_count<=4500:
+        return None
+    cmd=["ffmpeg","-v","error","-nostdin","-i",str(path),
+         "-map","0:v:0",
+         "-vf",f"select='gte(n,{frame_count-count})',scale=160:90,format=gray",
+         "-vsync","0","-f","rawvideo","-"]
+    buf=subprocess.check_output(cmd,timeout=90)
+    expected=count*160*90
+    if len(buf)!=expected:
+        raise RuntimeError("Terminal video frame read was incomplete")
+    return np.frombuffer(buf,dtype=np.uint8).reshape(count,90,160)
+
+
+def terminal_blackout_finding(tail):
+    """Reject a one-frame disappearance of the real subject at the end."""
+    if tail is None:return None
+    if not isinstance(tail,np.ndarray) or tail.ndim!=3 or tail.shape[0]<4:
+        raise ValueError("Terminal quality sample must contain actual video frames")
+    # Fixed central source region: remains inside the large floating browser,
+    # but also covers fullscreen source-true exports. Backgrounds at the
+    # border cannot hide a blacked-out browser panel.
+    h,w=tail.shape[1:]
+    focus=tail[:,round(h*.27):round(h*.73),round(w*.28):round(w*.72)]
+    if focus.size==0:return None
+    last=focus[-1].astype(np.float32)
+    previous=focus[-2].astype(np.float32)
+    p99=float(np.percentile(last,99.5))
+    before_mean=float(np.mean(previous))
+    before_std=float(np.std(previous))
+    delta=float(np.abs(last-previous).mean())
+    if p99<11 and before_mean>28 and delta>28:
+        return {"code":"TERMINAL_BROWSER_BLACKOUT",
+                "detail":{"last_frame_percentile_99p5":round(p99,2),
+                          "previous_frame_mean":round(before_mean,2),
+                          "previous_frame_std":round(before_std,2),
+                          "mean_frame_delta":round(delta,2),
+                          "affected_final_frames":1}}
+    return None
+
+
 def _source_event_windows(manifest):
     """Native verified event or paired real browser click/outcome timestamps."""
     rows=manifest.get("events")
@@ -203,6 +255,13 @@ def analyze(path, evidence=None, seconds=15):
     opener=diffs[:min(19,len(diffs))]
     findings=[]
     def issue(code,details): findings.append({"code":code,"detail":details})
+    # Full-rate terminal inspection is separate from the 10fps long-arc
+    # sampler. The old customer film's final black page escaped both FFmpeg
+    # decoding and the previous quality gate despite being visibly broken.
+    terminal=terminal_frames(path,video)
+    terminal_defect=terminal_blackout_finding(terminal)
+    if terminal_defect is not None:
+        findings.append(terminal_defect)
     if len(opener)>=10 and np.percentile(opener,80)<1.3: issue("STATIC_OPENING_2S",{"p80_frame_delta":round(float(np.percentile(opener,80)),3)})
     if np.mean((means>185)&(std<30))>.35: issue("WASHED_OUT_FRAMES",{"fraction":round(float(np.mean((means>185)&(std<30))),3)})
     # A theme switch or newly displayed panel can legitimately change

@@ -76,6 +76,45 @@ def calibrate_screen_origin(viewport_image:bytes,screen_image:bytes,
             "mean_absolute_error":round(err,4)}
 
 
+def verify_live_terminal_frames(path:Path, frames:int)->dict:
+    """Fail closed if FFmpeg captured Xvfb AFTER Chromium disappeared.
+
+    A fully black trailing X11 frame is technically valid H264, so ffprobe,
+    full decoding and generic quality checks cannot detect the flash.
+    Inspect only the final 8 original source frames; never recolor, freeze,
+    fabricate, or edit the original pixel stream to conceal a capture bug.
+    """
+    if type(frames) is not int or frames<16:
+        raise RuntimeError("Native browser film too short for terminal integrity check")
+    cap=cv2.VideoCapture(str(path))
+    if not cap.isOpened():
+        raise RuntimeError("Cannot independently decode terminal Chromium frames")
+    start=max(0,frames-8)
+    try:
+        cap.set(cv2.CAP_PROP_POS_FRAMES,start)
+        observations=[]
+        for index in range(start,frames):
+            good,frame=cap.read()
+            if not good or frame is None:
+                raise RuntimeError(f"Native browser capture ended before frame {index}")
+            thumbnail=cv2.resize(frame,(192,108),interpolation=cv2.INTER_AREA)
+            max_ch=thumbnail.max(axis=2)
+            observations.append({
+                "is_empty_black":bool(float(np.percentile(max_ch,99.5))<10.),
+                "has_page_detail":bool(float(thumbnail.mean())>25.
+                                       and float(thumbnail.std())>11.)
+            })
+    finally:
+        cap.release()
+    if (observations[-1]["is_empty_black"] and
+            any(o["has_page_detail"] for o in observations[:-1])):
+        raise RuntimeError(
+            "Native60 browser disappeared before capture stopped: "
+            "black terminal frame rejected, not exported")
+    return {"terminal_original_frames_checked":len(observations),
+            "terminal_source_integrity_verified":True}
+
+
 class Native60Recorder:
     def __init__(self,private:Path):
         self.private=Path(private)
@@ -204,7 +243,9 @@ class Native60Recorder:
             or (streams[0].get("width"),streams[0].get("height"))!=(1920,1080)
             or not 1.7<float(info["format"]["duration"])<=MAX_SOURCE_SECONDS):
             raise RuntimeError("Native60 source provenance mismatch")
+        terminal=verify_live_terminal_frames(self.output,int(streams[0]["nb_frames"]))
         return {"source_path":self.output,
+                **terminal,
                 "source_fps":"60/1",
                 "frames":int(streams[0]["nb_frames"]),
                 "duration_seconds":float(info["format"]["duration"]),

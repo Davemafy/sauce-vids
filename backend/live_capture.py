@@ -686,8 +686,17 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
     editorial_events.append({'kind':'interaction_complete','t':time.monotonic()-video_begin})
    page.wait_for_timeout(final_ms)
    length=time.monotonic()-start
-   context.close()
-   native_proof=native_recorder.stop_recording() if native_recorder else None
+   # Keep Chromium and the verified viewport ALIVE until x11grab has
+   # stopped and finalized. Closing the context first made Xvfb draw a
+   # completely black final source frame, then the MP4 displayed a
+   # one-frame black browser flash against the unchanged cloud stage.
+   # The Playwright recorder still requires context.close() first.
+   if native_recorder:
+    native_proof=native_recorder.stop_recording()
+    context.close()
+   else:
+    context.close()
+    native_proof=None
    if native_recorder:
     output=native_proof['source_path']
    else:
