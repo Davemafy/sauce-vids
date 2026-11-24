@@ -62,6 +62,7 @@ class CursorLens(MotionGlass):
             h=cv2.getPerspectiveTransform(np.float32([[0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]]),self.camera_quad(t))
             xy=pointer.at(t)
             target=cv2.perspectiveTransform(np.float32([[xy]]),h)[0,0].astype(float)
+            target=self.focus_point(target,t)
             # Minimum 85px support even near an edge; move center inward,
             # then limit radius by remaining room rather than pinching text.
             target=np.clip(target,lo+85,hi-85)
@@ -77,6 +78,8 @@ class CursorLens(MotionGlass):
             strength*=float(u*u*(3-2*u))*(.65+.35*radius/RADIUS)
             self.states.append((pos.copy(),radius,strength))
             self.positions.append(target)
+    def focus_point(self,point,t):
+        return point
     def state(self,t):
         i=min(max(t*self.fps,0.),len(self.states)-1)
         a=int(i);b=min(a+1,len(self.states)-1);u=i-a
