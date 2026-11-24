@@ -235,3 +235,10 @@ def test_film_plan_rejects_unregistered_cursor_styles_or_disabled_pointer(source
     bad["cursor"]="none"
     with pytest.raises(ValueError,match="cannot be specified when cursor is absent"):
         compile_plan((source[0],source[1],bad))
+
+
+def test_reference_pointer_motion_only_allowed_with_recorded_single_stage(source):
+    _,_,p=source
+    p["cursorMotion"]="reference-v1"
+    with pytest.raises(ValueError,match="Reference cursor motion"):
+        compile_plan(source)

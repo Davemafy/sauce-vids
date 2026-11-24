@@ -208,3 +208,26 @@ def test_reference_hand_and_arrow_use_different_vectors_at_identical_verified_ti
     # Still one glyph, within the real cursor's small local hit area.
     assert np.array_equal(arrow[470:],canvas[470:])
     assert np.array_equal(hand[470:],canvas[470:])
+
+
+def test_reference_motion_preserves_samples_stops_and_drag_hotspots():
+    from recorded_pointer import ReferencePointerMotion
+    track=np.array([[0,20,20],[.04,20,20],[.08,25,20],[.12,37,23],
+                    [.16,50,30],[.20,51,30],[.24,51,30],[.28,52,30],
+                    [.32,80,30],[.36,90,30],[.4,90,30],[1.2,200,60]],float)
+    m=ReferencePointerMotion(track,{"events":[{"kind":"slider_change","start":.28,"end":.36,"t":.36}]})
+    for t,x,y in track:np.testing.assert_allclose(m.at(t),[x,y],atol=1e-10)
+    for t in np.linspace(0,1.2,500):
+        linear=np.array([np.interp(t,track[:,0],track[:,i]) for i in (1,2)])
+        assert np.linalg.norm(m.at(t)-linear)<=5.000001
+        if .18<=t<=.46 or .4<=t<=1.2:np.testing.assert_allclose(m.at(t),linear)
+    assert m.unknown_gaps==1
+
+
+def test_reference_subpixel_cursor_moves_without_double_stamp():
+    from recorded_pointer import draw_reference_pointer
+    a=np.full((1080,1920,3),100,np.uint8); b=a.copy()
+    draw_reference_pointer(a,800.10,500.2,.65)
+    draw_reference_pointer(b,800.45,500.2,.65)
+    assert not np.array_equal(a,b)
+    assert np.all(a[:495]==100) and np.all(b[:495]==100)

@@ -21,6 +21,75 @@ def pointer_track(manifest, width, height):
     return track
 
 
+class ReferencePointerMotion:
+    """Bounded C1 interpolation of observed free pointer movement.
+
+    All recorded samples remain exact. Keep the legacy source interpolation
+    during genuine presses/drags, sparse intervals and semantic cursor changes.
+    The reference profile cannot invent a missing mouse trajectory.
+    """
+    def __init__(self, track, manifest):
+        self.track = np.asarray(track, dtype=np.float64)
+        self.times = self.track[:, 0]
+        self.positions = self.track[:, 1:]
+        self.dt = np.diff(self.times)
+        delta = np.diff(self.positions, axis=0)
+        slopes = delta / self.dt[:, None]
+        self.tangents = np.zeros_like(self.positions)
+        # Shape-preserving weighted harmonic means; no overshooting samples.
+        for i in range(1, len(self.times)-1):
+            a, b = slopes[i-1], slopes[i]
+            if max(self.dt[i-1], self.dt[i]) > .12:
+                continue
+            same = a*b > 0
+            w1, w2 = 2*self.dt[i]+self.dt[i-1], self.dt[i]+2*self.dt[i-1]
+            self.tangents[i, same] = (w1+w2)/(w1/a[same]+w2/b[same])
+        self.locked = np.zeros(len(self.dt), dtype=bool)
+        self.presses = []
+        for e in manifest.get("events", []):
+            if not isinstance(e, dict):
+                continue
+            start = e.get("start", e.get("t"))
+            end = e.get("end", e.get("t"))
+            if (e.get("kind") in ("click","slider_change","tab_switch","theme_change","pointer_down")
+                    and type(start) in (int,float) and type(end) in (int,float)
+                    and np.isfinite([start,end]).all() and start <= end):
+                self.presses.append(float(start))
+                # Protect actual event positions and any drag trace.
+                self.locked |= (self.times[:-1] <= end+.10) & (self.times[1:] >= start-.10)
+        samples = manifest.get("pointer_samples", [])
+        if len(samples) == len(self.track):
+            for i,(a,b) in enumerate(zip(samples,samples[1:])):
+                if a.get("cursor") != b.get("cursor"):
+                    self.locked[i] = True
+        self.locked |= self.dt > .12
+        self.unknown_gaps = int(np.count_nonzero((self.dt > .25) &
+                                                (np.linalg.norm(delta,axis=1) > 12)))
+
+    def at(self,t):
+        i = int(np.clip(np.searchsorted(self.times,t,side="right")-1,0,len(self.dt)-1))
+        u = float(np.clip((t-self.times[i])/self.dt[i],0,1))
+        a,b = self.positions[i:i+2]
+        linear = a + u*(b-a)
+        if self.locked[i] or u in (0.,1.):
+            return tuple(linear)
+        cubic = ((2*u**3-3*u**2+1)*a + (u**3-2*u**2+u)*self.dt[i]*self.tangents[i]
+                 + (-2*u**3+3*u**2)*b + (u**3-u**2)*self.dt[i]*self.tangents[i+1])
+        cubic = np.clip(cubic,np.minimum(a,b),np.maximum(a,b))
+        # Source-pixel displacement ceiling: only a small interpolation refinement.
+        correction = cubic-linear
+        length = float(np.linalg.norm(correction))
+        if length > 5:
+            correction *= 5/length
+        return tuple(linear+correction)
+
+    def scale(self,t):
+        from reference_cursor_v15 import press_scale
+        age = min((t-c for c in self.presses if 0<=t-c<.25),default=None)
+        return press_scale(age)
+
+
+
 # Colorosse Mint Cursors: original CC0 vector pack, not a UI icon or a
 # hand-drawn compositor polygon. The source SVGs remain verbatim under assets.
 # Explicit legacy mode retains reproducibility of prior rejected comparisons.
@@ -221,6 +290,29 @@ def draw_pointer(stage, tip_x, tip_y, scale=1., theme="founder-reference", role=
     effective=round(scale*stage.shape[0]/1080.,4)
     art,(hot_x,hot_y)=_recorded_cursor_sprite(effective,theme,role)
     _blend(stage,art,round(tip_x-hot_x),round(tip_y-hot_y))
+
+
+def draw_reference_pointer(stage, tip_x, tip_y, scale=1., theme="founder-reference", role="arrow"):
+    """Paint one unwarped, subpixel-positioned sprite, after camera exposure."""
+    if not np.isfinite((tip_x,tip_y,scale)).all() or scale<=0:
+        raise ValueError("Invalid recorded pointer geometry")
+    effective=round(scale*stage.shape[0]/1080.,4)
+    art,(hx,hy)=_recorded_cursor_sprite(effective,theme,role)
+    x,y=float(tip_x-hx),float(tip_y-hy)
+    ix,iy=int(np.floor(x)),int(np.floor(y))
+    h,w=art.shape[:2]
+    # Interpolate premultiplied BGR and alpha to avoid dark/white edge halos.
+    a=art[:,:,3:4].astype(np.float32)/255.
+    rgba=np.concatenate((art[:,:,[2,1,0]].astype(np.float32)*a,a),axis=2)
+    m=np.float32([[1,0,x-ix],[0,1,y-iy]])
+    patch=cv2.warpAffine(rgba,m,(w+1,h+1),flags=cv2.INTER_LINEAR)
+    x0,y0=max(0,ix),max(0,iy)
+    x1,y1=min(stage.shape[1],ix+w+1),min(stage.shape[0],iy+h+1)
+    if x1<=x0 or y1<=y0:return
+    src=patch[y0-iy:y1-iy,x0-ix:x1-ix]
+    dest=stage[y0:y1,x0:x1]
+    dest[:]=np.rint(np.clip(dest*(1-src[:,:,3:4])+src[:,:,:3],0,255)).astype(np.uint8)
+
 
 
 @lru_cache(maxsize=2)

@@ -153,7 +153,7 @@ def load_window(data, plan_path):
 
 
 def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_duration,plan_path):
-    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","cursorPack","camera","audio","composition","window", "glassLoupe","studioStage","domPlane","domPlanes"),"film plan")
+    _obj(data,("schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","cursorPack","cursorMotion","camera","audio","composition","window", "glassLoupe","studioStage","domPlane","domPlanes"),"film plan")
     if data.get("schema")!=SCHEMA:
         raise ValueError("Unsupported Sauce film-plan schema")
     expected=data.get("sourceSha256")
@@ -187,6 +187,10 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
         raise ValueError("Unrecognized source-timed cursor appearance")
     if data.get("cursor") == "none" and "cursorPack" in data:
         raise ValueError("Cursor appearance cannot be specified when cursor is absent")
+    if "cursorMotion" in data and (data["cursorMotion"] != "reference-v1"
+            or data["cursor"] != "recorded" or "studioStage" not in data
+            or "domPlane" in data or "domPlanes" in data):
+        raise ValueError("Reference cursor motion requires a recorded single-plane studio stage")
     if ("window" in data or "glassLoupe" in data) and data["presentation"] != "window":
         raise ValueError("Window and glass loupe controls require window presentation")
     if "glassLoupe" in data and data["cursor"] != "recorded":

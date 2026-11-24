@@ -17,7 +17,7 @@ from autozoom_event_planner import plan,sample_camera,smooth5
 from anchored_result_cut import plan_result_cut
 from verified_workflow_editorial import plan_verified_workflow
 from source_region_mask import dim_outside_region
-from recorded_pointer import pointer_track, project_pointer
+from recorded_pointer import pointer_track, project_pointer, ReferencePointerMotion, draw_reference_pointer
 from glass_loupe import LoupeStyle,apply_loupe,plan_loupe
 from slider_framing import slider_framing
 from live_edit_plan import sample_zoom
@@ -127,6 +127,9 @@ POINTER_PRESSES = tuple(event["t"] for event in MANIFEST.get("events", [])
                        and math.isfinite(event["t"])) if POINTER is not None else ()
 if args.recorded_pointer and POINTER is None:
     parser.error("--recorded-pointer requires explicit cursorless footage and ordered pointer samples")
+REFERENCE_POINTER = (ReferencePointerMotion(POINTER,MANIFEST)
+    if POINTER is not None and FILM_PLAN_DATA is not None
+    and FILM_PLAN_DATA.get("cursorMotion") == "reference-v1" else None)
 rect=MANIFEST.get("capture_rect",{})
 if rect and (int(rect["width"]),int(rect["height"]))!=(INPUT_W,INPUT_H):
     parser.error("Manifest capture rectangle must match the source video pixels")
@@ -484,6 +487,19 @@ def apply(source,t,static=False,plate_frame=None):
     pointer_role = pointer_role_at(MANIFEST,t) if POINTER is not None else "arrow"
     if STUDIO_STAGE is not None:
         from spatial_studio_stage import render_studio_stage
+        if REFERENCE_POINTER is not None:
+            composed=render_studio_stage(STUDIO_STAGE,source,t)
+            if t>=float(POINTER[0,0]):
+                px,py=REFERENCE_POINTER.at(t)
+                sw,sh=STUDIO_STAGE.source_size
+                hom=cv2.getPerspectiveTransform(
+                    np.float32([[0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]]),
+                    STUDIO_STAGE.quad(t))
+                mapped=cv2.perspectiveTransform(np.float32([[[px,py]]]),hom)[0,0]
+                draw_reference_pointer(composed,float(mapped[0]),float(mapped[1]),
+                    scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0]))*REFERENCE_POINTER.scale(t),
+                    theme=args.cursor_pack,role=pointer_role)
+            return composed
         if DOM_PLANE_GROUP is not None:
             from live_dom_multi_plane import render_live_dom_planes
             if plate_frame is None:
@@ -603,6 +619,8 @@ def diagnostics():
        "slider_framed": SLIDER_SHOT is not None,
        "recorded_pointer_samples":len(POINTER) if POINTER is not None else 0,
        "cursor_pack":args.cursor_pack if POINTER is not None else None,
+       **({"cursor_motion":"reference-v1","pointer_unknown_gaps":REFERENCE_POINTER.unknown_gaps}
+          if REFERENCE_POINTER is not None else {}),
        "max_translation_per_frame_px":round(float(np.max(np.abs(vel[:,[2,5]]),initial=0)),4),
        "max_continuous_translation_per_frame_px":round(
            float(np.max(np.abs(continuous_vel[:,[2,5]]),initial=0)),4),

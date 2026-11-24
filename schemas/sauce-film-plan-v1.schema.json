@@ -37,6 +37,10 @@
         "none"
       ]
     },
+    "cursorMotion": {
+      "const": "reference-v1",
+      "description": "Optional bounded source-sample interpolation and foreground pointer rendering for recorded single-plane studio films."
+    },
     "audio": {
       "oneOf": [
         {
