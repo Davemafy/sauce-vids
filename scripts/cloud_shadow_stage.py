@@ -196,6 +196,9 @@ def render_cloud_stage(stage, source, t):
     if stage.stage_preset=="cloud_glass_v1":
         from cloud_glass_object_stage import stage_plate as physical_plate
         from cloud_glass_object_stage import card_mask as aperture_mask
+    elif stage.stage_preset=="cloud_window_clearface_v1":
+        from cloud_window_clearface_stage import physical_plate, card_mask as aperture_mask, coat_glass_face
+        from cloud_window_sky_stage import sky_background
     elif stage.stage_preset=="cloud_window_volume_v1":
         from cloud_window_volume_stage import physical_plate, card_mask as aperture_mask
         from cloud_window_sky_stage import sky_background
@@ -210,7 +213,7 @@ def render_cloud_stage(stage, source, t):
     board = physical_plate(stage.source_size, stage.output_size).copy()
     if stage.immersive:
         view=stage.view_transform(t)
-        if stage.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1"):
+        if stage.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1","cloud_window_clearface_v1"):
             # Cloud environment is stationary; only the glossy window,
             # its real shadow and real Chromium capture move with camera.
             sky=sky_background(stage.output_size).astype(np.float32)
@@ -258,7 +261,7 @@ def render_cloud_stage(stage, source, t):
     if stage.immersive:
         m=cv2.warpAffine(m,stage.view_transform(t),(ow,oh),
                          flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
-    if stage.stage_preset=="cloud_window_fullglass_v1":
+    if stage.stage_preset in ("cloud_window_fullglass_v1","cloud_window_clearface_v1"):
         rendered=coat_glass_face(rendered,stage.source_size,stage.output_size,
                                  stage.view_transform(t) if stage.immersive else None)
     alpha = m.astype(np.float32)[:, :, None] / 255
@@ -287,6 +290,8 @@ def render_cloud_overview(source, output_size=(1920,1080), *,
         if stage_preset=="cloud_window_fullglass_v1":
             from cloud_window_sky_stage import fullglass_plate, coat_glass_face
             plate=fullglass_plate
+    elif stage_preset=="cloud_window_clearface_v1":
+        from cloud_window_clearface_stage import window_geometry as geometry, physical_plate as plate, card_mask as masker, coat_glass_face
     elif stage_preset=="cloud_window_volume_v1":
         from cloud_window_volume_stage import window_geometry as geometry, physical_plate as plate, card_mask as masker
     elif stage_preset=="cloud_shadow_v1":
@@ -297,7 +302,7 @@ def render_cloud_overview(source, output_size=(1920,1080), *,
     board=plate(size,output_size).copy()
     screen=cv2.resize(source,(x1-x0,y1-y0),interpolation=cv2.INTER_AREA
                       if x1-x0<=size[0] else cv2.INTER_CUBIC)
-    if stage_preset=="cloud_window_fullglass_v1":
+    if stage_preset in ("cloud_window_fullglass_v1","cloud_window_clearface_v1"):
         projected=np.zeros_like(board)
         projected[y0:y1,x0:x1]=screen
         screen=coat_glass_face(projected,size,output_size)[y0:y1,x0:x1]

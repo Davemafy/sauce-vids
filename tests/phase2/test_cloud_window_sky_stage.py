@@ -209,3 +209,31 @@ def test_volume_shell_has_opaque_display_and_wider_cloud_body(actual_source_fixt
     assert inner.mean()/255>.68
     assert np.std(output[exposed].astype(float))>15
     np.testing.assert_array_equal(output[0,0],sky_background(size)[0,0])
+
+
+def test_clear_cover_is_neutral_optics_over_full_opaque_display(actual_source_fixture):
+    from cloud_window_clearface_stage import PRESET as CLEAR, coat_glass_face, optical_field, card_mask as clear_mask
+    from cloud_shadow_stage import render_cloud_overview
+    size=(640,360)
+    dark=np.full((360,640,3),18,np.uint8)
+    light=np.full_like(dark,230)
+    a=coat_glass_face(dark,size,size)
+    b=coat_glass_face(light,size,size)
+    mask=clear_mask(size,size)>245
+    # Neutral light only; opacity is not a function of UI luminance.
+    assert np.array_equal(a[:,:,0],a[:,:,1]) and np.array_equal(a[:,:,1],a[:,:,2])
+    interior=cv2.erode(mask.astype(np.uint8),np.ones((7,7),np.uint8))>0
+    assert (b[interior].astype(float)-a[interior]).min()>115
+    field=optical_field(size,size)
+    assert field[:,:,0][interior].min()>.54
+    assert np.percentile(abs(a[mask].astype(float)-18),50)<6
+    # Reflection is on the actual display interior, not just its perimeter.
+    assert a[35:48,100:250].max()>35
+    out=render_cloud_overview(dark,size,stage_preset=CLEAR)
+    np.testing.assert_array_equal(out[0,0],sky_background(size)[0,0])
+    path,frame,manifest,cfg=actual_source_fixture
+    cfg["stagePreset"]=CLEAR
+    stage=load_studio_stage(cfg,manifest,path,(320,180),size,2.4,25)
+    assert render_studio_stage(stage,frame,0).shape==(360,640,3)
+    normalized,_=normalize_generated_studio_plan({"studioStage":cfg},enforce_cloud_stage=True)
+    assert normalized["studioStage"]["stagePreset"]==CLEAR

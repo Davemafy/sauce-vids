@@ -43,7 +43,7 @@ def normalize_generated_studio_plan(raw, *, manifest=None, source_path=None,
         previous=stage.get("stagePreset")
         # Keep an explicitly source-safe cloud environment. Do not
         # force the owner's new sky-behind-window preset back to ink-blue.
-        if previous not in ("cloud_shadow_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1"):
+        if previous not in ("cloud_shadow_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1","cloud_window_clearface_v1"):
             stage["stagePreset"]="cloud_shadow_v1"
             repairs.append({"field":"studioStage.stagePreset",
                   "from":previous,"to":"cloud_shadow_v1",

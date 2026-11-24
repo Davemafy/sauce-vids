@@ -356,7 +356,7 @@ class StudioStage:
             from cloud_glass_object_stage import window_geometry
         elif self.stage_preset=="cloud_window_volume_v1":
             from cloud_window_volume_stage import window_geometry
-        elif self.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1"):
+        elif self.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_clearface_v1"):
             from cloud_window_sky_stage import window_geometry
         else:
             from cloud_shadow_stage import window_geometry
@@ -406,7 +406,7 @@ class StudioStage:
             from cloud_glass_object_stage import window_geometry
         elif self.stage_preset=="cloud_window_volume_v1":
             from cloud_window_volume_stage import window_geometry
-        elif self.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1"):
+        elif self.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_clearface_v1"):
             from cloud_window_sky_stage import window_geometry
         else:
             from cloud_shadow_stage import window_geometry
@@ -459,9 +459,9 @@ class StudioStage:
 def load_studio_stage(data,manifest,source_path,source_size,output_size,duration,fps):
     _fields(data,("camera","material","depthPx","reflection","lighting","payoff","motion","stagePreset"),"studioStage")
     stage_preset=data.get("stagePreset","classic")
-    if stage_preset not in ("classic","cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1"):
+    if stage_preset not in ("classic","cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1","cloud_window_clearface_v1"):
         raise ValueError("Only approved rigid Sauce stage presets are supported")
-    if stage_preset in ("cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1"):
+    if stage_preset in ("cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1","cloud_window_clearface_v1"):
         from cloud_shadow_stage import backdrop
         # Fail closed rather than silently substituting a generic gradient.
         backdrop(*output_size)
@@ -474,7 +474,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
     immersive=motion.get("immersive",False)
     if type(immersive) is not bool or (immersive and
                                       (profile!="reference-spring" or
-                                       stage_preset not in ("cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1"))):
+                                       stage_preset not in ("cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1","cloud_window_clearface_v1"))):
         raise ValueError("Physical window push needs cloud stage and verified spring camera")
     shutter=_number(motion.get("shutter",0.),"studioStage.motion.shutter",0,.75)
     if shutter>0 and profile not in ("cinematic","reference-spring"):
@@ -635,7 +635,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
             f"Do not invent source coordinates or move the verified event.")
     if actual+0.001<visible:
         raise ValueError(f"Final studio payoff would be clipped: {actual:.3f} visible < {visible:.3f}")
-    if stage_preset in ("cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1") and mode=="overview":
+    if stage_preset in ("cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1","cloud_window_clearface_v1") and mode=="overview":
         # A window is not premium if the page's original heading/navigation
         # is chopped off by a model zoom. Permit only small overview pushes;
         # large authentic detail crops must explicitly select detail mode.
@@ -674,7 +674,7 @@ def render_studio_stage(stage,frame,t):
     ow,oh=stage.output_size
     if frame.shape[:2]!=(sh,sw):
         raise ValueError("Studio source video dimensions mismatch manifest")
-    if stage.stage_preset in ("cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1"):
+    if stage.stage_preset in ("cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1","cloud_window_clearface_v1"):
         from cloud_shadow_stage import render_cloud_stage
         return render_cloud_stage(stage,frame,t)
     board=_matte(ow,oh,stage.color,stage.grain).copy()
