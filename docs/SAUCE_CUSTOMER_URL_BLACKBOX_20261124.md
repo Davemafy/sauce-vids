@@ -28,7 +28,15 @@ An isolated server running this modified checkout, with no Gemini key, on the ex
 
 **Tests:** whole Phase 2 `pytest tests/phase2 -q`: **539 passed, 10 skipped, 21 subtests passed**. Legacy `unittest discover -s tests -q`: **340 run, 2 skipped, zero failures**, including the 3 new intent regressions and source-visibility tests. `git diff --check` passed.
 
-## 4. Critical remaining defects
+## 4. Customer-facing encoded-quality disclosure
+
+The initial strict customer gate prevents obviously unsupported public URLs from wasting capture/render resources. Separately, a genuinely rendered film can still be **visually rejected**. Its status endpoint therefore now derives safe fields from the actual saved `release.json`, not marketing copy or code-green state: `encoded_quality_verdict`, finding codes, actual browser source frame rate, encoded frame rate, whether a public product action was recorded, `film_kind`, `creative_approved:false` and `release_eligible:false`. There are distinct quality states for `REJECT`, `HUMAN_REVIEW_REQUIRED`, and `NOT_EVALUATED`. Unauthorized callers still cannot fetch job details or private footage. Existing bounded private revision is retained.
+
+Verified by running the updated `customer_quality_summary` **against the original exact encoded Dub and Radix customer release receipts** (not fixtures). Dub: actual browser **25/1 fps**, encoded output **60fps**, `encoded-qa-rejected`, no real product action, no release eligibility, `STATIC_OPENING_2S`, `REPEATED_OR_STATIC_FRAMES`, `NO_AUDIO_STREAM`. Radix: same source/output fps and rejected quality, no action, `REPEATED_OR_STATIC_FRAMES`, `NO_AUDIO_STREAM`. `tests/test_customer_quality_receipt.py` adds six regressions.
+
+**Updated regression:** 539 Phase2 passed, 10 skipped, 21 subtests; 346 legacy unittest run, 2 skipped, zero failures. This is status *truthfulness*, not a fix to the underlying native source fps, storytelling or audio.
+
+## 5. Critical remaining defects
 
 A URL that cannot expose a useful anonymous interactive action cannot automatically yield a saleable product demo, regardless of glass, background or camera effects. The live old server is still deployed and must not be confused with the clean main tests. The fallback website-preview recording is 25fps, silently resampled to 60fps, and produced overly static, silent output. We have NOT fixed native60 general public capture, the present story-discovery quality, model reliability, or product-value direction. **No customer-ready accepted film. Zero owner-approved premium films.**
 

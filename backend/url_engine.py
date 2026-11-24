@@ -368,6 +368,45 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
     return result
 
 
+def customer_quality_summary(release: dict) -> dict:
+    """Explain the real encoded film without granting creative approval.
+
+    Valid MP4, real browser source, and a product demo are distinct outcomes.
+    Even rejected videos remain private/reviewable for a bounded revision.
+    """
+    if not isinstance(release, dict) or release.get("source_verified") is not True:
+        raise ValueError("Original verified source receipt required")
+    verdict=release.get("encoded_quality_verdict","NOT_EVALUATED")
+    if verdict not in ("REJECT","HUMAN_REVIEW_REQUIRED","NOT_EVALUATED"):
+        raise ValueError("Unknown encoded quality outcome")
+    findings=release.get("encoded_quality_findings",[])
+    if (not isinstance(findings,list) or len(findings)>30 or
+            any(not isinstance(x,str) or len(x)>72 for x in findings)):
+        raise ValueError("Invalid private encoded quality finding codes")
+    demonstrated=(release.get("film_mode")=="interactive" and
+                  bool(release.get("observed_actions")))
+    quality={
+        "REJECT":"encoded-qa-rejected",
+        "HUMAN_REVIEW_REQUIRED":"human-review-required",
+        "NOT_EVALUATED":"encoded-qa-not-evaluated",
+    }[verdict]
+    source_fps=release.get("recorded_source_fps")
+    if source_fps is not None and not isinstance(source_fps,str):
+        raise ValueError("Invalid recorded source framerate")
+    return {
+        "quality":quality,
+        "encoded_quality_verdict":verdict,
+        "encoded_quality_findings":findings,
+        "real_product_action_recorded":demonstrated,
+        "film_kind":("product-interaction-candidate" if demonstrated
+                     else "public-website-preview-only"),
+        "source_capture_fps":source_fps,
+        "output_fps":release.get("master_fps"),
+        "creative_approved":False,
+        "release_eligible":False,
+    }
+
+
 def render_checkpoint(folder,checkpoint,stage,brief,audio):
     capture_dir=folder/'private'/'motion'
     export=folder/'export'
@@ -408,10 +447,11 @@ def render_checkpoint(folder,checkpoint,stage,brief,audio):
     receipt=json.loads(release.read_text())
     if not receipt.get('continuous_motion') or not receipt.get('source_verified'):
         raise RuntimeError('Source motion evidence was not verified')
+    quality=customer_quality_summary(receipt)
     stage('needs_review')
     return {'status':'needs_review','ai_calls':checkpoint['ai_calls'],'title':checkpoint['title'],
        'direction_source':checkpoint['direction_source'],'capture_mode':checkpoint['mode'],
        'render_mode':receipt['render_mode'],'narrated':receipt.get('narrated',False),
-       'quality':'human-review-required','video_type':
+       **quality,'video_type':
        'Real continuous browser recording; authenticated features not verified',
        'preview':'preview.mp4'}

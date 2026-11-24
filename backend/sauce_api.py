@@ -16,7 +16,7 @@ import hmac,json,os,re,secrets,threading,time,socketserver,shutil
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlsplit
-from .url_engine import execute, NoVerifiedProductAction
+from .url_engine import execute, NoVerifiedProductAction, customer_quality_summary
 from .url2video import inspect_url,validate_public_url,NeedsKey,NeedsAccess
 from .job_store import load_render_checkpoint, recover_jobs, save_job, write_render_checkpoint
 
@@ -149,7 +149,28 @@ class Handler(BaseHTTPRequestHandler):
             response={key:value for key,value in job.items()
                       if key in ("id","url","stage","status","created_at",
                                  "updated_at","stage_started_at","reason",
-                                 "error","message","ai_calls","title","quality","note","render_mode","direction_source","capture_mode","video_type","narrated","revision_of","intent")}
+                                 "error","message","ai_calls","title","quality","note","render_mode","direction_source","capture_mode","video_type","narrated","revision_of","intent",
+                                 "encoded_quality_verdict","encoded_quality_findings",
+                                 "real_product_action_recorded","film_kind",
+                                 "source_capture_fps","output_fps","creative_approved",
+                                 "release_eligible")}
+            if job.get("status")=="needs_review":
+                # A saved/old job can say review-ready even when actual encoded
+                # QA was rejected. Derive customer-safe status from the
+                # independent, source-verified release receipt, never from
+                # an editable or model-authored marketing claim.
+                release_path=OUT/job_id/"export"/"release.json"
+                if release_path.is_file():
+                    try:
+                        if release_path.stat().st_size>65536:
+                            raise ValueError("Oversized encoded release")
+                        receipt=json.loads(release_path.read_text())
+                        response.update(customer_quality_summary(receipt))
+                    except (OSError,ValueError,TypeError,KeyError):
+                        response.update(quality="receipt-invalid",
+                                        release_eligible=False,
+                                        creative_approved=False,
+                                        encoded_quality_verdict="UNVERIFIED")
             if job.get("stage")=="rendering":
                 log=OUT/job_id/"render.log"
                 try:
