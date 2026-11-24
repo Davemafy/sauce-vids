@@ -21,6 +21,35 @@ def file_digest(path):
   for chunk in iter(lambda:inp.read(2**20),b''):h.update(chunk)
  return h.hexdigest()
 
+def evaluate_encoded_customer_film(master:Path,source_dir:Path,receipt:dict,duration:float,out:Path):
+ """Evaluate EVERY real customer master, not only passive cloud overviews.
+
+ A film's source must still be a verified Chromium recording. This only
+ supplies a technical reject/review receipt, never creative approval.
+ """
+ from scripts.quality_preview_supervisor import analyze
+ if (receipt.get("continuous_recording") is not True or
+     not isinstance(receipt.get("sha256"),str) or
+     receipt["sha256"]!=file_digest(Path(source_dir)/"continuous-source.webm")):
+  raise ValueError("Unverified original continuous source")
+ record=Path(source_dir)/"continuous-capture.json"
+ if not record.is_file():
+  raise ValueError("Missing real capture receipt")
+ quality=analyze(Path(master),evidence={
+   "source_path":str(Path(source_dir)/"continuous-source.webm"),
+   "source_sha256":receipt["sha256"],
+   "event_manifest_path":str(record),
+   "event_manifest_sha256":file_digest(record)},seconds=duration)
+ if quality.get("verdict") not in ("REJECT","HUMAN_REVIEW_REQUIRED"):
+  raise ValueError("Encoded quality gate returned an untrusted verdict")
+ if not isinstance(quality.get("findings"),list):
+  raise ValueError("Encoded quality findings missing")
+ out=Path(out)
+ (out/"encoded-quality.json").write_text(json.dumps(quality,indent=2)+"\n")
+ return {"encoded_quality_verdict":quality["verdict"],
+         "encoded_quality_findings":[x["code"] for x in quality["findings"]],
+         "creative_approved":False}
+
 def probe(src):
  return json.loads(subprocess.check_output(['ffprobe','-v','error',
    '-show_entries','stream=codec_type,codec_name,width,height,r_frame_rate,nb_frames:format=duration',
@@ -265,16 +294,8 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
   result['edit_plan']={'schema':edit_plan['schema'],
                        'checksum':hashlib.sha256(json.dumps(edit_plan,sort_keys=True).encode()).hexdigest(),
                        'resolved_camera':plan_camera}
- if cloud_overview:
-  from scripts.quality_preview_supervisor import analyze
-  qa=analyze(master,evidence={
-    "source_path":str(src),"source_sha256":receipt["sha256"],
-    "event_manifest_path":str(source_dir/'continuous-capture.json'),
-    "event_manifest_sha256":file_digest(source_dir/'continuous-capture.json')})
-  (out/'encoded-quality.json').write_text(json.dumps(qa,indent=2))
-  result["encoded_quality_verdict"]=qa["verdict"]
-  result["encoded_quality_findings"]=[f["code"] for f in qa["findings"]]
-  result["creative_approved"]=False
+ result.update(evaluate_encoded_customer_film(
+   master,source_dir,receipt,duration,out))
  (out/'release.json').write_text(json.dumps(result,indent=2))
  return result
 

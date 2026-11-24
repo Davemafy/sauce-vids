@@ -8,6 +8,7 @@ from .shot_scorer import DISCOVER_JS, select_beats
 
 SAFE_LABEL=re.compile(r'paste text instead|show example|try (?:a )?sample|demo|preview|show more|read more|learn more|details|see how it works|view example|explore example|open menu|toggle menu|view features|expand|^toggle (?:first|second|both) elements?$|reveal|play video',re.I)
 UNSAFE_LABEL=re.compile(r'delete|remove|purchase|pay|checkout|order|submit|send|register|sign.?up|log.?in|sign.?in|logout|invite|share|publish|subscribe|follow|reset|clear|cancel|upload|download|add to cart|connect|authorize|approve|confirm|book|reserve|refund',re.I)
+SAFE_MODAL_LABEL=re.compile(r'^(?:open|show)\s+(?:a\s+)?(?:modal|dialog)$',re.I)
 UNSAFE_PATH=re.compile(r'/(api|auth|signin|signup|login|logout|register|account|checkout|payment|billing|purchase|unsubscribe|delete|submit|admin|invite|callback|token|session)(/|$)',re.I)
 # A tab is a local UI action only when the DOM identifies a real inactive pane.
 TAB_SELECTOR='button[role="tab"][aria-selected="false"][aria-controls]:not(:disabled)'
@@ -45,10 +46,12 @@ for(const e of document.querySelectorAll('h1,h2,h3,h4')){
 const controls=[];
 for(const e of document.querySelectorAll('input[type="range"]:enabled')){
  if(e.closest('form,[data-private],[data-secret],[data-sensitive]'))continue;
- const group=e.closest('[role="group"][aria-label]');
- const label=text(e)||text(group||e);
+ const group=e.closest('[role="group"]');
+ const labelled=e.getAttribute('aria-labelledby');
+ const named=labelled && document.getElementById(labelled);
+ const label=text(e)||text(named||group||e);
  if(!label||!/\b(value selector|volume|calculator|estimator|range|slider)\b/i.test(label))continue;
- const track=group||e;
+ const track=group?.querySelector('[data-slot="slider-track"]')||group||e;
  if(!visible(track)||track.getBoundingClientRect().width<120)continue;
  controls.push({id:'a'+controls.length,text:label,kind:'slider',selector:path(e)});
  if(controls.length>=4)break;
@@ -63,7 +66,12 @@ for(const e of tabs){
 }
 
 const candidates = [...document.querySelectorAll('a[href],button,[role="button"],summary')];
-const priority = e => e.matches('button[aria-controls][aria-expanded="false"],[role="button"][aria-controls][aria-expanded="false"]') ? 0 : e.closest('main') ? 1 : 2;
+const priority=e=>{
+  const content=!!e.closest('main,article,[role="main"]');
+  if(content&&e.matches('button[aria-controls][aria-expanded="false"],[role="button"][aria-controls][aria-expanded="false"]'))return 0;
+  if(content&&e.matches('button,[role="button"],summary'))return 1;
+  return content?2:3;
+};
 candidates.sort((a,b)=>priority(a)-priority(b));
 for(const e of candidates){
  if(!visible(e)||!text(e)||e.closest('[data-private],[data-secret],[data-sensitive]'))continue;
@@ -91,8 +99,16 @@ def known_dialog_opener(control, origin):
          and control.get('in_form') is False
          and control.get('text')=='Connect your agent')
 
+def safe_public_modal_opener(control):
+ """Only propose a tested, non-submitting local dialog trigger."""
+ return (control.get('tag')=='button' and control.get('kind')=='button'
+         and control.get('in_form') is False
+         and control.get('button_type')!='submit'
+         and bool(SAFE_MODAL_LABEL.fullmatch(control.get('text','').strip())))
+
+
 def allowed(c,origin):
- if known_dialog_opener(c,origin):return True
+ if known_dialog_opener(c,origin) or safe_public_modal_opener(c):return True
  label=c['text']
  if UNSAFE_LABEL.search(label):return False
  if c['kind']=='tab':return c.get('in_form') is False

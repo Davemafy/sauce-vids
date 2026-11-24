@@ -11,7 +11,7 @@ from playwright.sync_api import sync_playwright
 from scripts.capture_safety import validate_public_url,guard_route
 from scripts.session_contract import safe_url
 from .shot_scorer import crop_for_subject
-from .product_explorer import CHROME,known_dialog_opener,allowed,JS,TAB_TARGET_JS
+from .product_explorer import CHROME,known_dialog_opener,safe_public_modal_opener,allowed,JS,TAB_TARGET_JS
 
 
 def same_canonical_public_origin(original, current):
@@ -234,19 +234,23 @@ def capture_slider(page, loc, time_zero):
   if (!e.matches('input[type=range]') ||
       e.closest('form,[data-private],[data-secret],[data-sensitive]') ||
       getComputedStyle(e).direction !== 'ltr') return null;
-  const group=e.closest('[role=group][aria-label]');
-  const hidden=getComputedStyle(e).clipPath!=='none';
-  const track=(group||e).getBoundingClientRect();
-  const thumb=(hidden?e.parentElement:e).getBoundingClientRect();
+  const group=e.closest('[role=group]');
+  const trackEl=group?.querySelector('[data-slot="slider-track"]')||group||e;
+  const thumbEl=e.closest('[data-slot="slider-thumb"]')||
+    (getComputedStyle(e.parentElement).clipPath!=='none' ? e.parentElement.parentElement : e);
+  const track=trackEl.getBoundingClientRect();
+  const thumb=thumbEl.getBoundingClientRect();
   const min=Number(e.min||0), max=Number(e.max||100), value=Number(e.value);
   if (!(min<max) || track.left<0||track.right>innerWidth||
       track.top<0||track.bottom>innerHeight||track.width<120||track.width<2*track.height) return null;
   const left=track.left+1, right=track.right-1, y=thumb.top+thumb.height/2;
-  const x=hidden?thumb.left+thumb.width/2:
+  const x=thumbEl!==e?thumb.left+thumb.width/2:
       track.left+8+(track.width-16)*(value-min)/(max-min);
   if (!(left<=x&&x<=right&&track.top<=y&&y<=track.bottom)) return null;
-  if (!(document.elementFromPoint(x,y)?.closest('[role=group]')===group&&group ||
-        document.elementFromPoint(x,y)===e)) return null;
+  const hit=document.elementFromPoint(x,y);
+  // The visual thumb is distinct from the clipped screen-reader input in
+  // accessible component libraries. Never drag an unrelated overlay.
+  if (!(thumbEl!==e ? (hit===thumbEl||thumbEl.contains(hit)) : hit===e)) return null;
   const width=right-left, step=Math.abs(Number(e.step))/(max-min)||.01;
   const distance=Math.max(width*.245, width*step*1.2);
   const end=x+distance<=right?x+distance:Math.max(left,x-distance);
@@ -256,14 +260,17 @@ def capture_slider(page, loc, time_zero):
   for(const node of scope.querySelectorAll('*')){
    if(node.childElementCount||node.closest('form,[data-private],[data-secret],[data-sensitive]'))continue;
    const r=node.getBoundingClientRect(), text=node.innerText?.trim();
+   const output=!!(group&&group.contains(node)&&
+       node.matches('output,[data-slot="slider-output"]'));
    if(!text||text.length>70||!/\d/.test(text)||r.width<6||r.height<10||
-      r.top<track.top+22||r.bottom>Math.min(innerHeight,track.bottom+360)||
+      r.top<(output?track.top-110:track.top+22)||
+      r.bottom>Math.min(innerHeight,track.bottom+360)||
       r.left<0||r.right>innerWidth||node.checkVisibility?.({opacityProperty:true,visibilityProperty:true})===false)continue;
    candidates.push({node,text});
    if(candidates.length>=100)break;
   }
   if(!candidates.length)return null;
-  return {e,value,x,end,y,track:track.toJSON(),candidates};
+  return {e,group,value,x,end,y,track:track.toJSON(),candidates};
  }""")
  try:
   geometry=setup.evaluate('s => s && ({x:s.x,y:s.y,end:s.end,track:s.track})')
@@ -295,8 +302,11 @@ def capture_slider(page, loc, time_zero):
       if(!node.isConnected || node.checkVisibility?.({opacityProperty:true,visibilityProperty:true})===false)
         return [];
       const after=node.innerText?.trim(), r=node.getBoundingClientRect();
+      const output=!!(s.group&&s.group.contains(node)&&
+          node.matches('output,[data-slot="slider-output"]'));
       if(!after || after===text || !/\d/.test(after) || r.width<=6 || r.height<=10 ||
-         r.left<0 || r.right>innerWidth || r.top<s.track.top ||
+         r.left<0 || r.right>innerWidth ||
+         r.top<(output?s.track.top-110:s.track.top) ||
          r.bottom>innerHeight || r.width>=innerWidth*.48) return [];
       const currency=/^\$\s*\d{1,4}(?:\s*\/\s*mo)?$/i;
       // Record a numeric claim only when both values and the billing period
@@ -465,8 +475,10 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
       if not box:continue
       before=page.url
       dialog_opener=known_dialog_opener(c,before)
+      generic_modal=safe_public_modal_opener(c)
       dialogs=page.locator('[role="dialog"]:visible,dialog[open]:visible')
-      if dialog_opener and (dialogs.count() or not loc.evaluate("e => !e.form && !e.closest('form')")):
+      if (dialog_opener or generic_modal) and (
+           dialogs.count() or not loc.evaluate("e => !e.form && !e.closest('form')")):
        continue
       if box['y']<70 or box['y']>580:
        doc_y=page.evaluate("""s => {
@@ -503,6 +515,27 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
         {'kind':'click','t':click_time,'label':c['text'],'semanticGoal':'Reveal public agent setup'},
         {'kind':'state_change','t':time.monotonic()-video_begin,
          'evidence':'Public agent setup dialog visibly opened','resultRect':region}])
+      if generic_modal:
+       # A non-submitting trigger is not an outcome by itself: a new real,
+       # readable, bounded dialog must appear at this same public source.
+       if page.url!=before or dialogs.count()!=1:
+        raise RuntimeError('Source public modal did not open')
+       dialog=dialogs.first
+       region=dialog.bounding_box()
+       vw,vh=(page.viewport_size[k] for k in ('width','height'))
+       if (not region or region['width']<60 or region['height']<60
+           or region['x']<0 or region['y']<0
+           or region['x']+region['width']>vw
+           or region['y']+region['height']>vh
+           or len(dialog.inner_text().strip())<18
+           or dialog.locator('input[type=password]').count()):
+        raise RuntimeError('Source modal content not safely visible')
+       editorial_events.extend([
+        {'kind':'click','t':click_time,'label':c['text'],
+         'semanticGoal':'Inspect source-verified public modal'},
+        {'kind':'state_change','t':time.monotonic()-video_begin,
+         'evidence':'Public modal visibly opened in source browser',
+         'resultRect':region}])
       if tab_target:
        region=loc.evaluate("""(e,id) => {
         const pane=document.getElementById(id);

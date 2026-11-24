@@ -43,6 +43,11 @@ def authentication_barrier(dialogs):
         if not isinstance(text, str):
             continue
         text = " ".join(text.split())
+        # A public demo can contain a prefilled example password field. It
+        # is STILL private/authentication UI, not a source-true public product
+        # payoff; never put it on film as a no-login feature.
+        if item.get('password') is True:
+            return True
         if AUTH_REQUIRED.search(text):
             return True
         if AUTH_TITLE.search(text) and (AUTH_PROVIDER.search(text) or item.get("password") is True):

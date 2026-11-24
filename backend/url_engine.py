@@ -12,7 +12,7 @@ from urllib.request import Request,urlopen
 
 ROOT=Path(__file__).resolve().parents[1]
 from scripts.capture_safety import validate_public_url
-from backend.product_explorer import inspect,normalize,workflow,preflight,known_dialog_opener
+from backend.product_explorer import inspect,normalize,workflow,preflight,known_dialog_opener,safe_public_modal_opener
 from backend.job_store import load_render_checkpoint, write_render_checkpoint
 
 PROMPT="""You are the creative director for Sauce, a browser-recorded product-film tool.
@@ -43,6 +43,11 @@ def direction(report:dict,feedback:list[dict]|None=None,*,curiosity_dir=None):
     dialog=next((c for c in report['controls'] if known_dialog_opener(c,report['url'])),None)
     if dialog:
         return normalize({'mode':'interactive','action_ids':[dialog['id']]},report),0,'verified-public-dialog'
+    modal=next((c for c in report['controls'] if safe_public_modal_opener(c)),None)
+    if modal:
+        # Propose only: browser evidence must independently admit the real
+        # dialog, with readable changed source pixels and no auth barrier.
+        return normalize({'mode':'interactive','action_ids':[modal['id']]},report),0,'safe-public-modal-proposal'
     tab=next((c for c in report['controls'] if c['kind']=='tab'),None)
     if tab:
         return normalize({'mode':'interactive','action_ids':[tab['id']]},report),0,'local-tab'
@@ -98,6 +103,19 @@ def apply_visible_action_verdict(plan:dict,report:dict,proof:dict,
     if plan.get('mode')!='interactive':
         return plan
     if proof.get('decision')=='visible_outcome_candidate':
+        return plan
+    if (not cinematic_only and proof.get('decision')=='requires_recorded_slider_outcome'
+            and proof.get('schema')=='sauce-source-action-preflight-v1'
+            and proof.get('control_kind')=='slider'
+            and proof.get('source_control_id') in plan.get('action_ids',[])
+            and len(plan.get('action_ids',[]))==1
+            and proof.get('source_url')==report.get('url')
+            and proof.get('human_film_approval') is False
+            and any(c.get('id')==proof['source_control_id'] and c.get('kind')=='slider'
+                    for c in report.get('controls',[]))):
+        # This is NOT a verified product outcome yet. It permits a safe
+        # native browser drag to run; its actual dependent visible number,
+        # pointer samples, and source frames must then prove the change.
         return plan
     if cinematic_only:
         raise NoVerifiedProductAction(
@@ -212,6 +230,17 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
         from backend.url2video import previous_feedback
         plan,calls,source = direction(report,previous_feedback(folder.parent),
                                       curiosity_dir=None if cinematic_only else private/'curiosity')
+    verified_modal_proof=None
+    if cinematic_only and source=='safe-public-modal-proposal':
+        from backend.public_modal_search import investigate_modal_candidates
+        found=investigate_modal_candidates(
+            url,report,private/'public-modal-investigation',plan,
+            require_cinematic_story_proof,limit=3)
+        if found is None:
+            raise NoVerifiedProductAction(
+                'No source-proven useful public dialog among bounded candidates')
+        plan,verified_modal_proof=found
+        source='bounded-public-modal-search'
     (folder/'direction.json').write_text(json.dumps({
        **plan,'ai_calls':calls,'direction_source':source},indent=2))
     if cinematic_only and plan['mode']!='interactive':
@@ -228,16 +257,31 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
     # a vetted, non-submitting public control. Never a default or premium score.
     if (os.getenv('SAUCE_VERIFY_VISIBLE_ACTION')=='1' or cinematic_only or stagehand_plan is not None) and plan['mode']=='interactive':
         from backend.source_action_preflight import probe_public_action
-        try:
-            proof=probe_public_action(
-                url,report,plan['action_ids'][0],private/'visible-action')
-        except Exception as exc:
-            # A failed independent browser probe is never proof of a product
-            # action. Fail closed to showcase or explicit cinematic-only stop.
+        selected_control=next((c for c in report['controls']
+                               if c['id']==plan['action_ids'][0]),None)
+        if verified_modal_proof is not None:
+            proof=verified_modal_proof
+        elif selected_control and selected_control['kind']=='slider' and not cinematic_only:
+            # The button-only screenshot probe cannot perform a range drag.
+            # Defer verification to the native continuous-browser recorder,
+            # which rejects unchanged dependent numeric output.
             proof={'schema':'sauce-source-action-preflight-v1',
-                   'decision':'action_not_verified',
-                   'reason':type(exc).__name__,
+                   'decision':'requires_recorded_slider_outcome',
+                   'source_control_id':plan['action_ids'][0],
+                   'control_kind':'slider',
+                   'source_url':report['url'],
                    'human_film_approval':False}
+        else:
+            try:
+                proof=probe_public_action(
+                    url,report,plan['action_ids'][0],private/'visible-action')
+            except Exception as exc:
+                # A failed independent browser probe is never proof of a
+                # product action, whether the provider is up or not.
+                proof={'schema':'sauce-source-action-preflight-v1',
+                       'decision':'action_not_verified',
+                       'reason':type(exc).__name__,
+                       'human_film_approval':False}
         (private/'visible-action-receipt.json').write_text(
             json.dumps(proof,indent=2))
         plan=apply_visible_action_verdict(
@@ -277,6 +321,24 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
     record=json.loads((capture_dir/'continuous-capture.json').read_text())
     if not record.get('continuous_recording'):
         raise RuntimeError('No continuous motion stream captured')
+    # A deferral receipt alone is never a successful interaction. Check the
+    # independently recorded Chromium slider drag + actual changed number
+    # before Sauce can expose a product-interaction candidate to customers.
+    if (plan.get('mode')=='interactive' and
+        (folder/'private'/'visible-action-receipt.json').is_file()):
+        deferred=json.loads((private/'visible-action-receipt.json').read_text())
+        if deferred.get('decision')=='requires_recorded_slider_outcome':
+            verified=[a for a in record.get('editorial_events',[])
+                      if a.get('kind')=='slider_change' and a.get('evidence')
+                      and isinstance(a.get('resultRect'),dict)
+                      and len(a.get('pointer_samples',[]))>=20]
+            if (len(verified)!=1 or
+                not any(a.get('kind')=='slider' and
+                        a.get('id')==deferred['source_control_id']
+                        for a in record.get('actions',[]))):
+                if cinematic_only:
+                    raise NoVerifiedProductAction('Real slider outcome missing from source footage')
+                plan['mode']='showcase'
     if not any(a.get('kind') in ('link','button','slider','tab') for a in record.get('actions',[])):
         if cinematic_only:
             raise RuntimeError('Cinematic film rejected: source recording lost actual product action')
