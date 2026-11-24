@@ -26,7 +26,12 @@ def discover(page,scope=None):
         if not loc.is_visible() or not loc.evaluate("(e,s)=>!e.closest(s)&&!e.closest('a[href]')",PRIVATE):
             continue
         label=' '.join(loc.inner_text().split())
-        if safe_label(label):items.append({'label':label,'locator':loc})
+        if safe_label(label):
+            # Store a real DOM handle, not a dynamic positional selector.
+            # A detached/changed element fails rather than clicking its replacement.
+            handle=loc.element_handle(timeout=1500)
+            if handle is not None and ' '.join(handle.inner_text().split())==label:
+                items.append({'label':label,'locator':handle})
     return [x for x in items if sum(y['label']==x['label'] for y in items)==1][:24]
 
 def exact(items,label):
@@ -103,22 +108,31 @@ def sequence_viewport():
     return ({"width":1920,"height":1080},2) if os.getenv("SAUCE_CAPTURE_QUALITY","high")=="high" else ({"width":1280,"height":720},1)
 
 @contextmanager
-def browser(url):
+def probe_context(b,url):
+    viewport,dpr=sequence_viewport()
+    c=b.new_context(viewport=viewport,device_scale_factor=dpr,service_workers='block')
+    try:
+        loaded=False
+        def guard(route):
+            if loaded and route.request.is_navigation_request():return route.abort('blockedbyclient')
+            return guard_route(route)
+        c.route('**/*',guard)
+        page=c.new_page();page.goto(url,wait_until='domcontentloaded',timeout=28000)
+        validate_public_url(page.url);loaded=True;page.wait_for_timeout(850)
+        yield page
+    finally:c.close()
+
+@contextmanager
+def browser(url,existing=None):
     from playwright.sync_api import sync_playwright
     validate_public_url(url)
+    if existing is not None:
+        with probe_context(existing,url) as page:yield page
+        return
     with sync_playwright() as p:
         b=p.chromium.launch(executable_path=CHROME,headless=True,args=['--no-sandbox'])
         try:
-            viewport,dpr=sequence_viewport()
-            c=b.new_context(viewport=viewport,device_scale_factor=dpr,service_workers='block')
-            loaded=False
-            def guard(route):
-                if loaded and route.request.is_navigation_request():return route.abort('blockedbyclient')
-                return guard_route(route)
-            c.route('**/*',guard)
-            page=c.new_page();page.goto(url,wait_until='domcontentloaded',timeout=28000)
-            validate_public_url(page.url);loaded=True;page.wait_for_timeout(850)
-            yield page
+            with probe_context(b,url) as page:yield page
         finally:b.close()
 
 def choose(raw,items):
@@ -128,6 +142,65 @@ def choose(raw,items):
 
 def menu(items):
     return [{'id':f'c{i}','label':x['label']} for i,x in enumerate(items)]
+
+MAX_OPTION_PROBES=3
+
+def option_hypotheses(raw,items):
+    ids=parse(raw).get('ids')
+    if not isinstance(ids,list):return []
+    known={f'c{i}':x['label'] for i,x in enumerate(items)}
+    return list(dict.fromkeys(known[x] for x in ids if isinstance(x,str) and x in known))[:MAX_OPTION_PROBES]
+
+def assert_applied_option(page,option):
+    # A pixel delta alone does not prove that the intended preset was applied.
+    # Restrict this optional search to pickers exposing the applied label.
+    if option not in [x['label'] for x in discover(page)]:
+        raise ValueError('Applied picker label does not match observed option')
+
+def require_replay_payoff(proof,expected):
+    if not isinstance(expected,dict):raise ValueError('Missing comparative proof')
+    for k in ('changed_result_fraction','change_above_baseline'):
+        value=expected.get(k)
+        actual=proof.get(k)
+        if (type(value) not in (float,int) or not 0<value<=1 or
+            type(actual) not in (float,int) or not actual>=value*.60):
+            raise ValueError('Recorded transformation does not reproduce investigated payoff')
+def option_probe(url,picker,option,path,existing=None):
+    # A fresh disposable browser for each hypothesis: no accumulated state.
+    path.mkdir(mode=0o700,exist_ok=False)
+    with browser(url,existing) as page:
+        before=shot(page);page.wait_for_timeout(350);steady=shot(page)
+        old=panels(page)
+        scope=open_picker(page,url,picker)
+        exact(discover(page,scope),option).click(timeout=4000)
+        dismiss_picker(page,scope);page.wait_for_timeout(350)
+        assert_applied_option(page,option)
+        after,proof,_=observed_result(page,url,before,steady,old,time.monotonic())
+        (path/'before.png').write_bytes(before)
+        (path/'after.png').write_bytes(after)
+        return proof
+
+def compare_options(url,picker,options,path,conv,receipt,existing=None):
+    admitted={};media=[];rows=[]
+    for i,option in enumerate(options):
+        cid=f'p{i}';folder=path/cid
+        row={'id':cid,'option':option,'status':'rejected'}
+        try:
+            proof=option_probe(url,picker,option,folder,existing)
+            pair=[_media(folder/n,'image/png',4*1024*1024) for n in ('before.png','after.png')]
+            row.update(status='verified',proof=proof)
+            admitted[cid]=(option,proof)
+            media.extend(pair)
+        except Exception as exc:
+            row['error_type']=type(exc).__name__
+        rows.append(row)
+    receipt['option_probes']=rows
+    if not admitted:return None
+    raw=conv.ask("We tested your ideas in separate real browsers. Look at each verified BEFORE then AFTER image, in the order of the verified rows. Which actual transformation would stop a stranger scrolling? Prefer a clearly visible change across the product, not merely a colorful sidebar. Is it readable and distinctive even at phone video size? Reject all if none is compelling. Do not infer results for failed probes. Return JSON with id (one verified p ID or null) and reason. "+json.dumps(rows,ensure_ascii=False),media=tuple(media),json_mode=True,phase='compare-real-options',stop_on_rate_limit=True)
+    verdict=parse(raw)
+    receipt['judgment']=str(verdict.get('reason',''))[:1200]
+    key=verdict.get('id')
+    return admitted.get(key) if isinstance(key,str) else None
 
 def investigate_sequence(url,report,directory):
     path=Path(directory);path.mkdir(mode=0o700,parents=True,exist_ok=True)
@@ -152,6 +225,15 @@ def investigate_sequence(url,report,directory):
             opts=discover(page,scope)
             if not opts:return finish()
             (path/'picker.png').write_bytes(shot(page))
+            if os.getenv('SAUCE_CURIOUS_OPTION_SEARCH')=='1':
+                raw=conv.ask("Which three observed options might create the most distinct, substantial visual payoff? We can actually test them separately, so choose contrasting hypotheses instead of guessing a winner. Return JSON with ids (up to three observed c IDs), reason. No invented options. "+json.dumps(menu(opts)),media=(_media(path/'picker.png','image/png',4*1024*1024),),json_mode=True,phase='option-hypotheses',stop_on_rate_limit=True)
+                hypotheses=option_hypotheses(raw,opts)
+                receipt['hypotheses']=hypotheses
+                selected=compare_options(url,label,hypotheses,path,conv,receipt,page.context.browser)
+                if selected is None:return finish()
+                option,proof=selected
+                receipt.update(option=option,proof=proof,decision='source_proven_candidate')
+                return finish({'mode':'interactive','action_ids':[],'heading_ids':[],'title':report['title'],'reason':'Gemini compared independently verified option transformations','local_only_action':True,'sequence':{'picker':label,'option':option,'expected_payoff':{k:proof[k] for k in ('changed_result_fraction','change_above_baseline')}}})
             option=choose(conv.ask("Update your hypothesis using the actual picker evidence. Choose an observed unselected option that would demonstrate the product's core job through a clear before/action/after story. Contrast it with less informative alternatives. A dramatic style change alone is not sufficient unless styling is the product's core value. Pick one or null; no guessed selector or invented result. JSON {\"id\":\"c0\",\"reason\":\"...\"}. "+json.dumps(menu(opts))+advise(menu(opts),path,phase="picker"),media=(_media(path/'picker.png','image/png',4*1024*1024),),json_mode=True,phase='discover-option',stop_on_rate_limit=True),opts)
             if option is None:return finish()
             receipt['option']=option
@@ -203,6 +285,9 @@ def capture_sequence(page,url,sequence,video_begin,pointer,*,baseline=None,compa
     t=click(loc)
     dismiss_picker(page,scope);page.wait_for_timeout(350)
     after,proof,result_t=observed_result(page,url,before,steady,old,video_begin)
+    if 'expected_payoff' in sequence:
+        assert_applied_option(page,sequence['option'])
+        require_replay_payoff(proof,sequence['expected_payoff'])
     events=[{'kind':'click','t':t,'label':sequence['option'],'semanticGoal':'Apply observed local preset'},
             {'kind':'state_change','t':result_t,'resultRect':proof['result_rect'],'evidence':'Recorded persistent change in same public product panel'}]
     return events,proof

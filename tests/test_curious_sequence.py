@@ -33,3 +33,37 @@ def test_largest_independently_changed_panel_is_framed(monkeypatch):
     assert choose_result_panel([unchanged])=={}
     monkeypatch.setenv('SAUCE_CAPTURE_QUALITY','high')
     assert sequence_viewport()==({'width':1920,'height':1080},2)
+
+def test_option_search_bounded_and_observed_only():
+    from backend.curious_sequence import option_hypotheses
+    rows=[{'label':str(i)} for i in range(6)]
+    assert option_hypotheses('{"ids":["fake","c2","c2","c1","c0","c4",null]}',rows)==['2','1','0']
+    assert option_hypotheses('{"ids":"c0"}',rows)==[]
+
+def test_option_comparison_cannot_select_failed_probe(tmp_path,monkeypatch):
+    import backend.curious_sequence as s
+    def probe(url,picker,option,path,existing=None):
+        if option=='bad':raise ValueError('no payoff')
+        return {'result_area_fraction':.5}
+    monkeypatch.setattr(s,'option_probe',probe)
+    monkeypatch.setattr(s,'_media',lambda *a:{})
+    conv=Mock();conv.ask.return_value='{"id":"p0","reason":"invented"}'
+    receipt={}
+    assert s.compare_options('https://example.com','picker',['bad','good'],tmp_path,conv,receipt) is None
+    assert receipt['option_probes'][0]['status']=='rejected'
+    conv.ask.return_value='{"id":"p1","reason":"real"}'
+    assert s.compare_options('https://example.com','picker',['bad','good'],tmp_path,conv,{})==('good',{'result_area_fraction':.5})
+
+def test_comparative_capture_requires_same_substantial_payoff():
+    from backend.curious_sequence import require_replay_payoff
+    expected={'changed_result_fraction':.9492,'change_above_baseline':.6098}
+    require_replay_payoff({'changed_result_fraction':.85,'change_above_baseline':.55},expected)
+    with pytest.raises(ValueError,match='does not reproduce'):
+        require_replay_payoff({'changed_result_fraction':.1329,'change_above_baseline':.0778},expected)
+
+def test_applied_label_requires_real_option(monkeypatch):
+    import backend.curious_sequence as s
+    monkeypatch.setattr(s,'discover',lambda p:[{'label':'Claymorphism'}])
+    s.assert_applied_option(None,'Claymorphism')
+    with pytest.raises(ValueError,match='does not match'):
+        s.assert_applied_option(None,'Bubblegum')
