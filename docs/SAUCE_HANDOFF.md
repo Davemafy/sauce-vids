@@ -1,5 +1,10 @@
 # Sauce — living handoff for new agents and new chats
 
+## 2026-11-24 — Human-language Gemini discovery prompt (prompt-only, live quality unverified)
+
+Updated the existing read-only Stagehand scout to ask Gemini what makes the product worth using, compare available controls instead of settling for the first obvious button, and prefer meaningful before/after or product-result evidence over a superficial setup dialog or animation. Same single observe call, same bounded safe control list, exact-label matching, no browser actions or speculative outcomes, no renderer or production configuration changes. This is a prompt revision, not a persistent multi-round agent or proof of better model choices. On the persistent worker, `/opt/sauce-vids/.venv/bin/python -m unittest discover -s tests -p 'test_stagehand*.py' -q` passed 24/24, including a new prompt contract regression; `git diff --check` passed. Reopened actual prior Brimble 6.5s encoded frame at 3.5s: visible connection picker, still no deeper product payoff. ffprobe confirmed 1920x1080 H264/60, AAC, 6.5s. No new live Gemini request, film or premium approval in this change. Next: compare new live selections and render a meaningful verified outcome, retaining all existing safety gates.
+
+
 
 ## 2026-11-23 — Stagehand action pacing: native6.5s, source-true shorter Brimble film (HUMAN REVIEW)
 
