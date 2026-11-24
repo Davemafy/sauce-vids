@@ -105,7 +105,28 @@ def build(root,accents=(),seconds=10):
 def picture_hash(path):
     return run('ffmpeg','-v','error','-i',str(path),'-map','0:v:0','-c','copy','-f','hash','-hash','sha256','-').decode().strip()
 
-def audition(root,row,film,foley,receipt,out):
+def cue_times(proof,showcase_plan=None):
+    if proof.get('verifiedSourceEvents'):
+        if showcase_plan is not None:raise ValueError('Mixed source and showcase cue authority')
+        pairs=proof['verifiedSourceEvents']
+        return [e['visibleResultAt'] for e in pairs], [t for e in pairs for t in (e['pressAt'],e['visibleResultAt'])]
+    if showcase_plan is None:raise ValueError('Missing genuine event or showcase Foley plan')
+    plan=json.loads(Path(showcase_plan).read_text())
+    if (plan.get('schema')!='sauce-foley-plan-v1' or plan.get('sampleRate')!=RATE
+        or plan.get('muted') or plan.get('musicGain')!=0
+        or abs(plan['durationMs']*48-proof['samples'])>.01
+        or len(plan['cues'])!=proof['cue_count']):
+        raise ValueError('Showcase Foley plan does not match receipt')
+    times=[]
+    for c in plan['cues']:
+        if (c['sound']!='whoosh_soft' or type(c['outputSample']) is not int
+            or not 0<=c['outputSample']<proof['samples']
+            or abs(c['outputSample']/48-c['outputMs'])>.05):
+            raise ValueError('Invalid showcase cue')
+        times.append(c['outputSample']/RATE)
+    return times,times
+
+def audition(root,row,film,foley,receipt,out,showcase_plan=None):
     p=admit(root,row)
     info=json.loads(run('ffprobe','-v','error','-select_streams','v:0','-show_entries','stream=nb_frames,avg_frame_rate,width,height','-of','json',str(film)))['streams'][0]
     if info['avg_frame_rate']!='60/1' or (info['width'],info['height'])!=(1920,1080):raise ValueError('Expected landscape60 master')
@@ -117,7 +138,7 @@ def audition(root,row,film,foley,receipt,out):
     with wave.open(str(foley),'rb') as f:
         if (f.getnchannels(),f.getframerate(),f.getsampwidth(),f.getnframes())!=(2,RATE,2,n):raise ValueError('Foley clock mismatch')
         fx=np.frombuffer(f.readframes(n),dtype='<i2').reshape(n,2).astype(np.float32)/32768
-    ev=foley_proof['verifiedSourceEvents']
+    _,times=cue_times(foley_proof,showcase_plan)
     offset=row['pictureExcerptCandidates'][0]['start']
     m=decode(p,RATE,2,offset,duration+.02)
     if len(m)<n:raise ValueError('Track ends before film')
@@ -127,11 +148,10 @@ def audition(root,row,film,foley,receipt,out):
     m*=gain
     from foley_mixer import _ducking_gain,_soft_knee
     ducks=[]
-    for e in ev:
-        for t in (e['pressAt'],e['visibleResultAt']):
-            at=round(t*RATE)
-            if 0<=at<n:
-                ducks.append({'startSample':max(0,at-1920),'endSample':min(n,at+12000),'attackMs':40,'releaseMs':160,'attenuationDb':-3.5})
+    for t in times:
+        at=round(t*RATE)
+        if 0<=at<n:
+            ducks.append({'startSample':max(0,at-1920),'endSample':min(n,at+12000),'attackMs':40,'releaseMs':160,'attenuationDb':-3.5})
     m*=_ducking_gain(n,ducks)[:,None]
     # Very short attack avoids abrupt clip edges without a slow intro.
     m[:1440]*=np.linspace(0,1,1440)[:,None]
@@ -146,20 +166,28 @@ def audition(root,row,film,foley,receipt,out):
     subprocess.run(['ffmpeg','-v','error','-nostdin','-i',str(film),'-i',str(wav),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','256k','-movflags','+faststart',str(out)],check=True)
     if picture_hash(out)!=picture_hash(film):raise ValueError('Picture stream changed')
     subprocess.run(['ffmpeg','-v','error','-xerror','-i',str(out),'-f','null','-'],check=True)
-    result={'track':row['id'],'trackSha256':row['sha256'],'start':offset,'duration':duration,'samples':n,'duckIntervals':ducks,'peak':float(np.max(np.abs(mix))),'musicGain':gain,'pictureHash':picture_hash(out),'filmSha256':sha(out),'inputFilmSha256':sha(film),'foleySha256':sha(foley),'foleyReceiptSha256':sha(receipt),'ownerApproved':False}
+    result={'track':row['id'],'trackSha256':row['sha256'],'start':offset,'duration':duration,'samples':n,'duckIntervals':ducks,'peak':float(np.max(np.abs(mix))),'musicGain':gain,'pictureHash':picture_hash(out),'filmSha256':sha(out),'inputFilmSha256':sha(film),'foleySha256':sha(foley),'foleyReceiptSha256':sha(receipt),'showcasePlanSha256':sha(showcase_plan) if showcase_plan else None,'ownerApproved':False}
     out.with_suffix('.json').write_text(json.dumps(result,indent=2))
     return result
 
 def main():
-    a=argparse.ArgumentParser();a.add_argument('--root',type=Path,required=True);a.add_argument('--film',type=Path,required=True);a.add_argument('--foley',type=Path,required=True);a.add_argument('--receipt',type=Path,required=True);a.add_argument('--tracks',nargs='+',required=True);a.add_argument('--out',type=Path,required=True)
+    a=argparse.ArgumentParser();a.add_argument('--root',type=Path,required=True);a.add_argument('--film',type=Path,required=True);a.add_argument('--foley',type=Path,required=True);a.add_argument('--receipt',type=Path,required=True);a.add_argument('--tracks',nargs='+');a.add_argument('--role',choices=['interaction','showcase','transformation']);a.add_argument('--recent',nargs='*',default=[]);a.add_argument('--explore',action='store_true');a.add_argument('--showcase-plan',type=Path);a.add_argument('--out',type=Path,required=True)
     args=a.parse_args();ev=json.loads(args.receipt.read_text());seconds=ev['samples']/RATE
-    catalog=build(args.root,[e['visibleResultAt'] for e in ev['verifiedSourceEvents']],seconds)
+    accents,_=cue_times(ev,args.showcase_plan)
+    if bool(args.tracks)==bool(args.role):raise ValueError('Choose exactly one explicit track list or editorial role')
+    catalog=build(args.root,accents,seconds)
+    if args.role:
+        from soundtrack_taste import rank_candidates
+        ranked=rank_candidates(catalog['tracks'],args.role,args.recent,args.explore)
+        if not ranked:raise ValueError('No unused matching soundtrack candidate; abstaining')
+        args.tracks=[ranked[0]['id']]
+        catalog['selection']={'ranked':ranked,'chosen':args.tracks[0],'recent':args.recent}
     if not set(args.tracks)<=set(r['id'] for r in catalog['tracks']):raise ValueError('Unknown track requested')
     args.out.mkdir(parents=True,exist_ok=False)
     for row in catalog['tracks']:
         print(row['id'],row['tempoEstimateBpm'],row['pictureExcerptCandidates'][0],flush=True)
         if row['id'] in args.tracks:
-            print(audition(args.root,row,args.film,args.foley,args.receipt,args.out/(row['id']+'.mp4')),flush=True)
+            print(audition(args.root,row,args.film,args.foley,args.receipt,args.out/(row['id']+'.mp4'),args.showcase_plan),flush=True)
             row['auditionCount']=1
     (args.out/'catalog.json').write_text(json.dumps(catalog,indent=2))
 if __name__=='__main__':main()
