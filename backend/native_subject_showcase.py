@@ -128,6 +128,62 @@ def continuous_crop(beats, shots, t):
             return wide+(target-wide)*weight
     return wide
 
+def compile_camera_direction(source, direction):
+    """Compile a source-bound, cut-free editorial JSON into checked camera keys.
+
+    Targets are observed subjects or wide. No arbitrary source pixel rectangles.
+    A close-up may only follow its actual arrival; co-visible subjects on the
+    same measured scroll row may share that arrival and transition directly.
+    """
+    if (not isinstance(direction,dict) or direction.get("schema")!="sauce-continuous-camera-v1"
+            or direction.get("source_sha256")!=source["sha256"]):
+        raise ValueError("Camera direction does not bind to source")
+    beats=source["beats"]; scrolls=source["scrolls"]
+    observed={b["id"]:b for b in beats}
+    if len(scrolls)!=len(beats)-1:raise ValueError("Missing arrival evidence")
+    windows={beats[0]["id"]:(0.,scrolls[0]["start"])}
+    for i,b in enumerate(beats[1:]):
+        lo=hi=i
+        while lo>0 and scrolls[lo-1]["target_scroll_css"]==scrolls[i]["target_scroll_css"]:lo-=1
+        while hi+1<len(scrolls) and scrolls[hi+1]["target_scroll_css"]==scrolls[i]["target_scroll_css"]:hi+=1
+        windows[b["id"]]=(scrolls[lo]["end"],scrolls[hi+1]["start"] if hi+1<len(scrolls) else source["seconds"])
+    raw=direction.get("keys")
+    if not isinstance(raw,list) or not 2<=len(raw)<=24:raise ValueError("Invalid camera key count")
+    keys=[]
+    for k in raw:
+        if not isinstance(k,dict) or type(k.get("t")) not in (float,int) or not math.isfinite(k["t"]):
+            raise ValueError("Invalid camera time")
+        t=float(k["t"]); target=k.get("target"); mode=k.get("mode")
+        if not 0<=t<=source["seconds"] or keys and t<=keys[-1][0]:
+            raise ValueError("Camera clock must be monotonic")
+        if target=="wide":crop=np.array([0.,0.,*NATIVE])
+        elif isinstance(target,str) and target in observed and mode in ("detail","context"):
+            lo,hi=windows[target]
+            if not lo<=t<=hi:raise ValueError("Camera target not yet observed or no longer visible")
+            crop=crop_for(observed[target]["rect"],mode)
+        else:raise ValueError("Unknown camera target")
+        keys.append((t,crop,target))
+    if keys[0][0]!=0 or abs(keys[-1][0]-source["seconds"])>1e-6:
+        raise ValueError("Camera plan must cover entire source")
+    # Real vertical scrolls must retain wide framing; zero-distance transitions
+    # do not impose a pointless wide reset between adjacent subjects.
+    prev=0
+    for scroll in scrolls:
+        target=scroll["target_scroll_css"]
+        if target!=prev:
+            for n in range(math.ceil(scroll["start"]*FPS),math.floor(scroll["end"]*FPS)+1):
+                if not np.allclose(sample_camera_direction(keys,n/FPS),[0,0,*NATIVE]):
+                    raise ValueError("Detail camera during unverified scroll")
+        prev=target
+    crops=np.array([sample_camera_direction(keys,n/FPS) for n in range(source["frames"])])
+    if np.abs(np.diff(crops,axis=0)).max(initial=0)>45:raise ValueError("Camera exceeds per-frame motion limit")
+    return keys
+
+def sample_camera_direction(keys,t):
+    for (a,x,_),(b,y,_) in zip(keys,keys[1:]):
+        if t<=b:return x+(y-x)*ease((t-a)/(b-a))
+    return keys[-1][1].copy()
+
 def scroll_seconds(distance):
     return min(3.0,max(1.15,abs(distance)/850.))
 
@@ -210,11 +266,12 @@ def capture_continuous(page,url,rows,folder,display):
             "beats":beats,"scrolls":travel,"viewport_match_mae":deltas,"source_fps":60,
             "source_dpr":2,"intentional_cuts_seconds":[]}
 
-def render(source,shots,out):
+def render(source,shots,out,*,direction=None):
     cv2.setNumThreads(2)
     out.mkdir(exist_ok=False,parents=True)
     master=out/"master-1080p60.mp4"
     if sha(source["path"])!=source["sha256"]:raise ValueError("Native source changed")
+    keys=compile_camera_direction(source,direction) if direction is not None else None
     cmd=["ffmpeg","-v","error","-y","-f","rawvideo","-pix_fmt","bgr24","-s","1920x1080",
          "-r","60","-i","pipe:0","-an","-c:v","libx264","-preset","fast","-crf","17",
          "-threads","4","-movflags","+faststart",str(master)]
@@ -224,7 +281,7 @@ def render(source,shots,out):
         for n in range(source["frames"]):
             ok,frame=cap.read()
             if not ok or frame.shape!=(NATIVE[1],NATIVE[0],3):raise RuntimeError("Incomplete native frame")
-            crop=continuous_crop(source["beats"],shots,n/FPS)
+            crop=sample_camera_direction(keys,n/FPS) if keys is not None else continuous_crop(source["beats"],shots,n/FPS)
             if last is not None:max_step=max(max_step,float(np.max(np.abs(crop-last))))
             last=crop
             x,y,w,h=crop
@@ -244,7 +301,7 @@ def render(source,shots,out):
     if int(probe(master)["streams"][0]["nb_frames"])!=source["frames"]:raise RuntimeError("Output source clock changed")
     write(out/"camera-receipt.json",{"source_sha256":source["sha256"],"source_frames":source["frames"],
           "output_frames":source["frames"],"cuts":0,"max_crop_step_source_px":round(max_step,4),
-          "shots":stats,"master_sha256":sha(master),"creative_approved":False})
+          "shots":stats,"direction_schema":direction.get("schema") if direction else None,"master_sha256":sha(master),"creative_approved":False})
     return master,stats
 
 def run(url,out,display):

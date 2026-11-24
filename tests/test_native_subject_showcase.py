@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from backend.native_subject_showcase import crop_for,camera_crop,continuous_crop,shortlist,NATIVE
+from backend.native_subject_showcase import crop_for,camera_crop,continuous_crop,shortlist,NATIVE,compile_camera_direction,sample_camera_direction
 class NativeShowcaseTests(unittest.TestCase):
     def test_detail_contains_real_subject(self):
         rect={"x":288,"y":360,"width":1525,"height":900}
@@ -39,5 +39,18 @@ class NativeShowcaseTests(unittest.TestCase):
         self.assertLess(np.abs(np.diff(frames,axis=0)).max(),45)
         self.assertTrue((frames[:,:2]>=0).all())
         self.assertTrue((frames[:,:2]+frames[:,2:]<=np.array(NATIVE)+1e-6).all())
+
+    def test_source_bound_direct_pan_does_not_reset_wide(self):
+        rect={"x":288,"y":360,"width":746,"height":900}
+        right={"x":1066,"y":360,"width":1525,"height":900}
+        source={"sha256":"fixture","seconds":10.,"frames":600,"beats":[{"id":"s0","rect":rect},{"id":"s1","rect":rect},{"id":"s2","rect":right}],"scrolls":[{"start":1.,"end":3.,"target_scroll_css":1000},{"start":6.,"end":7.,"target_scroll_css":1000}]}
+        plan={"schema":"sauce-continuous-camera-v1","source_sha256":"fixture","keys":[{"t":0,"target":"wide"},{"t":3,"target":"wide"},{"t":4.5,"target":"s1","mode":"detail"},{"t":6,"target":"s1","mode":"detail"},{"t":7.8,"target":"s2","mode":"detail"},{"t":10,"target":"s2","mode":"detail"}]}
+        keys=compile_camera_direction(source,plan)
+        np.testing.assert_allclose(sample_camera_direction(keys,2),[0,0,*NATIVE])
+        self.assertLess(sample_camera_direction(keys,6.9)[2],NATIVE[0])
+        self.assertGreater(sample_camera_direction(keys,6.9)[0],sample_camera_direction(keys,6)[0])
+        with self.assertRaises(ValueError):compile_camera_direction(source,{**plan,"source_sha256":"wrong"})
+        bad={**plan,"keys":[{**plan["keys"][0],"target":"s1","mode":"detail"},*plan["keys"][1:]]}
+        with self.assertRaises(ValueError):compile_camera_direction(source,bad)
 
 if __name__=="__main__":unittest.main()
