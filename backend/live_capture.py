@@ -398,6 +398,10 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
  native_mode=capture_mode()=='x11grab60'
  if native_mode and quality['quality']!='high':
   raise RuntimeError('Native60 requires full-width DPR2 high quality capture')
+ sequence_pace=plan.get('sequence_pace','balanced')
+ if sequence_pace not in ('balanced','compact') or (sequence_pace=='compact' and not (plan.get('sequence') and native_mode and plan.get('local_only_action') is True)):
+  raise ValueError('Compact pace requires verified local native60 sequence')
+ compact=sequence_pace=='compact'
  native_recorder=Native60Recorder(private) if native_mode else None
  if native_recorder:
   try:native_recorder.start_display()
@@ -410,6 +414,7 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
          'readable':(350,800,1100,1.)}
  if pace not in pacing:raise ValueError('Unsupported showcase pace')
  lead_ms,read_ms,final_ms,scroll_speed=pacing[pace]
+ if compact:lead_ms,final_ms=180,350
  cursor_script=('' if cursorless or beats or passive_showcase else
                 ARROW_CURSOR_JS if cursor_style in ('arrow','tabler-legacy') else
                 CURSOR_JS if cursor_style=='circle' else
@@ -466,6 +471,13 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
           e.style.setProperty('visibility','hidden','important');
       }
     }""")
+   baseline=None
+   if compact:
+    from backend.curious_sequence import shot,panels
+    page.mouse.move(930,530)
+    before=shot(page);page.wait_for_timeout(350);steady=shot(page)
+    baseline=(before,steady,panels(page))
+    (private/'sequence-opening.png').write_bytes(before)
    if native_recorder:
     # Two independently read real browser frames align page pixels to the
     # full X11 window. The capture excludes browser chrome and is rejected
@@ -488,11 +500,11 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
                     type='jpeg',quality=60,animations='disabled')
     evidence.append({'phase':label,'time_s':round(time.monotonic()-start,2),
           'url':page.url.split('?')[0],'scroll':page.evaluate('Math.round(window.scrollY)')})
-   mark('opening')
+   if not compact:mark('opening')
    sequence_proof=None
    if plan.get('sequence') and local_only:
     from backend.curious_sequence import capture_sequence
-    sequence_events,sequence_proof=capture_sequence(page,url,plan['sequence'],video_begin,pointer_to)
+    sequence_events,sequence_proof=capture_sequence(page,url,plan['sequence'],video_begin,pointer_to,baseline=baseline,compact=compact)
     editorial_events.extend(sequence_events)
     events.append({'id':'sequence','kind':'button','label':'Observed local option selection'})
     mark('sequence-result')
@@ -670,7 +682,7 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
      page.wait_for_timeout(read_ms)
      mark('read-'+str(i))
    if editorial_events:
-    page.wait_for_timeout(1950 if cursorless else 2000)
+    page.wait_for_timeout(1450 if compact else 1950 if cursorless else 2000)
     editorial_events.append({'kind':'interaction_complete','t':time.monotonic()-video_begin})
    page.wait_for_timeout(final_ms)
    length=time.monotonic()-start
@@ -692,7 +704,9 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
       'requested_video_size':quality['video_size'],
       'viewport_css_size':quality['viewport'],
       'cursorless':cursorless,'presentation_cursor':'composited-arrow' if cursorless else 'hidden' if beats or passive_showcase else cursor_style}
-   if sequence_proof:receipt['sequence_proof']=sequence_proof
+   if sequence_proof:
+    receipt['sequence_proof']=sequence_proof
+    receipt['sequence_pace']=sequence_pace
    if native_proof:
     # FPS is the actual recorded source stream, not the export bitrate or
     # postproduced frame rate. Original source hashes remain authoritative.

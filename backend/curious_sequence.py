@@ -153,20 +153,23 @@ def dismiss_picker(page,scope):
     scope.wait_for(state='hidden',timeout=3500)
 
 
-def capture_sequence(page,url,sequence,video_begin,pointer):
+def capture_sequence(page,url,sequence,video_begin,pointer,*,baseline=None,compact=False):
     import time
-    before=shot(page);page.wait_for_timeout(350);steady=shot(page);old=panels(page)
+    if baseline is None:
+        before=shot(page);page.wait_for_timeout(350);steady=shot(page);old=panels(page)
+    else:
+        before,steady,old=baseline
     def click(loc):
         loc.scroll_into_view_if_needed(timeout=3000)
         rect=loc.bounding_box()
         if not rect:raise ValueError('No visible target')
         pointer(page,rect['x']+rect['width']/2,rect['y']+rect['height']/2)
-        page.wait_for_timeout(220)
+        page.wait_for_timeout(130 if compact else 220)
         t=time.monotonic()-video_begin
         loc.click(timeout=3500)
         return t
     scope=open_picker(page,url,sequence['picker'],click)
-    page.wait_for_timeout(400)
+    page.wait_for_timeout(260 if compact else 400)
     loc=exact(discover(page,scope),sequence['option'])
     t=click(loc)
     dismiss_picker(page,scope);page.wait_for_timeout(350)

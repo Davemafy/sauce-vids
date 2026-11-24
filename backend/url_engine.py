@@ -212,7 +212,7 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
     if checkpoint:
         if cinematic_only and checkpoint.get('cinematic_only') is not True:
             raise RuntimeError('Cinematic film rejected: checkpoint lacks cinematic admission')
-        return render_checkpoint(folder,checkpoint,stage,brief,audio)
+        return render_with_editorial(folder,checkpoint,stage,brief,audio)
     if (folder/'render-checkpoint.json').exists():
         raise RuntimeError('Saved capture failed checkpoint verification')
     stage('inspecting')
@@ -371,10 +371,12 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
                 'direction_source':source,'attempts':0,'subject_shots':bool(record.get('subject_shots')),
                 'cinematic_only':cinematic_only,'cursor_pack':cursor_pack,
                 'receipt_sha256':sha256((capture_dir/'continuous-capture.json').read_bytes()).hexdigest()}
+    if sequential and os.getenv('SAUCE_INTERACTIVE_EDITORIAL')=='1':
+        checkpoint['interactive_editorial']=True
     write_render_checkpoint(folder,checkpoint)
     curiosity_dir=private/'curiosity'
     if not (curiosity_dir/'conversation.json').is_file() or plan['mode']!='showcase':
-        return render_checkpoint(folder,checkpoint,stage,brief,audio)
+        return render_with_editorial(folder,checkpoint,stage,brief,audio)
     # Keep every render and model receipt. No new paid calls on checkpoint recovery.
     def before_review(x):
         if x!='needs_review':stage(x)
@@ -491,6 +493,63 @@ def customer_quality_summary(release: dict) -> dict:
         "creative_approved":False,
         "release_eligible":False,
     }
+
+
+def render_with_editorial(folder,checkpoint,stage,brief,audio):
+    if not checkpoint.get('interactive_editorial'):
+        return render_checkpoint(folder,checkpoint,stage,brief,audio)
+    from backend.interactive_editorial import run,evidence
+    private=folder/'private';motion=private/'motion';export=folder/'export'
+    directory=private/'interactive-editorial'
+    plan=json.loads((private/'motion-plan.json').read_text())
+    if checkpoint['mode']!='interactive' or not plan.get('sequence'):
+        raise RuntimeError('Editorial review requires a verified sequence')
+    def progress(x):
+        if x!='needs_review':stage(x)
+    if not (export/'release.json').is_file():
+        result=render_checkpoint(folder,checkpoint,progress,brief,audio)
+    else:
+        _,_,release=evidence(export,motion)
+        result={'status':'needs_review','ai_calls':checkpoint['ai_calls'],
+                'title':checkpoint['title'],'direction_source':checkpoint['direction_source'],
+                'capture_mode':'interactive','render_mode':release['render_mode'],
+                'narrated':release.get('narrated',False),**customer_quality_summary(release),
+                'video_type':'Real continuous browser recording; authenticated features not verified',
+                'preview':'preview.mp4'}
+    candidate=directory/'candidate'
+    def make_candidate():
+        stage('capturing')
+        cp=candidate/'private';cm=cp/'motion';cp.mkdir(parents=True,exist_ok=False)
+        revised={**plan,'sequence_pace':'compact'}
+        p=cp/'motion-plan.json';p.write_text(json.dumps(revised,indent=2))
+        env=dict(os.environ,SAUCE_SAFE_PUBLIC_ONLY='1')
+        env.setdefault('SAUCE_CAPTURE_QUALITY','high')
+        with (cp/'capture.log').open('w') as log:
+            subprocess.run([sys.executable,'-m','backend.live_capture','--url',checkpoint['url'],
+              '--out',str(cm),'--inspection',str(private/'inspection.json'),
+              '--plan',str(p),'--cursor-pack',checkpoint.get('cursor_pack','founder-reference')],
+              cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=140)
+        raw=(cm/'continuous-capture.json').read_bytes()
+        record=json.loads(raw)
+        if not record.get('sequence_proof') or record.get('sequence_pace')!='compact':
+            raise RuntimeError('Revision lost real sequence proof')
+        ck={**checkpoint,'attempts':0,'interactive_editorial':False,
+            'receipt_sha256':sha256(raw).hexdigest()}
+        write_render_checkpoint(candidate,ck)
+        render_checkpoint(candidate,ck,progress,brief,audio)
+        return candidate/'export',cm
+    try:
+        outcome=run(export,motion,directory,make_candidate)
+    except subprocess.SubprocessError:
+        # Review is optional; never claim a failed candidate was selected.
+        outcome={'selected':None,'decision':'revision-failed','ai_calls':0,'creative_approved':False}
+    # Keep both complete evidence bundles. Do not move the baseline or
+    # change its public-facing preview; selection is a private recommendation.
+    # The job store currently binds export/ to a single capture checkpoint.
+    result['editorial']={**outcome,'promotion':'private-recommendation-only'}
+    result['ai_calls']=checkpoint['ai_calls']+outcome.get('ai_calls',0)
+    stage('needs_review')
+    return result
 
 
 def render_checkpoint(folder,checkpoint,stage,brief,audio):
