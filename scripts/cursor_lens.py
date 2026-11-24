@@ -59,7 +59,7 @@ class CursorLens(MotionGlass):
         for i in range(math.ceil(stage.duration*fps)+1):
             t=i/fps
             sw,sh=stage.source_size
-            h=cv2.getPerspectiveTransform(np.float32([[0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]]),stage.quad(t))
+            h=cv2.getPerspectiveTransform(np.float32([[0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]]),self.camera_quad(t))
             xy=pointer.at(t)
             target=cv2.perspectiveTransform(np.float32([[xy]]),h)[0,0].astype(float)
             # Minimum 85px support even near an edge; move center inward,
@@ -111,7 +111,7 @@ class CursorLens(MotionGlass):
         self.transmission=(1-.12*np.exp(-d/12)).astype(np.float32)
         shadow=cv2.remap(self.shadow,mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
         self.board=LINEAR[np.clip(self.sky.astype(np.int16)+shadow,0,255).astype(np.uint8)]
-    def finish(self,screen,mx,my,qx,qy,energy):
+    def finish(self,screen,mx,my,qx,qy,energy,t):
         from luminous_display_stage import LINEAR,to_srgb
         ui=LINEAR[screen]
         face=ui*self.transmission[:,:,None]+self.light

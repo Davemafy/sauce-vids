@@ -92,9 +92,11 @@ class MotionGlass:
         return forward(point,self.geometry,PEAK_SAG*self.energy(t))
     def maps(self,t):
         return inverse_map(self.stage.source_size,self.stage.output_size,PEAK_SAG*self.energy(t))
+    def camera_quad(self,t):
+        return self.stage.quad(t)
     def render(self,source,t):
         stage=self.stage; sw,sh=stage.source_size; ow,oh=stage.output_size
-        quad=stage.quad(t)
+        quad=self.camera_quad(t)
         # Reuse the source-true camera; antialias before projection.
         scale=min(1.,max(np.linalg.norm(quad[1]-quad[0])/sw,
                          np.linalg.norm(quad[3]-quad[0])/sh)*1.10)
@@ -109,8 +111,8 @@ class MotionGlass:
         sx=((I[0,0]*mx+I[0,1]*my+I[0,2])/den).astype(np.float32)
         sy=((I[1,0]*mx+I[1,1]*my+I[1,2])/den).astype(np.float32)
         screen=cv2.remap(source,sx,sy,cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
-        return self.finish(screen,mx,my,qx,qy,energy)
-    def finish(self,screen,mx,my,qx,qy,energy):
+        return self.finish(screen,mx,my,qx,qy,energy,t)
+    def finish(self,screen,mx,my,qx,qy,energy,t):
         screen=reflect_face(screen,qx,qy,energy)
         mask=cv2.remap(self.mask,mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
         shadow=cv2.remap(self.shadow,mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
