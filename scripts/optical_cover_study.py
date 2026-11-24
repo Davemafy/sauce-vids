@@ -8,6 +8,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def main():
     a=argparse.ArgumentParser();a.add_argument('--source',type=Path,required=True);a.add_argument('--sha256',required=True);a.add_argument('--at',type=float,required=True);a.add_argument('--out',type=Path,required=True)
     a.add_argument('--bulge',type=float,default=0.)
+    a.add_argument('--polished',action='store_true')
     a.add_argument('--manifest',type=Path)
     a.add_argument('--manifest-sha256')
     x=a.parse_args()
@@ -41,7 +42,7 @@ def main():
             pointer['projection']=page.evaluate('d=>window.projectSource(...d)',[pointer['source'],sw,sh,x.bulge])
             if not pointer['projection']['visible'] or pointer['projection']['residual']>1e-6:raise ValueError('Optical cursor projection failed')
         for black,name in ((True,'black'),(False,'cloud')):
-            png=page.evaluate('async d=>window.study(d[0],d[1],d[2],d[3])',[uri(raw,'png'),uri(sky,'webp'),black,x.bulge])
+            png=page.evaluate('async d=>window.study(d[0],d[1],d[2],d[3],d[4])',[uri(raw,'png'),uri(sky,'webp'),black,x.bulge,x.polished])
             data=base64.b64decode(png.split(',',1)[1])
             if pointer:
                 from recorded_pointer import draw_reference_pointer
@@ -50,5 +51,5 @@ def main():
                 data=cv2.imencode('.png',frame)[1].tobytes()
             (x.out/(name+'.png')).write_bytes(data)
         b.close()
-    (x.out/'receipt.json').write_text(json.dumps({'renderer':renderer,'sourceSha256':x.sha256,'at':x.at,'bulge':x.bulge,'pointer':pointer,'researchOnly':True,'ownerApproved':False},indent=2))
+    (x.out/'receipt.json').write_text(json.dumps({'renderer':renderer,'sourceSha256':x.sha256,'at':x.at,'bulge':x.bulge,'pointer':pointer,'polished':x.polished,'researchOnly':True,'ownerApproved':False},indent=2))
 if __name__=='__main__':main()

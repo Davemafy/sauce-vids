@@ -9,7 +9,8 @@ ROOT=Path(__file__).resolve().parents[2]
 CHROME=Path('/opt/devmcp-browsers/chromium_headless_shell-1255/chrome-headless-shell-linux64/chrome-headless-shell')
 
 @pytest.mark.skipif(not CHROME.is_file(),reason='Existing Sauce SwiftShader worker required')
-def test_bulged_display_and_pointer_match_real_shader():
+@pytest.mark.parametrize("polished",[False,True])
+def test_bulged_display_and_pointer_match_real_shader(polished):
     # Diagnostic texture only; never used in a product film or owner preview.
     w,h=640,400
     src=np.zeros((h,w,3),np.uint8)
@@ -20,7 +21,7 @@ def test_bulged_display_and_pointer_match_real_shader():
         b=p.chromium.launch(headless=True,executable_path=str(CHROME),args=['--no-sandbox','--enable-unsafe-swiftshader','--use-gl=angle','--use-angle=swiftshader'])
         page=b.new_page()
         page.set_content((ROOT/'assets/shaders/optical-cover-study.html').read_text())
-        result=page.evaluate('async d=>window.study(...d)',[uri(src),uri(np.zeros((32,32,3),np.uint8)),True,.26])
+        result=page.evaluate('async d=>window.study(...d)',[uri(src),uri(np.zeros((32,32,3),np.uint8)),True,.26,polished])
         frame=cv2.imdecode(np.frombuffer(base64.b64decode(result.split(',',1)[1]),np.uint8),cv2.IMREAD_COLOR)
         for x,y in targets:
             hit=page.evaluate('d=>window.projectSource(...d)',[[x,y],w,h,.26])
