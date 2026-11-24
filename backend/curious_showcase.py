@@ -112,7 +112,7 @@ class Conversation:
         return text[:16000], {**answer.get("usageMetadata", {}),
                               "finishReason": candidate.get("finishReason")}
 
-    def ask(self, prompt, *, media=(), json_mode=False, phase):
+    def ask(self, prompt, *, media=(), json_mode=False, phase, stop_on_rate_limit=False):
         preferred = self.data.get("model") or os.getenv("SAUCE_DIRECTOR_MODEL", "gemini-3.1-flash-lite")
         fallback = os.getenv("SAUCE_CURIOUS_FALLBACK_MODEL", "gemini-3-flash-preview")
         models = [preferred] if self.succeeded else list(dict.fromkeys((preferred, fallback)))
@@ -131,7 +131,12 @@ class Conversation:
                 attempt.update(status="failed", error_type=type(exc).__name__)
                 if isinstance(exc, HTTPError):
                     attempt["http_status"] = exc.code
+                    retry_after = exc.headers.get("Retry-After", "") if exc.headers else ""
+                    if retry_after.isascii() and retry_after.isdecimal() and len(retry_after) <= 10:
+                        attempt["retry_after_seconds"] = int(retry_after)
                 self.save()
+                if stop_on_rate_limit and attempt.get("http_status") == 429:
+                    break
                 continue
             attempt.update(status="ok", finish_reason=usage.get("finishReason"),
                            usage={k: usage.get(k) for k in (

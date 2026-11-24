@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -125,10 +126,60 @@ def run(url, out, *, max_pages=3, max_probes=3, request=None):
         receipt.write_text(json.dumps(result,indent=2)+"\n")
     return result
 
+def resume_review(out, *, request=None):
+    """Resume only the stored outcome evidence; no fresh navigation or clicks."""
+    out = Path(out)
+    receipt = out / "receipt.json"
+    result = json.loads(receipt.read_text())
+    research = json.loads((out/"research"/"research.json").read_text())
+    if (result.get("schema") != "sauce-route-outcome-discovery-v1"
+            or result.get("source_url") != research.get("requested_url")):
+        raise ValueError("Route checkpoint mismatch")
+    pages = {p["url"]: p for p in research["pages"]}
+    pairs, mapping = [], {}
+    for i, attempt in enumerate(result["attempts"], 1):
+        if attempt["decision"] != "visible_outcome_candidate":
+            continue
+        target = attempt["route"]
+        page = pages[target]
+        if not re.fullmatch(r"p[0-4]",page["id"]) or not public_same_origin(target,result["source_url"]):
+            raise ValueError("Invalid checkpoint route")
+        report = json.loads((out/("inspect-"+page["id"])/"inspection.json").read_text())
+        if report["url"] != target:
+            raise ValueError("Inspection route mismatch")
+        directory = out/("probe-"+str(i))
+        proof = json.loads((directory/"outcome.json").read_text())
+        pair = pair_from_probe(report,attempt["observed_id"],proof,directory)
+        if pair["label"] != attempt["label"]:
+            raise ValueError("Checkpoint control mismatch")
+        ident = "a"+str(len(pairs)+1)
+        mapping[ident] = {**attempt,"proof_dir":str(directory)}
+        pair["id"] = ident
+        pair["label"] = (urlsplit(target).path+": "+pair["label"])[:160]
+        pairs.append(pair)
+    if not pairs:
+        return result
+    editorial = evaluate(research["pages"][0]["title"][:160],pairs,out/"editorial",
+                         request=request,resume=True)
+    result["editorial"] = editorial
+    result["selected"] = mapping.get(editorial["admitted_id"])
+    with tempfile.NamedTemporaryFile(mode="w",dir=out,prefix=".receipt-",delete=False) as stream:
+        temp = Path(stream.name)
+        stream.write(json.dumps(result,indent=2)+"\n")
+    temp.replace(receipt)
+    return result
+
 
 if __name__ == "__main__":
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--url",required=True);p.add_argument("--out",type=Path,required=True)
+    p.add_argument("--url");p.add_argument("--out",type=Path,required=True)
+    p.add_argument("--resume",action="store_true",help="Review stored evidence only; never crawl again")
     p.add_argument("--max-pages",type=int,default=3);p.add_argument("--max-probes",type=int,default=3)
     a=p.parse_args()
-    print(json.dumps(run(a.url,a.out,max_pages=a.max_pages,max_probes=a.max_probes),indent=2))
+    if a.resume:
+        if a.url: p.error("--resume uses the recorded URL, not a new URL")
+        result=resume_review(a.out)
+    else:
+        if not a.url: p.error("--url required for a new discovery")
+        result=run(a.url,a.out,max_pages=a.max_pages,max_probes=a.max_probes)
+    print(json.dumps(result,indent=2))

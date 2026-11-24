@@ -1,6 +1,8 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
+from urllib.error import HTTPError
 from pathlib import Path
 
 import cv2
@@ -65,6 +67,69 @@ class OutcomeEditorialGateTests(unittest.TestCase):
         self.pair.update(after=self.pair["before"],after_sha256=self.pair["before_sha256"])
         with self.assertRaises(ValueError):
             evaluate("Test", [self.pair], self.root/"same")
+
+
+    def test_rate_limit_defers_resumes_once_and_retains_history(self):
+        calls=[]
+        def limited(model, contents, json_mode):
+            calls.append(model)
+            raise HTTPError("https://example.test",429,"quota",{"Retry-After":"1800"},None)
+        directory=self.root/"retry"
+        with patch.dict("os.environ",{"SAUCE_DIRECTOR_MODEL":"gemini-test-a",
+                                     "SAUCE_CURIOUS_FALLBACK_MODEL":"gemini-test-b"}):
+            with patch("backend.outcome_editorial_gate.time.time",return_value=1000):
+                first=evaluate("Test",[self.pair],directory,request=limited)
+                self.assertEqual(first["state"],"provider_deferred")
+                self.assertEqual(first["retry_not_before"],2800)
+                self.assertIsNone(first["admitted_id"])
+                self.assertEqual(len(calls),1)
+            with patch("backend.outcome_editorial_gate.time.time",return_value=2799):
+                self.assertEqual(evaluate("Test",[self.pair],directory,request=limited,resume=True),first)
+            with patch("backend.outcome_editorial_gate.time.time",return_value=2800):
+                second=evaluate("Test",[self.pair],directory,request=limited,resume=True)
+                self.assertEqual(second["state"],"no_admission")
+                self.assertEqual(second["round_number"],2)
+                self.assertEqual(len(second["model_attempts"]),2)
+            with patch("backend.outcome_editorial_gate.time.time",return_value=10000):
+                self.assertEqual(evaluate("Test",[self.pair],directory,request=limited,resume=True),second)
+        self.assertEqual(len(calls),2)
+
+    def test_503_fallback_and_valid_abstention_is_terminal(self):
+        calls=[]
+        def request(model, contents, json_mode):
+            calls.append(model)
+            if len(calls)==1:
+                raise HTTPError("https://example.test",503,"unavailable",{},None)
+            return json.dumps(self.decision("locked_or_hidden","abstain",None)),{"finishReason":"STOP"}
+        with patch.dict("os.environ",{"SAUCE_DIRECTOR_MODEL":"gemini-test-a",
+                                     "SAUCE_CURIOUS_FALLBACK_MODEL":"gemini-test-b"}):
+            d=self.root/"fallback"
+            result=evaluate("Test",[self.pair],d,request=request)
+            self.assertEqual(result["state"],"decided")
+            self.assertIsNone(result["admitted_id"])
+            self.assertEqual(evaluate("Test",[self.pair],d,request=request,resume=True),result)
+            self.assertEqual(calls,["gemini-test-a","gemini-test-b"])
+
+    def test_nontransient_invalid_response_never_resumes(self):
+        d=self.root/"invalid"
+        result=evaluate("Test",[self.pair],d,request=lambda *a: ("{}",{"finishReason":"STOP"}))
+        self.assertEqual(result["state"],"no_admission")
+        self.assertEqual(evaluate("Test",[self.pair],d,request=lambda *a:self.fail("retried"),resume=True),result)
+
+    def test_provider_recovery_preserves_attempts_and_admits_only_valid_result(self):
+        d=self.root/"recovery"
+        def fail(*args):
+            raise HTTPError("https://example.test",503,"unavailable",{},None)
+        with patch.dict("os.environ",{"SAUCE_DIRECTOR_MODEL":"gemini-test-a",
+                                     "SAUCE_CURIOUS_FALLBACK_MODEL":"gemini-test-a"}):
+            with patch("backend.outcome_editorial_gate.time.time",return_value=1000):
+                first=evaluate("Test",[self.pair],d,request=fail)
+                self.assertEqual(first["state"],"provider_deferred")
+            with patch("backend.outcome_editorial_gate.time.time",return_value=1900):
+                second=evaluate("Test",[self.pair],d,request=lambda *a:(json.dumps(self.decision()),{"finishReason":"STOP"}),resume=True)
+        self.assertEqual(second["admitted_id"],"a1")
+        self.assertEqual(len(second["model_attempts"]),2)
+        self.assertFalse(second["creative_approved"])
 
 
 if __name__ == "__main__":

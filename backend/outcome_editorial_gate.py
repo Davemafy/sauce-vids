@@ -6,6 +6,8 @@ Never executes a model action, authorizes a purchase, or approves a film.
 from __future__ import annotations
 
 import base64
+import fcntl
+import time
 import hashlib
 import json
 import os
@@ -19,6 +21,8 @@ from backend.curious_showcase import Conversation
 
 SCHEMA = "sauce-outcome-editorial-v1"
 MAX_PAIRS = 3
+MAX_ROUNDS = 2
+RETRY_COOLDOWN_SECONDS = 900
 MAX_IMAGE_BYTES = 12_000_000
 STATUSES = {"core_visible", "supporting_visible", "generic_setting",
             "locked_or_hidden", "uncertain"}
@@ -98,7 +102,16 @@ def checked_decision(raw, ids):
     return raw
 
 
-def evaluate(title, pairs, private_dir, *, request=None):
+def evaluate(title, pairs, private_dir, *, request=None, resume=False):
+    """Serialize model attempts for an evidence packet on this worker."""
+    directory = Path(private_dir)
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with (directory / ".editorial.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _evaluate(title, pairs, directory, request=request, resume=resume)
+
+
+def _evaluate(title, pairs, private_dir, *, request=None, resume=False):
     """Caller supplies independently admitted source pairs, never model media.
 
     A positive decision is a proposed core-payoff candidate, not a proof of
@@ -127,12 +140,20 @@ def evaluate(title, pairs, private_dir, *, request=None):
         meta.append(row)
     packet = sha(json.dumps({"title": title, "pairs": meta}, sort_keys=True).encode())
     result_file = directory / "decision.json"
+    prior, round_number = [], 1
     if result_file.exists():
         saved = json.loads(result_file.read_text())
         if saved.get("packet_sha256") != packet:
             raise ValueError("Evidence changed; use a new private experiment directory")
-        return saved
-    conv = Conversation(directory / packet, request=request)
+        # A valid abstention, invalid response, or exhausted budget stays
+        # final. Only a known transient provider failure is resumable.
+        if (not resume or saved.get("state") != "provider_deferred"
+                or time.time() < saved.get("retry_not_before", float("inf"))
+                or saved.get("round_number", MAX_ROUNDS) >= MAX_ROUNDS):
+            return saved
+        prior = saved["model_attempts"]
+        round_number = saved["round_number"] + 1
+    conv = Conversation(directory / (packet if round_number == 1 else f"{packet}-round-{round_number}"), request=request)
     if conv.calls:
         raise ValueError("Prior inference attempt exists; refusing duplicate call")
     prompt = (
@@ -154,15 +175,24 @@ def evaluate(title, pairs, private_dir, *, request=None):
         "each with id, status (core_visible|supporting_visible|generic_setting|locked_or_hidden|uncertain), "
         "and evidence, describing only what is actually visible). Candidates: "
         + json.dumps([{k: r[k] for k in ("id", "label")} for r in meta]))
-    answer = conv.ask(prompt, media=tuple(media), json_mode=True, phase="outcome-editorial")
+    answer = conv.ask(prompt, media=tuple(media), json_mode=True, phase="outcome-editorial", stop_on_rate_limit=True)
     decision = None
     if answer and conv.data["attempts"][-1].get("finish_reason") == "STOP":
         try:
             decision = checked_decision(json.loads(answer), ids)
         except (ValueError, TypeError, KeyError):
             pass
+    attempts = conv.data["attempts"]
+    transient = bool(attempts) and all(a.get("status") == "failed" and
+                    a.get("http_status") in (429, 500, 502, 503, 504) for a in attempts)
+    deferred = transient and round_number < MAX_ROUNDS
+    retry_at = (time.time() + max(RETRY_COOLDOWN_SECONDS,
+                *(a.get("retry_after_seconds", 0) for a in attempts))) if deferred else None
     result = {"schema": SCHEMA, "packet_sha256": packet, "candidates": meta,
-              "model_attempts": conv.data["attempts"], "decision": decision,
+              "round_number": round_number,
+              "state": "provider_deferred" if deferred else ("decided" if decision else "no_admission"),
+              "retry_not_before": retry_at,
+              "model_attempts": prior + attempts, "decision": decision,
               "admitted_id": decision["selected_id"] if decision and decision["decision"] == "admit" else None,
               "creative_approved": False, "production_ready": False}
     temp = result_file.with_suffix(".tmp")
