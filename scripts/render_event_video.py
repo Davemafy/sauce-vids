@@ -63,6 +63,7 @@ parser.add_argument("--cloud-overview",action="store_true",
                     help="Fixed Cloud Shadow stage for passive public showcases")
 parser.add_argument("--physical-cover-bake",type=Path,help="Opt-in calibrated Cycles cover material study")
 parser.add_argument("--physical-cover-sha256",help="Exact SHA256 of the calibration asset")
+parser.add_argument("--feathered-lens-study",action="store_true",help="Original cursor lens with softly blended edges")
 parser.add_argument("--framed-lens-study",action="store_true",help="Full-source framing and refined optical cover research")
 parser.add_argument("--cursor-lens-study",action="store_true",help="Persistent recorded-pointer optical lens research")
 parser.add_argument("--motion-glass-study",action="store_true",help="Opt-in camera-travel convex cover research")
@@ -91,7 +92,7 @@ if args.film_plan:
 else:
     FILM_PLAN_DATA=None
     args.cursor_pack=args.cursor_pack or "founder-reference"
-if (args.motion_glass_study or args.cursor_lens_study or args.framed_lens_study) and (FILM_PLAN_DATA is None or args.physical_cover_bake or sum((args.motion_glass_study,args.cursor_lens_study,args.framed_lens_study))>1):
+if (args.motion_glass_study or args.cursor_lens_study or args.framed_lens_study or args.feathered_lens_study) and (FILM_PLAN_DATA is None or args.physical_cover_bake or sum((args.motion_glass_study,args.cursor_lens_study,args.framed_lens_study,args.feathered_lens_study))>1):
     parser.error("Motion glass requires a verified film plan and no other optical study")
 if args.physical_cover_bake and FILM_PLAN_DATA is None:
     parser.error("Physical cover requires a verified film plan")
@@ -181,13 +182,16 @@ if FILM_PLAN_DATA is not None:
             FILM_PLAN_DATA["studioStage"],MANIFEST,SRC,(INPUT_W,INPUT_H),
             (1920,1080),FILM_PLAN.duration,FPS)
 
-    if args.motion_glass_study or args.cursor_lens_study or args.framed_lens_study:
+    if args.motion_glass_study or args.cursor_lens_study or args.framed_lens_study or args.feathered_lens_study:
         if (STUDIO_STAGE is None or STUDIO_STAGE.stage_preset!="cloud_window_clearface_v1"
                 or REFERENCE_POINTER is None or ISOLATION is not None
                 or "domPlanes" in FILM_PLAN_DATA or "domPlane" in FILM_PLAN_DATA):
             raise ValueError("Motion glass study requires single-plane clearface and reference pointer")
         from motion_glass import MotionGlass
-        if args.framed_lens_study:
+        if args.feathered_lens_study:
+            from feathered_cursor_lens import FeatheredCursorLens
+            MOTION_GLASS=FeatheredCursorLens(STUDIO_STAGE,MANIFEST,REFERENCE_POINTER,FPS)
+        elif args.framed_lens_study:
             from framed_cursor_lens import FramedCursorLens
             MOTION_GLASS=FramedCursorLens(STUDIO_STAGE,MANIFEST,REFERENCE_POINTER,FPS)
         elif args.cursor_lens_study:
