@@ -161,3 +161,31 @@ def test_passive_paldey_showcase_uses_real_browser_over_new_clean_sky():
     # Product pixels are source-true, no synthetic dashboard or typography.
     old=render_cloud_overview(frame,(640,360))
     assert not np.array_equal(old[0,0],result[0,0])
+
+
+def test_fullglass_face_protects_bright_glyphs_and_preserves_outer_sky():
+    from cloud_window_sky_stage import coat_glass_face, FULL_GLASS_PRESET
+    from cloud_shadow_stage import render_cloud_overview
+    size=(640,360)
+    src=np.full((360,640,3),18,np.uint8)
+    src[130:160,220:320]=235
+    before=src.copy()
+    coated=coat_glass_face(src,size,size)
+    np.testing.assert_array_equal(src,before)
+    np.testing.assert_array_equal(coated[130:160,220:320],src[130:160,220:320])
+    dark=coated[50:100,70:560].astype(float)-18
+    assert dark.mean()>5 and dark.std()>2 and dark.max()<48
+    out=render_cloud_overview(src,size,stage_preset=FULL_GLASS_PRESET)
+    np.testing.assert_array_equal(out[0,0],sky_background(size)[0,0])
+
+
+def test_fullglass_stage_is_explicit_and_supported(actual_source_fixture):
+    from cloud_window_sky_stage import FULL_GLASS_PRESET
+    path,frame,manifest,cfg=actual_source_fixture
+    cfg["stagePreset"]=FULL_GLASS_PRESET
+    stage=load_studio_stage(cfg,manifest,path,(320,180),(640,360),2.4,25)
+    out=render_studio_stage(stage,frame,0)
+    assert out.shape==(360,640,3)
+    np.testing.assert_array_equal(out[0,0],sky_background((640,360))[0,0])
+    normalized,_=normalize_generated_studio_plan({"studioStage":cfg},enforce_cloud_stage=True)
+    assert normalized["studioStage"]["stagePreset"]==FULL_GLASS_PRESET

@@ -543,7 +543,9 @@
         "stagePreset": {
           "enum": [
             "classic",
-            "cloud_shadow_v1"
+            "cloud_shadow_v1",
+            "cloud_window_sky_v1",
+            "cloud_window_fullglass_v1"
           ]
         },
         "motion": {

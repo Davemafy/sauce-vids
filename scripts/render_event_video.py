@@ -789,7 +789,8 @@ def render(output,seconds=None,static=False):
                 "motionProfile":STUDIO_STAGE.motion_style,
                 "stagePreset":STUDIO_STAGE.stage_preset,
                 "sameSourceFrameShutter":STUDIO_STAGE.shutter,
-                "sourcePixelsOnly":True}
+                "sourcePixelsOnly":STUDIO_STAGE.stage_preset!="cloud_window_fullglass_v1",
+                "opticalSurfaceCoating":STUDIO_STAGE.stage_preset=="cloud_window_fullglass_v1"}
         if DOM_PLANE_GROUP is not None:
             record["film_plan"]["domPlanes"]={
                 "ids":[member.id for member in DOM_PLANE_GROUP.members],

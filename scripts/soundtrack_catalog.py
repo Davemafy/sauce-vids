@@ -126,7 +126,9 @@ def cue_times(proof,showcase_plan=None):
         times.append(c['outputSample']/RATE)
     return times,times
 
-def audition(root,row,film,foley,receipt,out,showcase_plan=None):
+def audition(root,row,film,foley,receipt,out,showcase_plan=None,*,foley_gain=1.):
+    if not np.isfinite(foley_gain) or not 0<=foley_gain<=1:
+        raise ValueError("Invalid Foley gain")
     p=admit(root,row)
     info=json.loads(run('ffprobe','-v','error','-select_streams','v:0','-show_entries','stream=nb_frames,avg_frame_rate,width,height','-of','json',str(film)))['streams'][0]
     if info['avg_frame_rate']!='60/1' or (info['width'],info['height'])!=(1920,1080):raise ValueError('Expected landscape60 master')
@@ -148,7 +150,7 @@ def audition(root,row,film,foley,receipt,out,showcase_plan=None):
     m*=gain
     from foley_mixer import _ducking_gain,_soft_knee
     ducks=[]
-    for t in times:
+    for t in times if foley_gain>0 else ():
         at=round(t*RATE)
         if 0<=at<n:
             ducks.append({'startSample':max(0,at-1920),'endSample':min(n,at+12000),'attackMs':40,'releaseMs':160,'attenuationDb':-3.5})
@@ -156,7 +158,7 @@ def audition(root,row,film,foley,receipt,out,showcase_plan=None):
     # Very short attack avoids abrupt clip edges without a slow intro.
     m[:1440]*=np.linspace(0,1,1440)[:,None]
     m[-14400:]*=np.linspace(1,0,14400)[:,None]
-    mix=_soft_knee(fx+m)
+    mix=_soft_knee(fx*foley_gain+m)
     out=Path(out);out.parent.mkdir(parents=True,exist_ok=True)
     if out.exists():raise ValueError('Refusing to overwrite existing audition')
     wav=out.with_suffix('.wav')
@@ -166,12 +168,12 @@ def audition(root,row,film,foley,receipt,out,showcase_plan=None):
     subprocess.run(['ffmpeg','-v','error','-nostdin','-i',str(film),'-i',str(wav),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','256k','-movflags','+faststart',str(out)],check=True)
     if picture_hash(out)!=picture_hash(film):raise ValueError('Picture stream changed')
     subprocess.run(['ffmpeg','-v','error','-xerror','-i',str(out),'-f','null','-'],check=True)
-    result={'track':row['id'],'trackSha256':row['sha256'],'start':offset,'duration':duration,'samples':n,'duckIntervals':ducks,'peak':float(np.max(np.abs(mix))),'musicGain':gain,'pictureHash':picture_hash(out),'filmSha256':sha(out),'inputFilmSha256':sha(film),'foleySha256':sha(foley),'foleyReceiptSha256':sha(receipt),'showcasePlanSha256':sha(showcase_plan) if showcase_plan else None,'ownerApproved':False}
+    result={'track':row['id'],'trackSha256':row['sha256'],'start':offset,'duration':duration,'samples':n,'duckIntervals':ducks,'peak':float(np.max(np.abs(mix))),'musicGain':gain,'foleyGain':foley_gain,'pictureHash':picture_hash(out),'filmSha256':sha(out),'inputFilmSha256':sha(film),'foleySha256':sha(foley),'foleyReceiptSha256':sha(receipt),'showcasePlanSha256':sha(showcase_plan) if showcase_plan else None,'ownerApproved':False}
     out.with_suffix('.json').write_text(json.dumps(result,indent=2))
     return result
 
 def main():
-    a=argparse.ArgumentParser();a.add_argument('--root',type=Path,required=True);a.add_argument('--film',type=Path,required=True);a.add_argument('--foley',type=Path,required=True);a.add_argument('--receipt',type=Path,required=True);a.add_argument('--tracks',nargs='+');a.add_argument('--role',choices=['interaction','showcase','transformation']);a.add_argument('--recent',nargs='*',default=[]);a.add_argument('--explore',action='store_true');a.add_argument('--showcase-plan',type=Path);a.add_argument('--out',type=Path,required=True)
+    a=argparse.ArgumentParser();a.add_argument('--root',type=Path,required=True);a.add_argument('--film',type=Path,required=True);a.add_argument('--foley',type=Path,required=True);a.add_argument('--receipt',type=Path,required=True);a.add_argument('--tracks',nargs='+');a.add_argument('--role',choices=['interaction','showcase','transformation']);a.add_argument('--recent',nargs='*',default=[]);a.add_argument('--explore',action='store_true');a.add_argument('--showcase-plan',type=Path);a.add_argument('--out',type=Path,required=True);a.add_argument('--foley-gain',type=float,default=1.)
     args=a.parse_args();ev=json.loads(args.receipt.read_text());seconds=ev['samples']/RATE
     accents,_=cue_times(ev,args.showcase_plan)
     if bool(args.tracks)==bool(args.role):raise ValueError('Choose exactly one explicit track list or editorial role')
@@ -187,7 +189,7 @@ def main():
     for row in catalog['tracks']:
         print(row['id'],row['tempoEstimateBpm'],row['pictureExcerptCandidates'][0],flush=True)
         if row['id'] in args.tracks:
-            print(audition(args.root,row,args.film,args.foley,args.receipt,args.out/(row['id']+'.mp4'),args.showcase_plan),flush=True)
+            print(audition(args.root,row,args.film,args.foley,args.receipt,args.out/(row['id']+'.mp4'),args.showcase_plan,foley_gain=args.foley_gain),flush=True)
             row['auditionCount']=1
     (args.out/'catalog.json').write_text(json.dumps(catalog,indent=2))
 if __name__=='__main__':main()

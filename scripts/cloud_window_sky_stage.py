@@ -160,3 +160,67 @@ def physical_plate(source_size,output_size):
     plate=sky*(1.-a)+refr*a
     plate=plate*(1-lip[:,:,None])+np.float32([249,253,255])*lip[:,:,None]
     return np.clip(plate,0,255).astype(np.uint8)
+
+
+FULL_GLASS_PRESET = "cloud_window_fullglass_v1"
+
+
+@lru_cache(maxsize=4)
+def fullglass_plate(source_size, output_size):
+    """Reduce the bright bezel; the glass face, not a ring, carries the look."""
+    original=physical_plate(source_size,output_size).astype(np.float32)
+    sky=sky_background(output_size).astype(np.float32)
+    shell=object_mask(output_size,source_size).astype(np.float32)/255.
+    # Retain elevation shadows outside the object and a quiet lit perimeter.
+    a=.28*shell[:,:,None]
+    return np.rint(original*(1-a)+sky*a).astype(np.uint8)
+
+
+@lru_cache(maxsize=4)
+def surface_light(source_size,output_size):
+    """A reflected cloud field across the entire physical face.
+
+    The sky asset remains unchanged behind the window. Its separate optical
+    reflection is softly refracted, with no copied artwork UI or text.
+    """
+    ow,oh=output_size
+    x0,y0,x1,y1,_=window_geometry(source_size,output_size)
+    rows,cols=np.indices((oh,ow),dtype=np.float32)
+    u=(cols-x0)/max(1,x1-x0)
+    v=(rows-y0)/max(1,y1-y0)
+    sky=sky_background(output_size)
+    # Different cloud placement from the environment gives the slab volume.
+    mx=(.10+.81*u+.045*np.sin(v*np.pi))*ow
+    my=(.10+.80*v+.035*np.sin(u*np.pi))*oh
+    ref=cv2.remap(sky,mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_REFLECT_101)
+    ref=cv2.GaussianBlur(ref,(0,0),max(1.,oh*.004))
+    # Soft overhead specular light: no opaque white bars across text.
+    sheen=np.exp(-((u-.27)/.43)**4-((v-.10)/.11)**2)
+    light=ref.astype(np.float32)*.145 + sheen[:,:,None]*np.float32([10,10,10])
+    return light
+
+
+def coat_glass_face(projected,source_size,output_size,view=None):
+    """Apply bounded optical light, never repaint, displace or blur UI pixels.
+
+    Bright and saturated product information is protected. Fine dark-on-light
+    and light-on-dark edges receive substantially less reflection. The
+    remaining low-detail dark surfaces reveal clouds throughout the slab.
+    """
+    if projected.shape!=(output_size[1],output_size[0],3):
+        raise ValueError("Glass needs the projected real source")
+    light=surface_light(source_size,output_size)
+    if view is not None:
+        light=cv2.warpAffine(light,view,output_size,flags=cv2.INTER_LINEAR,
+                             borderMode=cv2.BORDER_CONSTANT)
+    gray=cv2.cvtColor(projected,cv2.COLOR_BGR2GRAY).astype(np.float32)
+    local=cv2.blur(gray,(5,5))
+    edge=cv2.absdiff(gray,local)
+    edge=cv2.dilate(edge,np.ones((3,3),np.uint8))
+    chroma=projected.max(axis=2).astype(np.float32)-projected.min(axis=2)
+    # A low-contrast reflected image behind the readable interface:
+    # up to ~36 levels in dark blank areas, under 3 at bright glyphs.
+    weight=np.clip((145.-gray)/120.,0.,1.)
+    weight*=np.clip(1.-edge/22.,.10,1.)
+    weight*=np.clip(1.-chroma/100.,.12,1.)
+    return np.rint(np.clip(projected.astype(np.float32)+light*weight[:,:,None],0,255)).astype(np.uint8)

@@ -80,9 +80,9 @@ def direction(video:Path,manifest:Path):
       "cursor":"recorded",
       "audio":{"mode":"eventFoley",
                "eventIndices":list(range(len(events))),
-               "clickGain":.36,"motionGain":.19,"masterGain":.46},
+               "clickGain":0.,"motionGain":.10,"masterGain":.46},
       "studioStage":{
-        "stagePreset":"cloud_window_sky_v1",
+        "stagePreset":"cloud_window_fullglass_v1",
          "camera":keys,
          "material":{"color":[32,35,43],"grain":.16},
          "lighting":{"eventIndex":len(events)-1,"trigger":"verified",

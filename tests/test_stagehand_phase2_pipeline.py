@@ -82,6 +82,8 @@ class Phase2NativeDirectorTests(unittest.TestCase):
                 plan=source_event_director.direction(video,manifest)
             self.assertEqual(plan["durationSeconds"],6.5)
             self.assertEqual(plan["audio"]["eventIndices"],[0])
+            self.assertEqual(plan["audio"]["clickGain"],0.)
+            self.assertEqual(plan["studioStage"]["stagePreset"],"cloud_window_fullglass_v1")
             record["events"].append(dict(record["events"][0],start=3.2,t=4.2))
             manifest.write_text(json.dumps(record))
             with patch("film_director_capabilities.build_contract",return_value=packet):

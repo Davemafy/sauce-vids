@@ -196,16 +196,18 @@ def render_cloud_stage(stage, source, t):
     if stage.stage_preset=="cloud_glass_v1":
         from cloud_glass_object_stage import stage_plate as physical_plate
         from cloud_glass_object_stage import card_mask as aperture_mask
-    elif stage.stage_preset=="cloud_window_sky_v1":
+    elif stage.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1"):
         from cloud_window_sky_stage import physical_plate, card_mask as aperture_mask
-        from cloud_window_sky_stage import sky_background
+        from cloud_window_sky_stage import sky_background, fullglass_plate, coat_glass_face
+        if stage.stage_preset=="cloud_window_fullglass_v1":
+            physical_plate=fullglass_plate
     else:
         physical_plate=stage_plate
         aperture_mask=card_mask
     board = physical_plate(stage.source_size, stage.output_size).copy()
     if stage.immersive:
         view=stage.view_transform(t)
-        if stage.stage_preset=="cloud_window_sky_v1":
+        if stage.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1"):
             # Cloud environment is stationary; only the glossy window,
             # its real shadow and real Chromium capture move with camera.
             sky=sky_background(stage.output_size).astype(np.float32)
@@ -253,6 +255,9 @@ def render_cloud_stage(stage, source, t):
     if stage.immersive:
         m=cv2.warpAffine(m,stage.view_transform(t),(ow,oh),
                          flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
+    if stage.stage_preset=="cloud_window_fullglass_v1":
+        rendered=coat_glass_face(rendered,stage.source_size,stage.output_size,
+                                 stage.view_transform(t) if stage.immersive else None)
     alpha = m.astype(np.float32)[:, :, None] / 255
     return np.uint8(np.clip(board.astype(np.float32)*(1-alpha)
                             + rendered.astype(np.float32)*alpha, 0, 255))
@@ -269,13 +274,16 @@ def render_cloud_overview(source, output_size=(1920,1080), *,
     if source.ndim!=3 or source.shape[2]!=3 or source.dtype!=np.uint8:
         raise ValueError("Expected genuine decoded BGR browser frame")
     size=(source.shape[1],source.shape[0])
-    if stage_preset=="cloud_window_sky_v1":
+    if stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1"):
         from cloud_window_sky_stage import (
             window_geometry as sky_window,
             physical_plate as sky_plate,
             card_mask as sky_mask,
         )
         geometry,plate,masker=sky_window,sky_plate,sky_mask
+        if stage_preset=="cloud_window_fullglass_v1":
+            from cloud_window_sky_stage import fullglass_plate, coat_glass_face
+            plate=fullglass_plate
     elif stage_preset=="cloud_shadow_v1":
         geometry,plate,masker=window_geometry,stage_plate,card_mask
     else:
@@ -284,6 +292,10 @@ def render_cloud_overview(source, output_size=(1920,1080), *,
     board=plate(size,output_size).copy()
     screen=cv2.resize(source,(x1-x0,y1-y0),interpolation=cv2.INTER_AREA
                       if x1-x0<=size[0] else cv2.INTER_CUBIC)
+    if stage_preset=="cloud_window_fullglass_v1":
+        projected=np.zeros_like(board)
+        projected[y0:y1,x0:x1]=screen
+        screen=coat_glass_face(projected,size,output_size)[y0:y1,x0:x1]
     mask=masker(size,output_size)[y0:y1,x0:x1,None].astype(np.uint16)
     dst=board[y0:y1,x0:x1]
     dst[:]=((screen.astype(np.uint16)*mask+
