@@ -230,7 +230,8 @@ def render(source,shots,out):
             x,y,w,h=crop
             matrix=np.array([[1920/w,0,-x*1920/w],[0,1080/h,-y*1080/h]],np.float32)
             cropped=cv2.warpAffine(frame,matrix,(1920,1080),flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_REPLICATE)
-            encoder.stdin.write(render_cloud_overview(cropped).tobytes())
+            encoder.stdin.write(render_cloud_overview(
+                cropped,stage_preset="cloud_window_sky_v1").tobytes())
     finally:
         cap.release();encoder.stdin.close()
         err=encoder.stderr.read()

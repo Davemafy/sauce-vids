@@ -66,28 +66,26 @@ def card_mask(source_size,output_size):
 
 @lru_cache(maxsize=4)
 def sky_background(output_size):
-    """The existing source-proven cobalt cloud asset becomes the BACKGROUND.
+    """Render the owner's clean cobalt-halftone clouds BEHIND the browser.
 
-    Gentle atmospheric smoothing removes most print micro-dots and places
-    the cloud formations in an airy blue environment. The scene never
-    contains model-invented source application imagery.
+    Asset: a 1536x864 full-bleed clean sky plate made from the owner's
+    reference. No generated dashboard, chrome, text or page content. The
+    image is fixed in stage coordinates during browser camera movement.
+    Importantly, preserve its printed halftone dots and cobalt/white palette:
+    do not blur, recolor, or paint an arbitrary daylight wash over the plate.
     """
-    from cloud_shadow_stage import backdrop
-    ow,oh=output_size
-    original=backdrop(ow,oh)
-    sky=cv2.GaussianBlur(original,(0,0),2.35).astype(np.float32)
-    y=np.linspace(0,1,oh,dtype=np.float32)[:,None,None]
-    tint=np.zeros((1,ow,3),np.float32)
-    tint[:]=np.array([252.,220.,160.],np.float32)  # BGR soft daylight sky
-    # Preserve actual cloud shapes while lifting the deep cobalt shadows.
-    strength=.43+.08*y
-    sky=sky*(1-strength)+tint*strength
-    # Upper-left daylight spills into sky naturally, no radial color blobs.
-    illum=np.exp(-((np.arange(ow,dtype=np.float32)[None,:]/ow-.03)/.55)**2)
-    illum=illum*np.exp(-((np.arange(oh,dtype=np.float32)[:,None]/oh-.02)/.6)**2)
-    white=(.11*illum)[:,:,None]
-    sky=sky*(1-white)+np.float32([255,255,255])*white
-    return np.clip(sky,0,255).astype(np.uint8)
+    from pathlib import Path
+    ow, oh = output_size
+    asset = Path(__file__).resolve().parents[1] / (
+        "assets/stages/sauce_sky_halftone_1536x864.webp"
+    )
+    raw = cv2.imread(str(asset), cv2.IMREAD_COLOR)
+    if raw is None or raw.shape != (864, 1536, 3):
+        raise ValueError("Missing/invalid 1536x864 owner-approved sky backdrop")
+    if (ow, oh) == (1536, 864):
+        return raw
+    method = cv2.INTER_AREA if ow <= 1536 and oh <= 864 else cv2.INTER_CUBIC
+    return cv2.resize(raw, (ow, oh), interpolation=method)
 
 
 @lru_cache(maxsize=4)

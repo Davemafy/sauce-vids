@@ -1,6 +1,7 @@
 """Clouds in the environment; crisp real browser inside clear floating glass."""
 from pathlib import Path
 import sys
+import hashlib
 
 import cv2
 import numpy as np
@@ -37,10 +38,18 @@ def test_clouds_are_background_and_glass_has_its_own_physical_shape():
     assert np.mean(np.abs(full[exposed].astype(float)-
                           background[exposed].astype(float)))>9.
     # New cloud orientation is structurally different from old white studio.
-    assert np.mean(background[0,0])<249.
-    assert np.mean(background[0,0])>110.
-    # Original sky artwork exists and is the only environmental image asset.
+    # The actual new artwork, not the previous tinted cobalt stage.
+    original = Path(__file__).resolve().parents[2]/(
+        "assets/stages/sauce_sky_halftone_1536x864.webp")
+    assert original.is_file()
+    assert hashlib.sha256(original.read_bytes()).hexdigest() == (
+        "359bf6d37f2820b303606c2c6e4e897f6445fdd740ab46a449f1195376b55096"
+    )
+    exact = cv2.imread(str(original), cv2.IMREAD_COLOR)
+    np.testing.assert_array_equal(sky_background((1536,864)),exact)
     assert legacy_clouds(*output).shape==background.shape
+    assert np.mean(np.abs(background.astype(np.int16)-
+                          legacy_clouds(*output).astype(np.int16)))>15
 
 
 def test_one_large_rounded_browser_no_cutout_or_decorative_tail():
@@ -133,3 +142,22 @@ def test_all_landscape_sizes_fit_without_source_clipping():
         assert not np.any(outer[-1,:]>10)
         assert not np.any(outer[:,0]>10)
         assert not np.any(outer[:,-1]>10)
+
+
+def test_passive_paldey_showcase_uses_real_browser_over_new_clean_sky():
+    from cloud_shadow_stage import render_cloud_overview
+    frame=np.full((360,640,3),(21,108,225),np.uint8)
+    frame[:,300:]=(196,80,21)
+    original=frame.copy()
+    result=render_cloud_overview(frame,(640,360),
+                                  stage_preset="cloud_window_sky_v1")
+    assert result.shape==frame.shape
+    np.testing.assert_array_equal(frame,original)
+    x0,y0,x1,y1,_=window_geometry((640,360),(640,360))
+    sky=sky_background((640,360))
+    np.testing.assert_array_equal(result[0,0],sky[0,0])
+    np.testing.assert_array_equal(result[(y0+y1)//2,x0+20],frame[180,20])
+    np.testing.assert_array_equal(result[(y0+y1)//2,x1-20],frame[180,620])
+    # Product pixels are source-true, no synthetic dashboard or typography.
+    old=render_cloud_overview(frame,(640,360))
+    assert not np.array_equal(old[0,0],result[0,0])
