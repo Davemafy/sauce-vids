@@ -103,13 +103,13 @@ def pointer_to(page,x,y,*,steps=19):
   page.mouse.move(x0+dx*p-dy/dist*bend,y0+dy*p+dx/dist*bend)
   page.wait_for_timeout(13)
 
-def smooth_to(page,target):
+def smooth_to(page,target,*,speed=1.):
  """Frame-driven browser scroll, avoiding a 6000px jump in one instant."""
  y=max(0,int(target))
  current=float(page.evaluate('window.scrollY'))
  distance=abs(y-current)
  if distance<8:return
- duration=min(3600,max(780,int(distance*.50)))
+ duration=min(3600,max(780,int(distance*.50/speed)))
  page.evaluate("""async args => {
   const start=window.scrollY,delta=args.y-start;
   await new Promise(resolve=>{
@@ -385,6 +385,11 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
  beats=plan.get('beats',[]) if plan.get('mode')=='showcase' else []
  from backend.cursor_capture_js import build_cursor_script
  passive_showcase=plan.get('mode')=='showcase' and not beats
+ pace=plan.get('showcase_pace','balanced') if passive_showcase else 'balanced'
+ pacing={'balanced':(500,360,1000,1.),'brisk':(180,240,650,1.15),
+         'readable':(350,800,1100,1.)}
+ if pace not in pacing:raise ValueError('Unsupported showcase pace')
+ lead_ms,read_ms,final_ms,scroll_speed=pacing[pace]
  cursor_script=('' if cursorless or beats or passive_showcase else
                 ARROW_CURSOR_JS if cursor_style in ('arrow','tabler-legacy') else
                 CURSOR_JS if cursor_style=='circle' else
@@ -428,7 +433,7 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
    start=time.monotonic()
    lead_in=max(0,start-video_begin)
    page.mouse.move(930,530)
-   page.wait_for_timeout(500)
+   page.wait_for_timeout(lead_ms)
    evidence=[]
    editorial_events=[]
    def mark(label):
@@ -573,19 +578,23 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
      positions.append(round(loc.evaluate("e=>e.getBoundingClientRect().top+scrollY")))
     positions=sorted(set(positions))
     height=page.evaluate('document.documentElement.scrollHeight')
-    if height>1600 and (len(positions)<2 or max(positions)<550):
+    if passive_showcase and 'showcase_pace' in plan and len(positions)!=len(plan['heading_ids']):
+     raise RuntimeError('Model-selected public heading is no longer source verified')
+    if 'showcase_pace' in plan and passive_showcase and positions:
+     pass
+    elif height>1600 and (len(positions)<2 or max(positions)<550):
      positions=[min(height-720,round(height*.32)),min(height-720,round(height*.64))]
     elif not positions and height>900:
      positions=[min(height-720,round(height*.35)),min(height-720,round(height*.66))]
     for i,y in enumerate(positions[:2]):
-     smooth_to(page,max(0,y-210))
+     smooth_to(page,max(0,y-210),speed=scroll_speed)
      if not passive_showcase:pointer_to(page,900-i*240,340+i*75)
-     page.wait_for_timeout(360)
+     page.wait_for_timeout(read_ms)
      mark('read-'+str(i))
    if editorial_events:
     page.wait_for_timeout(1950 if cursorless else 2000)
     editorial_events.append({'kind':'interaction_complete','t':time.monotonic()-video_begin})
-   page.wait_for_timeout(1000)
+   page.wait_for_timeout(final_ms)
    length=time.monotonic()-start
    context.close()
    source=Path(video.path())
@@ -595,7 +604,7 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
       'sha256':hash_file(output),'duration_wall_s':round(length,3),
       'lead_in_seconds':round(lead_in,3),
       'actions':events,'evidence':evidence,'editorial_events':editorial_events,
-      'subject_shots':subject_shots,
+      'subject_shots':subject_shots,'showcase_pace':pace if passive_showcase else None,
       'source_url':url.split('?')[0],'mode':plan.get('mode','showcase'),
       'capture_quality':quality['quality'],'source_dpr':quality['dpr'],
       'requested_video_size':quality['video_size'],

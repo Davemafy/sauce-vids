@@ -4,8 +4,8 @@ Public browser motions and source streams are SHA-verified. No generated CSS
 selectors or fabricated UI, and no false claims of deterministic DOM replay.
 """
 from __future__ import annotations
-import base64,json,os,signal,subprocess,sys
-from hashlib import sha256
+import base64,json,os,signal,subprocess,sys,shutil
+from hashlib import sha256, file_digest
 from pathlib import Path
 from urllib.error import HTTPError,URLError
 from urllib.request import Request,urlopen
@@ -36,7 +36,7 @@ For interactive choose one highest-value safe action_id only; for showcase
 choose 1-2 meaningful heading IDs. What actually helps a curious viewer understand the product? Compare features and workflow sections; avoid logo walls, FAQ, pricing and signup pitches. Do not invent a click outcome.
 """
 
-def direction(report:dict,feedback:list[dict]|None=None):
+def direction(report:dict,feedback:list[dict]|None=None,*,curiosity_dir=None):
     slider=next((c for c in report['controls'] if c['kind']=='slider'),None)
     if slider:
         return normalize({'mode':'interactive','action_ids':[slider['id']]},report),0,'local-slider'
@@ -55,6 +55,17 @@ def direction(report:dict,feedback:list[dict]|None=None):
         if plan['mode']=='showcase' and report.get('beats'):
             return {**plan,'beats':report['beats']},0,'local-subjects'
         return plan,0,'no-key-fallback'
+    # Public passive films get a real two-turn conversation. Retain the
+    # independent interaction gates and existing source-specific shot paths.
+    if (curiosity_dir is not None and not report.get('beats') and not panel
+            and all(c['kind']=='link' for c in report['controls'])
+            and os.getenv('SAUCE_CURIOUS_SHOWCASE','1')=='1'):
+        from backend.curious_showcase import direct, candidates
+        if candidates(report):
+            plan,calls=direct(report,curiosity_dir)
+            if plan:
+                return plan,calls,'gemini-curious-showcase'
+            return normalize(local,report),calls,'provider-or-plan-fallback'
     model=os.getenv('SAUCE_DIRECTOR_MODEL','gemini-3.1-flash-lite')
     body={
       "contents":[{"role":"user","parts":[
@@ -191,7 +202,8 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto", cursor
         plan,calls,source = stagehand_plan,1,"stagehand-observed-id"
     else:
         from backend.url2video import previous_feedback
-        plan,calls,source = direction(report,previous_feedback(folder.parent))
+        plan,calls,source = direction(report,previous_feedback(folder.parent),
+                                      curiosity_dir=None if cinematic_only else private/'curiosity')
     (folder/'direction.json').write_text(json.dumps({
        **plan,'ai_calls':calls,'direction_source':source},indent=2))
     if cinematic_only and plan['mode']!='interactive':
@@ -235,12 +247,12 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto", cursor
     env=dict(os.environ,SAUCE_SAFE_PUBLIC_ONLY='1')
     env.setdefault('SAUCE_CAPTURE_CURSOR','founder-reference')
     env.setdefault('SAUCE_CAPTURE_QUALITY','high')
-    def run_capture():
-        with (private/'motion-capture.log').open('a') as log:
+    def run_capture(output_dir=capture_dir, plan_path=planfile, log_path=private/'motion-capture.log'):
+        with log_path.open('a') as log:
             result=subprocess.run([sys.executable,'-m','backend.live_capture',
-              '--url',url,'--out',str(capture_dir),
+              '--url',url,'--out',str(output_dir),
               '--inspection',str(private/'inspection.json'),
-              '--plan',str(planfile),'--cursor-pack',cursor_pack],cwd=ROOT,env=env,
+              '--plan',str(plan_path),'--cursor-pack',cursor_pack],cwd=ROOT,env=env,
               stdout=log,stderr=subprocess.STDOUT,timeout=140)
         if result.returncode!=0:raise RuntimeError('Continuous browser capture failed')
     try:
@@ -265,7 +277,86 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto", cursor
                 'cinematic_only':cinematic_only,'cursor_pack':cursor_pack,
                 'receipt_sha256':sha256((capture_dir/'continuous-capture.json').read_bytes()).hexdigest()}
     write_render_checkpoint(folder,checkpoint)
-    return render_checkpoint(folder,checkpoint,stage,brief,audio)
+    curiosity_dir=private/'curiosity'
+    if not (curiosity_dir/'conversation.json').is_file() or plan['mode']!='showcase':
+        return render_checkpoint(folder,checkpoint,stage,brief,audio)
+    # Keep every render and model receipt. No new paid calls on checkpoint recovery.
+    def before_review(x):
+        if x!='needs_review':stage(x)
+    result=render_checkpoint(folder,checkpoint,before_review,brief,audio)
+    from backend.curious_showcase import Conversation,review,prefer_revision
+    outcome={'creative_approved':False,'selected':'baseline','revision_rendered':False}
+    try:
+        revised,calls=review(report,plan,folder/'export',curiosity_dir)
+        review_receipt=Conversation(curiosity_dir).data
+        outcome['review_response_received']=any(a.get('phase') in ('watch-and-challenge','repair-review') and a.get('status')=='ok'
+                                                for a in review_receipt['attempts'])
+        outcome['review_success']=review_receipt.get('review_valid') is True
+        changed=(revised and (revised['heading_ids']!=plan['heading_ids'] or
+                 revised['showcase_pace']!=plan.get('showcase_pace','balanced')))
+        if changed:
+            stage('capturing')
+            candidate=curiosity_dir/'candidate'
+            candidate_private=candidate/'private'
+            candidate_private.mkdir(parents=True,exist_ok=False)
+            cp=candidate_private/'motion-plan.json'
+            cp.write_text(json.dumps(revised,indent=2))
+            cm=candidate_private/'motion'
+            run_capture(cm,cp,candidate_private/'motion-capture.log')
+            candidate_receipt=(cm/'continuous-capture.json').read_bytes()
+            cr=json.loads(candidate_receipt)
+            if not cr.get('continuous_recording') or cr.get('actions') or cr.get('editorial_events'):
+                raise RuntimeError('Refinement is not a passive source-verified capture')
+            ck=dict(checkpoint,attempts=0,ai_calls=calls,
+                    direction_source='gemini-curious-refinement',
+                    receipt_sha256=sha256(candidate_receipt).hexdigest())
+            write_render_checkpoint(candidate,ck)
+            candidate_result=render_checkpoint(candidate,ck,before_review,brief,audio)
+            outcome['revision_rendered']=True
+            base_qa=json.loads((folder/'export'/'encoded-quality.json').read_text())
+            new_qa=json.loads((candidate/'export'/'encoded-quality.json').read_text())
+            outcome['baseline_qa']=base_qa
+            outcome['candidate_qa']=new_qa
+            if prefer_revision(base_qa,new_qa):
+                # Archive baseline; retain the original candidate source and
+                # export in its own folder so all receipt paths remain valid.
+                # A crash during promotion fails the checkpoint hash check.
+                archive=curiosity_dir/'baseline'
+                archive.mkdir(exist_ok=False)
+                shutil.copytree(cm,archive/'promoted-motion')
+                shutil.copytree(candidate/'export',archive/'promoted-export')
+                os.replace(capture_dir,archive/'motion')
+                os.replace(folder/'export',archive/'export')
+                os.replace(archive/'promoted-motion',capture_dir)
+                os.replace(archive/'promoted-export',folder/'export')
+                write_render_checkpoint(folder,ck)
+                result=candidate_result
+                outcome['selected']='candidate'
+                (folder/'final-direction.json').write_text(json.dumps(revised,indent=2))
+    except (RuntimeError,ValueError,OSError,KeyError,TypeError,subprocess.SubprocessError) as exc:
+        outcome['error_type']=type(exc).__name__
+        if not (folder/'export'/'release.json').is_file():
+            raise RuntimeError('Refinement promotion interrupted') from exc
+    result['ai_calls']=Conversation(curiosity_dir).calls
+    # Fail closed if a partially promoted revision ever loses its source
+    # or encoded receipt binding. Preserve both private originals.
+    selected_checkpoint=load_render_checkpoint(folder,url)
+    selected_release=json.loads((folder/'export'/'release.json').read_text())
+    selected_capture=json.loads((capture_dir/'continuous-capture.json').read_text())
+    selected_qa=json.loads((folder/'export'/'encoded-quality.json').read_text())
+    with (folder/'export'/'master-1080p60.mp4').open('rb') as video:
+        selected_hash=file_digest(video,'sha256').hexdigest()
+    if (not selected_checkpoint or selected_release.get('source_verified') is not True
+            or selected_release.get('source_sha256')!=selected_capture.get('sha256')
+            or selected_hash!=selected_qa.get('film_sha256')):
+        raise RuntimeError('Selected curiosity export lost source or film binding')
+    selected_checkpoint['ai_calls']=result['ai_calls']
+    write_render_checkpoint(folder,selected_checkpoint)
+    outcome['ai_calls']=result['ai_calls']
+    (curiosity_dir/'result.json').write_text(json.dumps(outcome,indent=2))
+    result['curiosity']={k:v for k,v in outcome.items() if k not in ('baseline_qa','candidate_qa')}
+    stage('needs_review')
+    return result
 
 
 def render_checkpoint(folder,checkpoint,stage,brief,audio):
