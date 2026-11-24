@@ -121,16 +121,17 @@ def derive(profile,source,manifest,base):
         cams.append(key(end,1.23,start=end-.64,focus="event:2:result"))
         stage["motion"]={"profile":"cinematic","shutter":0.}
     else:
-        # Physical camera, not a crop of a low-res screenshot. Source cursor
-        # only informs a small relative parallax, never an invented pointer.
+        # Dolly the WHOLE glass/browser after source-verified price changes.
+        # Do not pan a price card to frame center: that moved the real page
+        # heading out of frame in the rejected optical study. Keep the
+        # original UI, context and recorded cursor source-true.
         cams=[key(0,.885,view=1.)]
         first_pre=max(.24,timing[0][0]-.18)
         cams.append(key(first_pre,.89,start=.12,
                         focus="event:0:target",view=1.015))
         for i,(start,t) in enumerate(timing):
             cams.append(key(t+.58,.89,start=t+.065,
-                            focus=f"event:{i}:result",
-                            view=[1.09,1.145,1.20][i]))
+                            view=[1.085,1.135,1.16][i]))
             if i<2:
                 next_start=timing[i+1][0]
                 end_bridge=next_start-.24

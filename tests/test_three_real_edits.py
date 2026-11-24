@@ -72,6 +72,17 @@ class ThreeRealEditsTests(unittest.TestCase):
                     ix=int(key["focus"].split(":")[1])
                     self.assertGreaterEqual(key.get("startAt",0),
                                             self.events[ix]["t"])
+            if profile=="optical":
+                # Physical zooms occur only after source-confirmed changes,
+                # but stay whole-window to preserve the Pricing heading.
+                result_times=[event["t"] for event in self.events]
+                close=[k for k in keys if k.get("viewScale",1)>1.03]
+                self.assertEqual(len(close),3)
+                for event_t,k in zip(result_times,close):
+                    self.assertNotIn("focus",k)
+                    self.assertEqual(k.get("center"),[.5,.5])
+                    self.assertGreaterEqual(k["startAt"],event_t)
+                    self.assertLessEqual(k["viewScale"],1.16)
             if profile=="editorial":
                 cuts=[k for k in keys if k.get("cut")]
                 self.assertEqual(len(cuts),3)
