@@ -9,7 +9,7 @@ ROOT=Path(__file__).resolve().parents[2]
 CHROME=Path('/opt/devmcp-browsers/chromium_headless_shell-1255/chrome-headless-shell-linux64/chrome-headless-shell')
 
 @pytest.mark.skipif(not CHROME.is_file(),reason='Existing Sauce SwiftShader worker required')
-@pytest.mark.parametrize("polished,sag",[(False,.26),(True,.26),(2,.096),(3,.096)])
+@pytest.mark.parametrize("polished,sag",[(False,.26),(True,.26),(2,.096),(3,.096),(4,.096)])
 def test_bulged_display_and_pointer_match_real_shader(polished,sag):
     # Diagnostic texture only; never used in a product film or owner preview.
     w,h=640,400
@@ -35,4 +35,23 @@ def test_bulged_display_and_pointer_match_real_shader(polished,sag):
             yy,xx=np.where(mask)
             assert len(xx)>0
             assert np.hypot(xx.mean()-14,yy.mean()-14)<3
+        b.close()
+
+
+@pytest.mark.skipif(not CHROME.is_file(),reason='Existing Sauce SwiftShader worker required')
+def test_seamless_cover_has_no_inset_at_display_shoulders():
+    w,h=640,400
+    src=np.full((h,w,3),220,np.uint8)
+    uri=lambda a:'data:image/png;base64,'+base64.b64encode(cv2.imencode('.png',a)[1]).decode()
+    with sync_playwright() as p:
+        b=p.chromium.launch(headless=True,executable_path=str(CHROME),args=['--no-sandbox','--enable-unsafe-swiftshader','--use-gl=angle','--use-angle=swiftshader'])
+        page=b.new_page()
+        page.set_content((ROOT/'assets/shaders/optical-cover-study.html').read_text())
+        result=page.evaluate('async d=>window.study(...d)',[uri(src),uri(np.zeros((32,32,3),np.uint8)),True,.096,4])
+        frame=cv2.imdecode(np.frombuffer(base64.b64decode(result.split(',',1)[1]),np.uint8),cv2.IMREAD_COLOR)
+        for x,y in [(4,200),(636,200),(320,4),(320,396)]:
+            hit=page.evaluate('d=>window.projectSource(...d)',[[x,y],w,h,.096,4])
+            assert hit['visible'] and hit['residual']<1e-6
+            px,py=map(lambda v:int(round(v)),hit['pixel'])
+            assert frame[py,px].min()>185
         b.close()

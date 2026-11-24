@@ -33,7 +33,7 @@ vec2 bend(vec2 p){
   return q;
 }
 vec3 panel(vec2 p){
-  if(polished>=2) {
+  if(polished>=2 && polished<4) {
     p/= .965;
     if(any(greaterThan(abs(p),vec2(1.))))return vec3(.0025);
   }
@@ -152,6 +152,33 @@ void main(){
     light=display*(1.-fresnel*.11)+vec3(.96,.98,1.)*specEnergy
           +environment*internal*fresnel*.18;
   }
+  if(polished==4){
+    // Continuous emissive source behind a clear convex cover. No inset,
+    // separate backing, colored rim, or environment substitution.
+    float cosI=max(dot(n,V),0.);
+    float f0=pow((1.515-1.)/(1.515+1.),2.);
+    float fresnel=f0+(1.-f0)*pow(1.-cosI,5.);
+    // Smooth optical normal for reflection, avoiding the nearest-edge
+    // SDF gradient discontinuity at the corner diagonals. Keep the
+    // established refraction mapping unchanged for exact cursor alignment.
+    vec2 edgeDist=halfSize-abs(phys);
+    vec2 roll=sign(q)*exp(-max(edgeDist,0.)/.043);
+    vec3 glassNormal=normalize(vec3(slope+roll*2.8,1.));
+    vec3 ray=reflect(-V,glassNormal);
+    float f=f0+(1.-f0)*pow(1.-max(dot(glassNormal,V),0.),5.);
+    // Finite reflected panels: asymmetrical, terminate before the corners.
+    // abs() is necessary for defined GLSL pow on negative coordinates.
+    float upper=exp(-pow(abs((ray.y-.65)/.115),4.))
+                *exp(-pow(abs((q.x+.38)/.48),6.))*smoothstep(.2,.9,q.y);
+    float right=exp(-pow(abs((ray.x-.78)/.13),4.))
+                *exp(-pow(abs((q.y-.28)/.51),6.))*smoothstep(.3,.9,q.x);
+    float fill=exp(-pow(abs((ray.y-.50)/.28),2.))
+               *exp(-pow(abs((q.x+.42)/.64),2.))*smoothstep(.4,.95,q.y);
+    float spec=(upper*3.0+right*1.75+fill*.17)*(f+.06);
+    // The source is continuous all the way to the silhouette; clear
+    // transmission preserves the dark interface instead of adding a rim.
+    light=transmitted*(1.-fresnel*.12)+vec3(.98,.99,1.)*spec;
+  }
   vec3 result=mix(bg,light,a);
   // Spectral meniscus and broad optical bloom cross the silhouette,
   // without placing a second solid housing around the display.
@@ -195,7 +222,7 @@ window.projectSource=(point,sw,sh,sag,polished=0)=>{
   if(!(sag>0 && sag<=.30))throw Error('Unsupported convex sag');
   const h=polished>=2?.84:.79,b=[h*sw/sh,h],r=polished>=2?.085:.112;
   const box=p=>{let x=Math.abs(p[0])-b[0]+r,y=Math.abs(p[1])-b[1]+r;return Math.hypot(Math.max(x,0),Math.max(y,0))+Math.min(Math.max(x,y),0)-r;};
-  const target=[2*point[0]/sw-1,1-2*point[1]/sh].map(x=>x*(polished>=2?.965:1));
+  const target=[2*point[0]/sw-1,1-2*point[1]/sh].map(x=>x*(polished>=2 && polished<4?.965:1));
   function sample(q){
     let p=q.map((x,i)=>x*b[i]),d=box(p),g=[box([p[0]+.001,p[1]])-box([p[0]-.001,p[1]]),box([p[0],p[1]+.001])-box([p[0],p[1]-.001])].map(x=>x+1e-7);
     let l=Math.hypot(...g),shoulder=Math.exp(Math.min(d,0)/(polished>=2?.062:.045));
