@@ -1,5 +1,10 @@
 # Sauce — living handoff for new agents and new chats
 
+## 2026-11-24 — Shared convex display projection and optical cursor still study
+
+Owner requested the real UI itself visibly bulge with the lens. Recovered main `cfa6f98`, preserved existing worker and prior optical results. Existing opt-in WebGL2 still study adds bounded perspective sag projection (tested .26), exact analytic inverse radial mapping shared by source texture and cover geometry, slope-dependent dielectric normals, existing HDR bloom. Same real 2880x1800 tweakcn source SHA `0b8259e42f326451c308e476fa415f1986d3f2e759c3a8ea0788c65e1a01d1f2` at 4.75s. Actual 1080p stills inspected: top navigation, panels and chart now visibly bow across the surface. Black/cloud final PNG SHA256 `fa50fb707ad57d3a65610a8ae1b9afd9e1062a6c7521b982dec0f4216b4afb47` / `6d544c66119943e42071a814da8ed79243c3b3791c82b9b6b27c83d7aefb5601`, both repeat byte-identical, original zero-sag default also byte-identical to prior study. Optional hash-pinned manifest cursor at 5.016666667s from actual sample 5.01517s, source (1486.873,301.12), refracted green-ray inverse maps to (987.913,181.366), residual 5.21e-9 normalized; crisp foreground pointer. Real WebGL fixture test checks projected hotspot within 3px of rendered green markers at three source positions, 1 passed. Private stills `.sauce-stagehand-private/bulged-display-study-20261124/` and `bulged-display-pointer-20261124/`, signed HTTP206 unsigned403. No generated product UI. Research only: no full video, camera integration, fresh capture, audio changes or deployment. Edge labels still softened by shoulder scatter and perspective compression, actual reference is richer/more luminous. No premium owner approval. Preserve default; continue optical readability and motion validation before promotion.
+
+
 
 ## 2026-11-24 — Cold customer URL → bounded real action discovery → encoded QA
 
