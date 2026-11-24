@@ -83,8 +83,15 @@ def plan(events:list, viewport:dict,duration:float, profile:str="standard")->lis
         if max_zoom < 1.15:
             # A whole-screen update is not a close-up target.
             continue
-        zoom=(clamp(max_zoom*1.16,1.36,1.62) if profile in ("screenstudio", "action-first")
-              else clamp(max_zoom,1.16,1.36))
+        source_area=(rw*rh)/(w*h)
+        if profile=="action-first" and .02 <= source_area <= .16:
+            # The recorded compact dialog fills only a few source pixels.
+            # Give a real, substantial verified result a legible crop, while
+            # retaining source orientation and never expanding an unknown UI.
+            zoom=clamp(max_zoom*1.16,1.36,2.10)
+        else:
+            zoom=(clamp(max_zoom*1.16,1.36,1.62) if profile in ("screenstudio","action-first")
+                  else clamp(max_zoom,1.16,1.36))
         end_evt=next((e for e in events if e.get("kind")=="interaction_complete"
                     and changed["t"]<e.get("t",-1)<duration),None)
         if profile=="action-first":
@@ -96,8 +103,8 @@ def plan(events:list, viewport:dict,duration:float, profile:str="standard")->lis
                 continue
             start=max(0.0,float(changed["t"])+.06)
             release=min(duration-.95,float(end_evt["t"])+.08)
-            settle=min(start+.72,release-.60)
-            end=min(duration-.08,release+.80)
+            settle=min(start+1.05,release-.60)
+            end=min(duration-.08,release+1.02)
             if settle<=start+.30 or release<=settle+.50:
                 continue
         elif profile=="screenstudio":

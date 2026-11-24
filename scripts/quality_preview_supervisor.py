@@ -13,10 +13,48 @@ def digest(path):
         for block in iter(lambda:f.read(1024*1024),b""): h.update(block)
     return h.hexdigest()
 
-def frames(path, seconds, fps=10):
-    cmd=["ffmpeg","-v","error","-i",str(path),"-t",str(seconds),"-vf",f"fps={fps},scale=160:90,format=gray","-f","rawvideo","-"]
+def frames(path, seconds, fps=10, *, start=0.):
+    if (type(start) not in (float,int) or not math.isfinite(start) or
+        start<0 or start>75 or not 0<seconds<=75):
+        raise ValueError("Invalid bounded source frame sample window")
+    # Trim on decode, *after* -i, to align real Chromium source UI frames
+    # with the separately encoded postproduced film's own exact source trim.
+    cmd=["ffmpeg","-v","error","-i",str(path)]
+    if start:
+        cmd+=["-ss",str(round(start,5))]
+    cmd+=["-t",str(seconds),"-vf",f"fps={fps},scale=160:90,format=gray","-f","rawvideo","-"]
     data=subprocess.check_output(cmd,timeout=90)
     return np.frombuffer(data,dtype=np.uint8).reshape(-1,90,160).astype(np.int16)
+
+
+def _source_event_windows(manifest):
+    """Native verified event or paired real browser click/outcome timestamps."""
+    rows=manifest.get("events")
+    if isinstance(rows,list) and rows:
+        return [(float(e["start"])-.15,float(e["t"])+.2)
+                for e in rows if isinstance(e,dict)
+                and isinstance(e.get("evidence"),str) and e["evidence"].strip()
+                and type(e.get("start")) in (int,float)
+                and type(e.get("t")) in (int,float)
+                and math.isfinite(e["start"]) and math.isfinite(e["t"])
+                and 0<=e["start"]<=e["t"]<=75]
+    rows=manifest.get("editorial_events",[])
+    if not isinstance(rows,list):return []
+    clicks=[e for e in rows if isinstance(e,dict) and e.get("kind")=="click"
+            and isinstance(e.get("semanticGoal"),str) and e["semanticGoal"].strip()
+            and type(e.get("t")) in (int,float) and math.isfinite(e["t"])]
+    outcomes=[e for e in rows if isinstance(e,dict) and
+              e.get("kind")=="state_change" and
+              isinstance(e.get("evidence"),str) and e["evidence"].strip()
+              and isinstance(e.get("resultRect"),dict) and
+              type(e.get("t")) in (int,float) and math.isfinite(e["t"])]
+    result=[]
+    for click in clicks:
+        t=float(click["t"])
+        after=next((e for e in outcomes if t<=e["t"]<=t+1.8),None)
+        if after is not None:
+            result.append((max(0,t-.15),min(75,float(after["t"])+.2)))
+    return result
 
 def verified_focal_geometry(focal:dict, size:tuple[int,int])->list[dict]:
     """Opt-in source-verified camera/DOM geometry rejection.
@@ -184,23 +222,26 @@ def analyze(path, evidence=None, seconds=15):
                 and digest(original)==ev["source_sha256"]
                 and digest(original_manifest)==ev["event_manifest_sha256"]):
             try:
-                source_events=json.loads(original_manifest.read_text()).get("events",[])
-                original_frames=frames(original,min(duration,seconds))
+                manifest=json.loads(original_manifest.read_text())
+                windows=_source_event_windows(manifest)
+                source_trim=ev.get("source_trim_seconds",0.)
+                if (type(source_trim) not in (int,float) or
+                    not math.isfinite(source_trim) or
+                    source_trim<0 or source_trim>75):
+                    raise ValueError("Invalid original-source trim for film QA")
+                original_frames=frames(original,min(duration,seconds),start=source_trim)
                 original_diff=np.abs(np.diff(original_frames,axis=0)).mean(axis=(1,2))
                 unverified_abrupt=[]
                 for ix in abrupt_indices:
-                    t=float(ix+1)/10
-                    close=any(isinstance(e,dict) and
-                        isinstance(e.get("evidence"),str) and e["evidence"].strip()
-                        and type(e.get("start")) in (float,int)
-                        and type(e.get("t")) in (float,int)
-                        and e["start"]-.15<=t<=e["t"]+.2
-                        for e in source_events)
+                    film_t=float(ix+1)/10
+                    t=film_t+source_trim
+                    close=any(begin<=t<=end for begin,end in windows)
                     matching=original_diff[max(0,ix-1):min(len(original_diff),ix+2)]
                     peak=float(max(matching,default=0))
                     if close and peak>=62 and float(diffs[ix])<=peak*1.25:
                         source_relative_transitions.append({
                            "actualSourceTime":round(t,3),
+                           "filmSampleTime":round(film_t,3),
                            "sourceFrameDifference":round(peak,3),
                            "filmFrameDifference":round(float(diffs[ix]),3),
                            "verifiedRealUiTransition":True})

@@ -21,7 +21,8 @@ def file_digest(path):
   for chunk in iter(lambda:inp.read(2**20),b''):h.update(chunk)
  return h.hexdigest()
 
-def evaluate_encoded_customer_film(master:Path,source_dir:Path,receipt:dict,duration:float,out:Path):
+def evaluate_encoded_customer_film(master:Path,source_dir:Path,receipt:dict,duration:float,out:Path,
+                                   *,source_trim_seconds:float=0.):
  """Evaluate EVERY real customer master, not only passive cloud overviews.
 
  A film's source must still be a verified Chromium recording. This only
@@ -39,7 +40,8 @@ def evaluate_encoded_customer_film(master:Path,source_dir:Path,receipt:dict,dura
    "source_path":str(Path(source_dir)/"continuous-source.webm"),
    "source_sha256":receipt["sha256"],
    "event_manifest_path":str(record),
-   "event_manifest_sha256":file_digest(record)},seconds=duration)
+   "event_manifest_sha256":file_digest(record),
+   "source_trim_seconds":source_trim_seconds},seconds=duration)
  if quality.get("verdict") not in ("REJECT","HUMAN_REVIEW_REQUIRED"):
   raise ValueError("Encoded quality gate returned an untrusted verdict")
  if not isinstance(quality.get("findings"),list):
@@ -88,6 +90,33 @@ def source_video_profile(stream:dict,receipt:dict):
          'source_fps':stream.get('r_frame_rate'),'filter':filter_graph}
 
 
+def verified_action_intro_trim(editorial_events, original_trim, *, pre_click_seconds=.55):
+    """Keep real recorded approach footage without a largely static opener.
+
+    Read-only postproduction helper: only trim if a verified source click has
+    a separately recorded visible DOM result within 1.8 seconds. This never
+    inserts action frames, invents an outcome, or retimes the original event.
+    """
+    if (type(original_trim) not in (int,float) or
+        not math.isfinite(original_trim) or original_trim<0):
+        raise ValueError("Invalid real source trim")
+    clicks=[e for e in editorial_events if
+            isinstance(e,dict) and e.get('kind')=='click'
+            and isinstance(e.get('semanticGoal'),str) and e['semanticGoal'].strip()
+            and type(e.get('t')) in (float,int) and math.isfinite(e['t'])]
+    for click in clicks:
+        t=click['t']
+        outcome=next((e for e in editorial_events if
+                      isinstance(e,dict) and e.get('kind')=='state_change'
+                      and isinstance(e.get('evidence'),str) and e['evidence'].strip()
+                      and isinstance(e.get('resultRect'),dict)
+                      and type(e.get('t')) in (float,int) and
+                      math.isfinite(e['t']) and t<=e['t']<=t+1.8),None)
+        if outcome is not None and t>0 and t>=original_trim:
+            return round(max(original_trim,t-pre_click_seconds),3)
+    return original_trim
+
+
 def render(source_dir:Path,out:Path,title:str,story:str,mode:str, *, brief="", audio="auto", edit_plan=None, cursor_pack="founder-reference"):
  source_dir=Path(source_dir);out=Path(out)
  if edit_plan is None:
@@ -120,11 +149,7 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
  cursorless=receipt.get('cursorless') is True
  loupe=cursorless and not plan and os.getenv('SAUCE_SLIDER_LOUPE')=='1'
  if mode=='interactive' and not cursorless:
-  events=receipt.get('editorial_events',[])
-  first=next((e for e in events if e.get('kind')=='click' and e.get('semanticGoal')),None)
-  if first and any(e.get('kind')=='state_change' and e.get('resultRect')
-                   and first['t']<=e['t']<=first['t']+1.8 for e in events):
-   trim=round(max(trim,first['t']-1.05),3)
+  trim=verified_action_intro_trim(receipt.get('editorial_events',[]),trim)
  if cursorless:
   slider=next(event for event in receipt['editorial_events']
               if event['kind']=='slider_change')
@@ -295,7 +320,7 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
                        'checksum':hashlib.sha256(json.dumps(edit_plan,sort_keys=True).encode()).hexdigest(),
                        'resolved_camera':plan_camera}
  result.update(evaluate_encoded_customer_film(
-   master,source_dir,receipt,duration,out))
+   master,source_dir,receipt,duration,out,source_trim_seconds=trim))
  (out/'release.json').write_text(json.dumps(result,indent=2))
  return result
 
