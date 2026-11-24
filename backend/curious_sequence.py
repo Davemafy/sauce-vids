@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 from backend.curious_showcase import Conversation,_media
 from backend.curious_interactive import parse
+from backend.curiosity_council import advise
 from backend.product_explorer import CHROME,UNSAFE_LABEL
 from backend.source_action_preflight import (same_local_tab_route,visible_authentication_barrier,
     image_change,measured_result_region)
@@ -151,7 +152,7 @@ def investigate_sequence(url,report,directory):
             opts=discover(page,scope)
             if not opts:return finish()
             (path/'picker.png').write_bytes(shot(page))
-            option=choose(conv.ask("Update your hypothesis using the actual picker evidence. Choose an observed unselected option that would demonstrate the product's core job through a clear before/action/after story. Contrast it with less informative alternatives. A dramatic style change alone is not sufficient unless styling is the product's core value. Pick one or null; no guessed selector or invented result. JSON {\"id\":\"c0\",\"reason\":\"...\"}. "+json.dumps(menu(opts)),media=(_media(path/'picker.png','image/png',4*1024*1024),),json_mode=True,phase='discover-option',stop_on_rate_limit=True),opts)
+            option=choose(conv.ask("Update your hypothesis using the actual picker evidence. Choose an observed unselected option that would demonstrate the product's core job through a clear before/action/after story. Contrast it with less informative alternatives. A dramatic style change alone is not sufficient unless styling is the product's core value. Pick one or null; no guessed selector or invented result. JSON {\"id\":\"c0\",\"reason\":\"...\"}. "+json.dumps(menu(opts))+advise(menu(opts),path,phase="picker"),media=(_media(path/'picker.png','image/png',4*1024*1024),),json_mode=True,phase='discover-option',stop_on_rate_limit=True),opts)
             if option is None:return finish()
             receipt['option']=option
             exact(discover(page,scope),option).click(timeout=4000)

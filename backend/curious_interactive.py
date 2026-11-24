@@ -6,6 +6,7 @@ It never supplies selectors, browser instructions, or creative approval.
 import json
 from pathlib import Path
 from backend.curious_showcase import Conversation, _media
+from backend.curiosity_council import advise
 from backend.product_explorer import allowed, normalize
 from backend.source_action_preflight import probe_public_action
 
@@ -64,6 +65,7 @@ def investigate(url,report,directory,admit,*,conversation=None,probe=probe_publi
             "no fabricated interactions, coordinates, selectors, or navigation. "
             'Return JSON {"action_ids":["observed ID"],"reason":"product job, competing hypotheses, predicted payoff and falsifier"}. '
             +json.dumps({'title':report.get('title'),'controls':observed},ensure_ascii=False))
+    prompt+=advise(observed,base,phase="interactive")
     raw=conv.ask(prompt,media=(_media(report['screenshot'],'image/jpeg',2*1024*1024),),
                  json_mode=True,phase='interactive-hypotheses',stop_on_rate_limit=True)
     ids=hypothesis_ids(raw)
