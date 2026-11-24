@@ -103,7 +103,6 @@ def directed_plan(source, manifest):
 def check_shell_coverage(plan, source, manifest):
     """Deny a black/unfilled card: original video must cover physical shell."""
     from spatial_studio_stage import load_studio_stage
-    from cloud_shadow_stage import window_geometry
     from fractions import Fraction
     import subprocess
     info=json.loads(subprocess.check_output([
@@ -119,8 +118,12 @@ def check_shell_coverage(plan, source, manifest):
     stage=load_studio_stage(plan["studioStage"],
          json.loads(Path(manifest).read_text()),source,(w,h),(1920,1080),
          duration,fps)
-    if stage.stage_preset!="cloud_shadow_v1":
-        raise ValueError("Stage identity must be owner cloud backdrop")
+    if stage.stage_preset=="cloud_shadow_v1":
+        from cloud_shadow_stage import window_geometry
+    elif stage.stage_preset=="cloud_window_sky_v1":
+        from cloud_window_sky_stage import window_geometry
+    else:
+        raise ValueError("Stage identity must be approved cloud backdrop")
     x0,y0,x1,y1,_=window_geometry((w,h),(1920,1080))
     # At all 60fps sample times, the genuine browser source quad encloses
     # the visible card. Interpolation is smooth and the checker is conservative.

@@ -196,17 +196,27 @@ def render_cloud_stage(stage, source, t):
     if stage.stage_preset=="cloud_glass_v1":
         from cloud_glass_object_stage import stage_plate as physical_plate
         from cloud_glass_object_stage import card_mask as aperture_mask
+    elif stage.stage_preset=="cloud_window_sky_v1":
+        from cloud_window_sky_stage import physical_plate, card_mask as aperture_mask
+        from cloud_window_sky_stage import sky_background
     else:
         physical_plate=stage_plate
         aperture_mask=card_mask
     board = physical_plate(stage.source_size, stage.output_size).copy()
     if stage.immersive:
-        # Camera approaches the physical object, not a scaled already-low-res
-        # screenshot. Background and original soft shadows move together;
-        # source UI is separately reprojected from ORIGINAL native DPR2.
         view=stage.view_transform(t)
-        board=cv2.warpAffine(board,view,(ow,oh),flags=cv2.INTER_CUBIC,
-                             borderMode=cv2.BORDER_REFLECT_101)
+        if stage.stage_preset=="cloud_window_sky_v1":
+            # Cloud environment is stationary; only the glossy window,
+            # its real shadow and real Chromium capture move with camera.
+            sky=sky_background(stage.output_size).astype(np.float32)
+            delta=board.astype(np.float32)-sky
+            movement=cv2.warpAffine(delta,view,(ow,oh),flags=cv2.INTER_LINEAR,
+                                    borderMode=cv2.BORDER_CONSTANT,borderValue=0)
+            board=np.uint8(np.clip(sky+movement,0,255))
+        else:
+            # Keep previous cloud presets' rendering behaviour identical.
+            board=cv2.warpAffine(board,view,(ow,oh),flags=cv2.INTER_CUBIC,
+                                 borderMode=cv2.BORDER_REFLECT_101)
     sq = np.float32([[0, 0], [sw-1, 0], [sw-1, sh-1], [0, sh-1]])
     q = stage.quad(t)
     H = cv2.getPerspectiveTransform(sq, q)

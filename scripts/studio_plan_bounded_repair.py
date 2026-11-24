@@ -41,7 +41,9 @@ def normalize_generated_studio_plan(raw, *, manifest=None, source_path=None,
         if not isinstance(stage,dict):
             raise ValueError("Cannot enforce a fixed stage over invalid JSON")
         previous=stage.get("stagePreset")
-        if previous!="cloud_shadow_v1":
+        # Keep an explicitly source-safe cloud environment. Do not
+        # force the owner's new sky-behind-window preset back to ink-blue.
+        if previous not in ("cloud_shadow_v1","cloud_window_sky_v1"):
             stage["stagePreset"]="cloud_shadow_v1"
             repairs.append({"field":"studioStage.stagePreset",
                   "from":previous,"to":"cloud_shadow_v1",
