@@ -184,6 +184,95 @@ def sample_camera_direction(keys,t):
         if t<=b:return x+(y-x)*ease((t-a)/(b-a))
     return keys[-1][1].copy()
 
+def viewer_camera_direction(source, shots):
+    """Compile attention -> transport -> readable payoff from measured arrivals.
+
+    This is a showcase, so a detail is an illustration, not a verified action.
+    Never invent pointer events. Adjacent subjects on the same settled page
+    can share attention without an unnecessary zoom-out. Keep the last payoff
+    in view rather than spending its reading time on a decorative release.
+    """
+    beats, scrolls = source["beats"], source["scrolls"]
+    if len(beats) != len(shots) or len(scrolls) != len(beats)-1:
+        raise ValueError("Viewer plan needs a measured subject sequence")
+    if [b["id"] for b in beats] != [s["id"] for s in shots]:
+        raise ValueError("Viewer plan subject mismatch")
+    keys = []
+    def key(t, target="wide", mode=None):
+        t = float(t)
+        item = {"t":t,"target":target}
+        if mode is not None:item["mode"]=mode
+        if keys and t <= keys[-1]["t"]:
+            raise ValueError("Insufficient source time for viewer attention")
+        keys.append(item)
+    def focus(t,i):
+        key(t,shots[i]["id"],shots[i]["camera"])
+    # Quintic easing peak speed is 1.875 times average. Keep margin below
+    # the existing 45 source-pixel/frame movement gate.
+    wide=np.array([0.,0.,*NATIVE])
+    targets=[crop_for(b["rect"],s["camera"]) for b,s in zip(beats,shots)]
+    def transition(a,b):
+        return max(.55,1.875*float(np.abs(a-b).max())/(FPS*40))
+    def travel_after(i):
+        return i < len(scrolls) and scrolls[i]["target_scroll_css"] != (
+            scrolls[i-1]["target_scroll_css"] if i else 0)
+    key(0)
+    key(.10)
+    focus(.10+transition(wide,targets[0]),0)
+    for i in range(len(beats)):
+        if i:
+            if travel_after(i-1):
+                arrival=float(scrolls[i-1]["end"])
+                key(arrival+.04)
+                focus(arrival+.04+transition(wide,targets[i]),i)
+            else:
+                # The page has not moved: establish the next subject by a
+                # smooth pan after the preceding reading hold, not a reset.
+                focus(keys[-1]["t"]+max(1.25,transition(targets[i-1],targets[i])),i)
+        if i==len(beats)-1:
+            hold=source["seconds"]-keys[-1]["t"]
+            if hold<.7:raise ValueError("Insufficient final payoff hold")
+            # Preserve the result through a restrained contextual release;
+            # the final image still contains the entire measured subject.
+            end=float(source["seconds"])
+            context=crop_for(beats[i]["rect"],"context")
+            release=max(1.25,transition(targets[i],context))
+            if shots[i]["camera"]=="detail" and hold>=1.45+release and not np.allclose(targets[i],context):
+                focus(end-release,i)
+                key(end,shots[i]["id"],"context")
+            else:
+                focus(end,i)
+        elif travel_after(i):
+            departure=float(scrolls[i]["start"])
+            release=departure-.03-transition(targets[i],wide)
+            if release-keys[-1]["t"]<.25:
+                raise ValueError("Insufficient context before travel")
+            focus(release,i)
+            key(departure-.03)
+        else:
+            # Use the otherwise idle same-row source interval for comprehension.
+            hold_end=max(keys[-1]["t"]+.85,float(scrolls[i]["start"])-.45)
+            focus(hold_end,i)
+    direction={"schema":"sauce-continuous-camera-v1","source_sha256":source["sha256"],
+               "director":"viewer-attention-v1","keys":keys}
+    compile_camera_direction(source,direction)
+    return direction
+
+def render_viewer_plan(source,shots,out):
+    """Keep existing safe camera as a disclosed fallback for tight source clocks."""
+    try:
+        direction=viewer_camera_direction(source,shots)
+    except ValueError as exc:
+        direction=None
+        fallback_reason=str(exc)
+    else:
+        fallback_reason=None
+    master,stats=render(source,shots,out,direction=direction)
+    write(out/"viewer-direction.json",{"direction":direction,"fallback_reason":fallback_reason,
+          "scope":"public illustrations, not verified product interaction",
+          "creative_approved":False})
+    return master,stats
+
 def scroll_seconds(distance):
     return min(3.0,max(1.15,abs(distance)/850.))
 
@@ -353,10 +442,10 @@ def run(url,out,display):
                     write(out/"subjects.json",rows)
                     packet=json.dumps([{k:r[k] for k in ("id","label","section","kind")} for r in rows],ensure_ascii=False)
                     media=(_media(out/"subjects.jpg","image/jpeg",2*1024*1024),)
-                    first=conv.ask("Hey Gemini, I want to make a short beautiful film of this product. Look at the REAL subject contact sheet. What makes someone care? Which two actual product details best communicate that, beyond the hero? Be curious about the visual evidence, not marketing claims. These are public illustrations, not verified live app actions. Think like a motion designer: what deserves a close-up and why? "+packet,media=media,phase="explore")
+                    first=conv.ask("Hey Gemini, I want to make a short beautiful film of this product. Look at the REAL subject contact sheet. Imagine you are the viewer, not the director. What do you understand in the first second? What question makes you want to see more? Which two real details answer that question and leave you with one useful outcome? What would you skip because it repeats an idea or makes you read too much? Be curious about the visual evidence, not marketing claims. These are public illustrations, not verified live app actions. Think like a motion designer: what deserves a close-up and why? "+packet,media=media,phase="explore")
                     chosen=None
                     if first:
-                        answer=conv.ask("But would your choices still work for a stranger on a phone? Compare the actual cards; avoid redundant claims. The hero already opens. Choose two distinct subject IDs in downward source order, each with a detail or context camera. This is ONE unbroken scrolling film; choose subjects that make a natural continuous journey, no cuts or jumps. No invented UI. Return JSON only: {\"shots\":[{\"id\":\"s1\",\"camera\":\"detail\"},{\"id\":\"s2\",\"camera\":\"context\"}],\"reason\":\"why\"}. "+packet,media=media,json_mode=True,phase="challenge")
+                        answer=conv.ask("But what does a stranger know after the first detail that they did not know before? What question does it raise, and does the second detail actually answer it? Compare other visible cards and choose a stronger sequence if needed. Would the viewer understand it on a phone? Prefer a readable payoff to a flashy visual. Avoid redundant claims. The hero already opens. Choose two distinct subject IDs in downward source order, each with a detail or context camera. This is ONE unbroken scrolling film; choose subjects that make a natural continuous journey, no cuts or jumps. No invented UI. Return JSON only: {\"shots\":[{\"id\":\"s1\",\"camera\":\"detail\"},{\"id\":\"s2\",\"camera\":\"context\"}],\"reason\":\"why\"}. "+packet,media=media,json_mode=True,phase="challenge")
                         try:chosen=shortlist(json.loads(answer),rows)
                         except (TypeError,ValueError):pass
                     directed=chosen is not None
@@ -374,18 +463,18 @@ def run(url,out,display):
     write(manifest,{"url":url,"events":[],"continuous_recording":True,**recording})
     evidence={"source_path":recording["path"],"source_sha256":recording["sha256"],
               "event_manifest_path":str(manifest),"event_manifest_sha256":sha(manifest)}
-    master,stats=render(recording,shots,out/"baseline")
+    master,stats=render_viewer_plan(recording,shots,out/"baseline")
     qa=analyze(master,evidence);write(out/"baseline"/"encoded-quality.json",qa)
     selected="baseline"
     selected_shots=shots
     selected_stats=stats
     if directed and conv.calls<4:
-        response=conv.ask("We made it. Watch this exact unbroken MP4. Does the camera release naturally before travel and push after arrival? Where does it help or hurt readability? Which actual shot is too distant or crops context? Be specific with timestamps. You can revise only the two selected camera modes, detail or context; no new source footage or fake actions. Return JSON only: {\"critique\":\"under 100 words\",\"shots\":[{\"id\":\"same first ID\",\"camera\":\"detail\"},{\"id\":\"same second ID\",\"camera\":\"context\"}]}. Current shots "+json.dumps(shots[1:]),media=(_media(master,"video/mp4",12*1024*1024),),json_mode=True,phase="watch-and-challenge")
+        response=conv.ask("We made it. Watch this exact unbroken MP4. Watch as a first-time viewer. At what timestamp do you understand the product? Where does your attention drift during travel? Does the next detail answer the question raised by the previous one? Can you read the final payoff without rushing? Which actual shot is too distant or crops context? Be specific with timestamps. You can revise only the two selected camera modes, detail or context; no new source footage or fake actions. Return JSON only: {\"critique\":\"under 100 words\",\"shots\":[{\"id\":\"same first ID\",\"camera\":\"detail\"},{\"id\":\"same second ID\",\"camera\":\"context\"}]}. Current shots "+json.dumps(shots[1:]),media=(_media(master,"video/mp4",12*1024*1024),),json_mode=True,phase="watch-and-challenge")
         try:
             raw=json.loads(response);revision=shortlist(raw,rows)
         except (ValueError,TypeError):revision=None
         if revision and [s["id"] for s in revision]==[s["id"] for s in shots[1:]] and revision!=shots[1:]:
-            revised,rs=render(recording,[shots[0],*revision],out/"revision")
+            revised,rs=render_viewer_plan(recording,[shots[0],*revision],out/"revision")
             rq=analyze(revised,evidence);write(out/"revision"/"encoded-quality.json",rq)
             # No new QA finding; select only if measured framing improves.
             if not ({f["code"] for f in rq["findings"]}-{f["code"] for f in qa["findings"]}) and sum(s["subject_area_fraction"] for s in rs)>sum(s["subject_area_fraction"] for s in stats)+.03:

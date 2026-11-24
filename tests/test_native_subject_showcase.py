@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from backend.native_subject_showcase import crop_for,camera_crop,continuous_crop,shortlist,NATIVE,compile_camera_direction,sample_camera_direction
+from backend.native_subject_showcase import crop_for,camera_crop,continuous_crop,shortlist,NATIVE,compile_camera_direction,sample_camera_direction,viewer_camera_direction
 class NativeShowcaseTests(unittest.TestCase):
     def test_detail_contains_real_subject(self):
         rect={"x":288,"y":360,"width":1525,"height":900}
@@ -52,5 +52,24 @@ class NativeShowcaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):compile_camera_direction(source,{**plan,"source_sha256":"wrong"})
         bad={**plan,"keys":[{**plan["keys"][0],"target":"s1","mode":"detail"},*plan["keys"][1:]]}
         with self.assertRaises(ValueError):compile_camera_direction(source,bad)
+
+    def test_viewer_attention_preserves_transport_and_final_payoff(self):
+        left={"x":288,"y":360,"width":746,"height":900}
+        right={"x":1066,"y":360,"width":1525,"height":900}
+        hero={"x":240,"y":290,"width":2400,"height":708}
+        source={"sha256":"fixture","seconds":12.75,"frames":765,
+                "beats":[{"id":"s0","rect":hero},{"id":"s1","rect":left},{"id":"s2","rect":right}],
+                "scrolls":[{"start":2.152,"end":5.3593,"target_scroll_css":2778},
+                           {"start":8.1603,"end":9.4846,"target_scroll_css":2778}]}
+        shots=[{"id":b["id"],"camera":"detail"} for b in source["beats"]]
+        direction=viewer_camera_direction(source,shots)
+        keys=compile_camera_direction(source,direction)
+        np.testing.assert_allclose(sample_camera_direction(keys,4),[0,0,*NATIVE])
+        self.assertLess(sample_camera_direction(keys,8.2)[2],NATIVE[0])
+        np.testing.assert_allclose(sample_camera_direction(keys,12.75),crop_for(right,"context"))
+        self.assertEqual(direction["keys"][-1]["target"],"s2")
+        self.assertGreaterEqual(direction["keys"][-2]["t"]-direction["keys"][-3]["t"],1.45)
+        bad=[dict(shots[0]),dict(shots[2]),dict(shots[1])]
+        with self.assertRaises(ValueError):viewer_camera_direction(source,bad)
 
 if __name__=="__main__":unittest.main()
