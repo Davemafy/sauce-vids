@@ -122,7 +122,7 @@ def check_shell_coverage(plan, source, manifest):
         from cloud_shadow_stage import window_geometry
     elif stage.stage_preset=="cloud_window_volume_v1":
         from cloud_window_volume_stage import window_geometry
-    elif stage.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_clearface_v1"):
+    elif stage.stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_clearface_v1","cloud_luminous_display_v1"):
         from cloud_window_sky_stage import window_geometry
     else:
         raise ValueError("Stage identity must be approved cloud backdrop")

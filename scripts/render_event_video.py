@@ -169,6 +169,9 @@ if FILM_PLAN_DATA is not None:
             FILM_PLAN_DATA["studioStage"],MANIFEST,SRC,(INPUT_W,INPUT_H),
             (1920,1080),FILM_PLAN.duration,FPS)
 
+    if STUDIO_STAGE is not None and STUDIO_STAGE.stage_preset=="cloud_luminous_display_v1":
+        if REFERENCE_POINTER is None or "domPlanes" in FILM_PLAN_DATA or "domPlane" in FILM_PLAN_DATA:
+            raise ValueError("Luminous display requires a single source plane and reference-v1 pointer")
     if "domPlanes" in FILM_PLAN_DATA:
         from live_dom_multi_plane import load_live_dom_planes
         if STUDIO_STAGE is None:
@@ -496,6 +499,9 @@ def apply(source,t,static=False,plate_frame=None):
                     np.float32([[0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]]),
                     STUDIO_STAGE.quad(t))
                 mapped=cv2.perspectiveTransform(np.float32([[[px,py]]]),hom)[0,0]
+                if STUDIO_STAGE.stage_preset=="cloud_luminous_display_v1":
+                    from luminous_display_stage import project_point
+                    mapped=project_point(STUDIO_STAGE,t,px,py)
                 draw_reference_pointer(composed,float(mapped[0]),float(mapped[1]),
                     scale=max(.45,min(.95,.73*STUDIO_STAGE.pose(t)[0]))*REFERENCE_POINTER.scale(t),
                     theme=args.cursor_pack,role=pointer_role)
@@ -789,8 +795,8 @@ def render(output,seconds=None,static=False):
                 "motionProfile":STUDIO_STAGE.motion_style,
                 "stagePreset":STUDIO_STAGE.stage_preset,
                 "sameSourceFrameShutter":STUDIO_STAGE.shutter,
-                "sourcePixelsOnly":STUDIO_STAGE.stage_preset not in ("cloud_window_fullglass_v1","cloud_window_clearface_v1"),
-                "opticalSurfaceCoating":STUDIO_STAGE.stage_preset in ("cloud_window_fullglass_v1","cloud_window_clearface_v1")}
+                "sourcePixelsOnly":STUDIO_STAGE.stage_preset not in ("cloud_window_fullglass_v1","cloud_window_clearface_v1","cloud_luminous_display_v1"),
+                "opticalSurfaceCoating":STUDIO_STAGE.stage_preset in ("cloud_window_fullglass_v1","cloud_window_clearface_v1","cloud_luminous_display_v1")}
         if DOM_PLANE_GROUP is not None:
             record["film_plan"]["domPlanes"]={
                 "ids":[member.id for member in DOM_PLANE_GROUP.members],
