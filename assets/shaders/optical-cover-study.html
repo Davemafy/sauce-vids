@@ -216,11 +216,18 @@ if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw Err
 gl.bindFramebuffer(gl.FRAMEBUFFER,null);
 function tex(img,i,name){gl.activeTexture(gl.TEXTURE0+i);let t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,img);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.generateMipmap(gl.TEXTURE_2D);gl.uniform1i(gl.getUniformLocation(prog,name),i);}
 async function img(s){let i=new Image();i.src=s;await i.decode();return i}
-window.study=async (source,sky,black,bulge=0,polished=false)=>{gl.useProgram(prog);const s=await img(source);tex(s,0,'displayTex');tex(await img(sky),1,'skyTex');let h=polished>=2?.84:bulge>0?.79:.86;gl.uniform1f(gl.getUniformLocation(prog,'sag'),bulge);gl.uniform1i(gl.getUniformLocation(prog,'polished'),Number(polished));gl.uniform2f(gl.getUniformLocation(prog,'halfSize'),h*s.width/s.height,h);gl.uniform1i(gl.getUniformLocation(prog,'blackStage'),black?1:0);gl.viewport(0,0,1920,1080);gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.useProgram(postProg);gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,hdr);gl.uniform1i(gl.getUniformLocation(postProg,"hdr"),2);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.finish();if(gl.getError()!==gl.NO_ERROR)throw Error('GL draw failed');return document.querySelector('canvas').toDataURL('image/png')};
+// At high sag preserve the previous maximum aperture height. The
+// center advances while the corners recede, without cropping the stage.
+function apertureHeight(sag,polished){
+  if(!Number.isFinite(sag)||sag<0||sag>.42)throw Error('Unsupported convex sag');
+  if(polished>=2){if(sag>.12)throw Error('Unsupported clear-cover sag');return .84;}
+  return sag>.30?.79*(1-.5*sag)/.85:sag>0?.79:.86;
+}
+window.study=async (source,sky,black,bulge=0,polished=false)=>{gl.useProgram(prog);const s=await img(source);tex(s,0,'displayTex');tex(await img(sky),1,'skyTex');let h=apertureHeight(bulge,polished);gl.uniform1f(gl.getUniformLocation(prog,'sag'),bulge);gl.uniform1i(gl.getUniformLocation(prog,'polished'),Number(polished));gl.uniform2f(gl.getUniformLocation(prog,'halfSize'),h*s.width/s.height,h);gl.uniform1i(gl.getUniformLocation(prog,'blackStage'),black?1:0);gl.viewport(0,0,1920,1080);gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.useProgram(postProg);gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,hdr);gl.uniform1i(gl.getUniformLocation(postProg,"hdr"),2);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.finish();if(gl.getError()!==gl.NO_ERROR)throw Error('GL draw failed');return document.querySelector('canvas').toDataURL('image/png')};
 // Numerically invert the SAME green-channel texture map as the shader.
 window.projectSource=(point,sw,sh,sag,polished=0)=>{
-  if(!(sag>0 && sag<=.30))throw Error('Unsupported convex sag');
-  const h=polished>=2?.84:.79,b=[h*sw/sh,h],r=polished>=2?.085:.112;
+  if(!(sag>0))throw Error('Unsupported convex sag');
+  const h=apertureHeight(sag,polished),b=[h*sw/sh,h],r=polished>=2?.085:.112;
   const box=p=>{let x=Math.abs(p[0])-b[0]+r,y=Math.abs(p[1])-b[1]+r;return Math.hypot(Math.max(x,0),Math.max(y,0))+Math.min(Math.max(x,y),0)-r;};
   const target=[2*point[0]/sw-1,1-2*point[1]/sh].map(x=>x*(polished>=2 && polished<4?.965:1));
   function sample(q){

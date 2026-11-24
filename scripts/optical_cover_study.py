@@ -18,7 +18,7 @@ def main():
     if sum((x.clear_shoulder,x.polished,x.dielectric_shoulder,x.seamless_cover))>1:raise ValueError('Choose one optical material')
     if (x.clear_shoulder or x.dielectric_shoulder or x.seamless_cover) and not 0<x.bulge<=.12:raise ValueError('Clear shoulder requires sag in (0,.12] and no legacy polished mode')
     mode=4 if x.seamless_cover else 3 if x.dielectric_shoulder else 2 if x.clear_shoulder else int(x.polished)
-    if not 0<=x.bulge<=.30:raise ValueError('Bulge outside optical study bounds')
+    if not 0<=x.bulge<=.42:raise ValueError('Bulge outside optical study bounds')
     if bool(x.manifest)!=bool(x.manifest_sha256):raise ValueError('Require pinned cursor manifest')
     if hashlib.sha256(x.source.read_bytes()).hexdigest()!=x.sha256:raise ValueError('Source hash mismatch')
     x.out.mkdir(parents=True,exist_ok=False)
