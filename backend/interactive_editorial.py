@@ -24,8 +24,14 @@ def response(raw,choices):
     try:r=json.loads(raw)
     except (ValueError,TypeError):return None
     if not isinstance(r,dict) or r.get('decision') not in choices:return None
-    if not isinstance(r.get('observations'),str) or not r['observations'].strip():return None
-    return {'decision':r['decision'],'observations':r['observations'][:1200]}
+    observations=r.get('observations')
+    if isinstance(observations,dict) and observations:
+        # Gemini sometimes returns its timestamp/critique fields as an object.
+        # Preserve them as inert text; the decision is still independently
+        # allowlisted and no arbitrary model fields reach the renderer.
+        observations=json.dumps(observations,ensure_ascii=False)
+    if not isinstance(observations,str) or not observations.strip():return None
+    return {'decision':r['decision'],'observations':observations[:2000]}
 
 def critique(conv,base,phase,other=None):
     film,qa,_=base
@@ -36,13 +42,13 @@ def critique(conv,base,phase,other=None):
                 "Name specific timestamps, judge pointer, readable payoff, pacing and composition. "
                 "Can a shorter native recording of the SAME verified sequence help? "
                 "Compact removes excess waiting, never invents actions or alters the source. "
-                "If the idea itself is weak, reject it. Return JSON {decision: keep|compact|reject, observations: specific critique}. ")
+                "If the idea itself is weak, reject it. Return a JSON object with decision (one of keep, compact, reject) and observations (a concise string with timestamps). ")
     else:
         choices=('baseline','candidate','reject')
         prompt=("Watch BOTH actual encoded films (baseline first, candidate second). "
                 "Did we really improve the story, motion and readable payoff, or merely shorten the film? "
                 "Identify visible moments and timestamps. Reject both if neither works. "
-                "Return JSON {decision: baseline|candidate|reject, observations: specific critique}. ")
+                "Return a JSON object with decision (one of baseline, candidate, reject) and observations (a concise string with timestamps). ")
     media=(_media(film,'video/mp4',12*1024*1024),)
     if other:
         media+=(_media(other[0],'video/mp4',12*1024*1024),)

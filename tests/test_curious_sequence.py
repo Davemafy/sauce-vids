@@ -23,3 +23,13 @@ def test_open_picker_is_dismissed_only_if_needed():
     p.reset_mock();s.is_visible.return_value=False
     dismiss_picker(p,s)
     p.keyboard.press.assert_not_called()
+
+def test_largest_independently_changed_panel_is_framed(monkeypatch):
+    from backend.curious_sequence import choose_result_panel,sequence_viewport
+    sidebar={'result_area_fraction':.24,'changed_result_fraction':.79}
+    product={'result_area_fraction':.57,'changed_result_fraction':.16}
+    unchanged={'result_area_fraction':.8,'changed_result_fraction':.01}
+    assert choose_result_panel([sidebar,product,unchanged])==product
+    assert choose_result_panel([unchanged])=={}
+    monkeypatch.setenv('SAUCE_CAPTURE_QUALITY','high')
+    assert sequence_viewport()==({'width':1920,'height':1080},2)

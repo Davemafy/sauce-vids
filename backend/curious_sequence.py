@@ -1,5 +1,5 @@
 """Bounded two-step local option selection; observed IDs, never model selectors."""
-import json,re
+import json,re,os,time
 from pathlib import Path
 from contextlib import contextmanager
 from hashlib import sha256
@@ -69,10 +69,37 @@ def verify_change(page,url,before,steady,old_panels,after=None):
         old=next((x for x in old_panels if x['id']==r['id']),None)
         if not old or any(abs(old[k]-r[k])>4 for k in ('x','y','width','height')):continue
         candidates.append(measured_result_region(b,c,r))
-    region=max(candidates,key=lambda r:r['result_area_fraction']*r['changed_result_fraction'],default={})
-    if delta<.025 or region.get('result_area_fraction',0)<.12 or region.get('changed_result_fraction',0)<.07:
+    region=choose_result_panel(candidates)
+    if delta<.025 or not region:
         raise ValueError('No substantial persistent change in same visible product panel')
     return after,{'change_above_baseline':delta,**region,'before_sha256':sha256(before).hexdigest(),'after_sha256':sha256(after).hexdigest()}
+
+def choose_result_panel(candidates):
+    """Frame the largest independently changed product surface, not its settings."""
+    qualified=[r for r in candidates if r['result_area_fraction']>=.12
+               and r['changed_result_fraction']>=.07]
+    return max(qualified,key=lambda r:(r['result_area_fraction'],r['changed_result_fraction']),default={})
+
+def observed_result(page,url,before,steady,old,clock):
+    # Bounded settle polling. Recheck actual pixels and panel geometry;
+    # record the acquisition timestamp, never the later verification time.
+    for _ in range(3):
+        after=shot(page)
+        t=time.monotonic()-clock
+        try:
+            after,proof=verify_change(page,url,before,steady,old,after=after)
+        except ValueError:
+            page.wait_for_timeout(150)
+            continue
+        page.wait_for_timeout(250)
+        if image_change(arr(after),arr(shot(page)))<=.025:
+            return after,proof,t
+    raise ValueError('No stable verified product transformation')
+
+def sequence_viewport():
+    # Align exploration to the customer capture geometry, not a smaller
+    # responsive layout that may expose different controls or result panels.
+    return ({"width":1920,"height":1080},2) if os.getenv("SAUCE_CAPTURE_QUALITY","high")=="high" else ({"width":1280,"height":720},1)
 
 @contextmanager
 def browser(url):
@@ -81,7 +108,8 @@ def browser(url):
     with sync_playwright() as p:
         b=p.chromium.launch(executable_path=CHROME,headless=True,args=['--no-sandbox'])
         try:
-            c=b.new_context(viewport={'width':1280,'height':720},service_workers='block')
+            viewport,dpr=sequence_viewport()
+            c=b.new_context(viewport=viewport,device_scale_factor=dpr,service_workers='block')
             loaded=False
             def guard(route):
                 if loaded and route.request.is_navigation_request():return route.abort('blockedbyclient')
@@ -173,10 +201,7 @@ def capture_sequence(page,url,sequence,video_begin,pointer,*,baseline=None,compa
     loc=exact(discover(page,scope),sequence['option'])
     t=click(loc)
     dismiss_picker(page,scope);page.wait_for_timeout(350)
-    after=shot(page);result_t=time.monotonic()-video_begin
-    after,proof=verify_change(page,url,before,steady,old,after=after)
-    page.wait_for_timeout(400)
-    if image_change(arr(after),arr(shot(page)))>.025:raise ValueError('Recorded result did not settle')
+    after,proof,result_t=observed_result(page,url,before,steady,old,video_begin)
     events=[{'kind':'click','t':t,'label':sequence['option'],'semanticGoal':'Apply observed local preset'},
             {'kind':'state_change','t':result_t,'resultRect':proof['result_rect'],'evidence':'Recorded persistent change in same public product panel'}]
     return events,proof

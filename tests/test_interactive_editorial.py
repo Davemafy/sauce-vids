@@ -43,3 +43,11 @@ def test_model_prefers_candidate_but_qa_rejects_both(tmp_path):
     assert result['comparison']['decision']=='candidate'
     assert result['selected'] is None
     make.assert_called_once()
+
+def test_structured_critique_does_not_discard_valid_bounded_decision():
+    raw=json.dumps({'decision':'compact','observations':{'timestamps':{'idle':'00:00-00:03'},'critique':'slow opener'}})
+    r=response(raw,('keep','compact','reject'))
+    assert r['decision']=='compact'
+    assert '00:00-00:03' in r['observations']
+    assert response(raw,('baseline','candidate','reject')) is None
+    assert response('{"decision":"compact","observations":{}}',('compact',)) is None
