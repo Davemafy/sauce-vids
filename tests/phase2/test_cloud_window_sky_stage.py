@@ -30,9 +30,10 @@ def test_clouds_are_background_and_glass_has_its_own_physical_shape():
     # farther sky is unchanged and stationary.
     np.testing.assert_array_equal(full[:18,:18],background[:18,:18])
     assert np.std(background[outside].astype(float))>15
-    # Clear shell is a real object, not a 2px border.
+    # A neat, thin acrylic browser border — no giant cloud-filled body.
     exposed=(outer>245)&(inner==0)
-    assert exposed.mean()>.19
+    assert .027<exposed.mean()<.06
+    assert (inner>245).mean()>.70
     assert np.mean(np.abs(full[exposed].astype(float)-
                           background[exposed].astype(float)))>9.
     # New cloud orientation is structurally different from old white studio.
@@ -42,21 +43,26 @@ def test_clouds_are_background_and_glass_has_its_own_physical_shape():
     assert legacy_clouds(*output).shape==background.shape
 
 
-def test_sculpted_window_surrounds_original_aperture_not_fake_controls():
+def test_one_large_rounded_browser_no_cutout_or_decorative_tail():
     source=(2880,1800); output=(1920,1080)
-    outer=object_mask(output)
+    outer=object_mask(output,source)
     inner=card_mask(source,output)
     assert (outer[inner==255]>245).all()
     x0,y0,x1,y1,_=window_geometry(source,output)
-    assert 250<=x0<=320 and 120<=y0<=160
-    assert 1180<=x1-x0<=1250
-    assert 720<=y1-y0<=780
-    assert outer[960,1750]<20  # Lower-right sculpted recess
-    assert outer[800,1600]>200 # Broad glossy right wing above recess
-    assert outer[900,450]>200
+    assert 170<=x0<=215 and 45<=y0<=75
+    assert 1500<=x1-x0<=1580
+    assert 940<=y1-y0<=980
+    # One continuous rounded-rectangle silhouette across the height; no
+    # sculpted lower-right protrusion or cloud-filled decorative wing.
+    for row in (250,550,850):
+        xx=np.flatnonzero(outer[row]>245)
+        assert xx[0]<x0 and xx[-1]>x1
+        assert abs(xx[0]+xx[-1]-1920)<4
+    assert outer[1000,1755]<10
+    assert outer[1000,1650]>245
     assert outer[0,0]==0
-    # Prior approved 87.5%-height stage remains unchanged.
-    assert legacy_window(source,output).sum()>inner.sum()*1.4
+    # Real browser coverage is larger than the prior 87.5%-height default.
+    assert inner.sum()>legacy_window(source,output).sum()
 
 
 @pytest.fixture
@@ -121,7 +127,7 @@ def test_existing_preset_and_explicit_new_sky_choice_remain_distinct():
 def test_all_landscape_sizes_fit_without_source_clipping():
     for output in ((640,360),(1280,720),(1920,1080)):
         inner=card_mask((2880,1800),output)
-        outer=object_mask(output)
+        outer=object_mask(output,(2880,1800))
         assert np.all(outer[inner==255]>245)
         assert not np.any(outer[0,:]>10)
         assert not np.any(outer[-1,:]>10)
