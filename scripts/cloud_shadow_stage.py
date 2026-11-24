@@ -270,7 +270,7 @@ def render_cloud_stage(stage, source, t):
 
 
 def render_cloud_overview(source, output_size=(1920,1080), *,
-                          stage_preset="cloud_shadow_v1"):
+                          stage_preset="cloud_shadow_v1", coat_source=True):
     """Passive public-film shot; never invent a UI state or camera target.
 
     Legacy callers retain the original Cloud Shadow image/geometry. The
@@ -279,6 +279,8 @@ def render_cloud_overview(source, output_size=(1920,1080), *,
     """
     if source.ndim!=3 or source.shape[2]!=3 or source.dtype!=np.uint8:
         raise ValueError("Expected genuine decoded BGR browser frame")
+    if type(coat_source) is not bool:
+        raise ValueError("Source coating policy must be explicit boolean")
     size=(source.shape[1],source.shape[0])
     if stage_preset in ("cloud_window_sky_v1","cloud_window_fullglass_v1"):
         from cloud_window_sky_stage import (
@@ -302,7 +304,7 @@ def render_cloud_overview(source, output_size=(1920,1080), *,
     board=plate(size,output_size).copy()
     screen=cv2.resize(source,(x1-x0,y1-y0),interpolation=cv2.INTER_AREA
                       if x1-x0<=size[0] else cv2.INTER_CUBIC)
-    if stage_preset in ("cloud_window_fullglass_v1","cloud_window_clearface_v1"):
+    if coat_source and stage_preset in ("cloud_window_fullglass_v1","cloud_window_clearface_v1"):
         projected=np.zeros_like(board)
         projected[y0:y1,x0:x1]=screen
         screen=coat_glass_face(projected,size,output_size)[y0:y1,x0:x1]

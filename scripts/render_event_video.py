@@ -61,6 +61,8 @@ parser.add_argument("--presentation",choices=["window","fullscreen"],default="wi
 parser.add_argument("--stage-image",type=Path,help="Operator-supplied backdrop for the window presentation")
 parser.add_argument("--cloud-overview",action="store_true",
                     help="Fixed Cloud Shadow stage for passive public showcases")
+parser.add_argument("--customer-cloud-stage",action="store_true",
+                    help="Opt-in cobalt full-glass stage for a verified real customer interaction")
 parser.add_argument("--physical-cover-bake",type=Path,help="Opt-in calibrated Cycles cover material study")
 parser.add_argument("--physical-cover-sha256",help="Exact SHA256 of the calibration asset")
 parser.add_argument("--feathered-lens-study",action="store_true",help="Original cursor lens with softly blended edges")
@@ -70,6 +72,14 @@ parser.add_argument("--motion-glass-study",action="store_true",help="Opt-in came
 args=parser.parse_args()
 if bool(args.physical_cover_bake)!=bool(args.physical_cover_sha256):
     parser.error("Physical cover requires both calibration and hash")
+if args.customer_cloud_stage and (
+        args.cloud_overview or args.film_plan or args.stage_image or
+        args.presentation!="window" or args.glass_loupe or args.slider_framing or
+        args.recorded_pointer or args.anchored_result_cut or args.result_focus or
+        args.verified_workflow_editorial or args.guided_result or
+        args.static or args.motion_glass_study or args.cursor_lens_study or
+        args.physical_cover_bake):
+    parser.error("Customer cloud stage is an independent source-true camera path")
 if args.cloud_overview and (args.film_plan or args.stage_image or args.presentation!="window"
         or args.glass_loupe or args.slider_framing or args.recorded_pointer
         or args.anchored_result_cut or args.verified_workflow_editorial or args.guided_result
@@ -244,6 +254,11 @@ if FILM_PLAN_DATA is not None:
     if FILM_PLAN.audio_file and args.music:
         parser.error("Film-plan audio and CLI music cannot be mixed implicitly")
 
+CUSTOMER_CLOUD_MOMENT=None
+if args.customer_cloud_stage:
+    from customer_cloud_window import verified_cloud_moment
+    CUSTOMER_CLOUD_MOMENT=verified_cloud_moment(
+        MANIFEST.get("events"),DURATION,(INPUT_W,INPUT_H))
 if DURATION<0.5:parser.error("Video duration is too short")
 VENDOR=PROJECT/"studio"/"assets"/"vendor"/"shotcandy"
 FRAME=VENDOR/"browser-dark.svg"
@@ -523,6 +538,10 @@ def compose_window(source,t,static=False):
     return stage
 
 def apply(source,t,static=False,plate_frame=None):
+    if args.customer_cloud_stage:
+        from customer_cloud_window import render_customer_cloud
+        return render_customer_cloud(source,t,CUSTOMER_CLOUD_MOMENT,
+                                     output_size=(MASTER_W,MASTER_H))
     if args.cloud_overview:
         from cloud_shadow_stage import render_cloud_overview
         return render_cloud_overview(source,(MASTER_W,MASTER_H))
@@ -675,8 +694,12 @@ def diagnostics():
        "max_translation_acceleration_px_per_frame_sq":
              round(float(np.max(np.abs(accel[:,[2,5]]),initial=0)),4),
        "max_zoom_per_frame":round(float(np.max(np.abs(vel[:,0]),initial=0)),8),
-       "frame_source":("unmodified browser recording" if args.presentation=="fullscreen" or args.cloud_overview else "Shotcandy MIT browser-dark.svg"),
-       "stagePreset":"cloud_shadow_v1" if args.cloud_overview else None,
+       "frame_source":("unmodified verified Chromium pixels in owner cloud stage"
+                        if args.customer_cloud_stage else
+                        "unmodified browser recording" if args.presentation=="fullscreen" or args.cloud_overview
+                        else "Shotcandy MIT browser-dark.svg"),
+       "stagePreset":("cloud_window_fullglass_v1" if args.customer_cloud_stage
+                       else "cloud_shadow_v1" if args.cloud_overview else None),
        "camera_profile":("json-film-plan-v1" if FILM_PLAN is not None else
                          "verified-workflow-editorial" if WORKFLOW_SHOT else
                          "guided-result" if GUIDED_SHOT else args.camera_profile),
@@ -734,6 +757,40 @@ def diagnostics():
                 raise ValueError("Studio camera hides the real recorded cursor at the verified action")
         if max60>45:
             raise ValueError("Studio camera is too abrupt; revise JSON camera keys")
+    if CUSTOMER_CLOUD_MOMENT is not None:
+        # The standard 2D Shotcandy camera is deliberately BYPASSED for the
+        # customer full-glass stage. Report the *actual* verified physical
+        # camera, not misleading unused 2D zoom/pan metrics.
+        moments=np.asarray([CUSTOMER_CLOUD_MOMENT.amplitude(
+            (TRIM_FRAMES+i)/FPS) for i in range(frames)],dtype=np.float64)
+        values=1.+.043*moments
+        delta=np.abs(np.diff(values))
+        motion=float(delta.max(initial=0))*max(MASTER_W,MASTER_H)/2
+        acceleration=float(np.abs(np.diff(values,n=2)).max(initial=0))*max(MASTER_W,MASTER_H)/2
+        metrics.update({
+            "zoom_shots":1,
+            "max_translation_per_frame_px":round(motion,4),
+            "max_continuous_translation_per_frame_px":round(motion,4),
+            "max_translation_acceleration_px_per_frame_sq":round(acceleration,4),
+            "max_zoom_per_frame":round(float(delta.max(initial=0)),8),
+            "camera_profile":"verified-customer-whole-browser-push",
+            "camera_plan_source":"paired original Chromium click, changed DOM and completion",
+            "interpolation":"C2 quintic + premultiplied source-preserving glass",
+            "customerCloudStage":{
+                "schema":"sauce-customer-cloud-v1",
+                "stagePreset":"cloud_window_fullglass_v1",
+                "trueSourcePixels":True,
+                "sourceCoating":False,
+                "stationarySky":True,
+                "verifiedClickSeconds":CUSTOMER_CLOUD_MOMENT.click,
+                "verifiedResultSeconds":CUSTOMER_CLOUD_MOMENT.result,
+                "verifiedHoldEndSeconds":CUSTOMER_CLOUD_MOMENT.complete,
+                "peakWholeBrowserPush":.043,
+                "maxCameraMotionPerFramePx":round(motion,4),
+                "creativeApproved":False
+            }})
+        if motion*FPS/60 > 16:
+            raise ValueError("Whole-browser physical camera would move too quickly")
     if FILM_PLAN is not None:
         # Validate motion in 60fps-equivalent units, even for 24/25/30fps sources.
         speed60=metrics["max_translation_per_frame_px"] * FPS/60

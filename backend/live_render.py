@@ -255,6 +255,17 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
     '--video',str(prepared),'--manifest',str(manifest),'--output',str(composed),
     '--cursor-pack',compositor_cursor,
     '--camera-profile','action-first','--presentation','window']
+ # Customer stage is an EXPLICIT opt-in, not a speculative visual switch.
+ # Original source, capture clock, source cursor and verified result remain
+ # intact; only the surrounding studio and whole-browser camera differ.
+ stage=os.getenv('SAUCE_CUSTOMER_STAGE','')
+ if stage not in ('','cloud_window_fullglass_v1'):
+  raise ValueError('Unsupported opt-in Sauce customer stage')
+ customer_cloud=(stage=='cloud_window_fullglass_v1')
+ if customer_cloud:
+  if mode!='interactive' or cursorless or subjects or plan:
+   raise ValueError('Full-glass customer stage requires one verified click outcome')
+  command.append('--customer-cloud-stage')
  cloud_overview=(mode=='showcase' and not events and not cursorless and not subjects)
  if cloud_overview:
   command+=['--cloud-overview']
@@ -269,7 +280,7 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
  metrics=json.loads((work/'camera-metrics.json').read_text())
  if loupe and not metrics['glass_loupe_shots']:
   raise RuntimeError('Recorded slider evidence could not produce a glass shot')
- if (not cursorless or loupe) and not cloud_overview:
+ if (not cursorless or loupe) and not cloud_overview and not customer_cloud:
   shutil.copyfile(work/'SHOTCANDY-LICENSE.txt',out/'SHOTCANDY-LICENSE.txt')
  composed.replace(master)
  verify_mp4(master,1920,1080,60)
@@ -315,7 +326,9 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
  build_web_player(Path(__file__).parents[1]/'docs/sauce-premium-player-template.html',
                    out,title,story,duration)
  result={
-  'render_mode':'continuous-browser-capture','presentation':'cloud-shadow-overview' if cloud_overview else 'slider-framing' if cursorless and not loupe else 'floating-browser',
+  'render_mode':'continuous-browser-capture','presentation':('source-true-cobalt-glass'
+       if customer_cloud else 'cloud-shadow-overview' if cloud_overview
+       else 'slider-framing' if cursorless and not loupe else 'floating-browser'),
   'verified_camera_shots':metrics['zoom_shots'],
   'subject_shot_count':len(subjects),
   'verified_glass_shots':metrics['glass_loupe_shots'],'source_url':safe_url(receipt['source_url']),
