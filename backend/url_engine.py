@@ -221,16 +221,38 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
     # Opt-in Stagehand can propose only a separately observed Sauce control ID.
     # No model selector, unverified outcome or navigation reaches capture.
     stagehand_plan = None
-    if os.getenv("SAUCE_STAGEHAND_DISCOVERY") == "1":
+    verified_modal_proof=None
+    curious_interactive=cinematic_only and os.getenv("SAUCE_CURIOUS_INTERACTIVE")=="1"
+    sequential=curious_interactive and os.getenv("SAUCE_CURIOUS_SEQUENCE")=="1"
+    if sequential:
+        from backend.curious_sequence import investigate_sequence
+        plan,calls=investigate_sequence(url,report,private/'sequence-curiosity')
+        if plan is None:
+            raise NoVerifiedProductAction('No independently verified public option transformation')
+        source='gemini-sequential-curiosity'
+    elif curious_interactive:
+        from backend.curious_interactive import investigate
+        selected,calls=investigate(url,report,private/'interactive-curiosity',
+                                   require_cinematic_story_proof)
+        if selected is None:
+            (folder/'direction.json').write_text(json.dumps({
+                'mode':'rejected','ai_calls':calls,'direction_source':'gemini-interactive-curiosity',
+                'reason':'No independently verified and semantically selected product payoff'},indent=2))
+            raise NoVerifiedProductAction('No independently verified public product interaction selected by bounded curiosity')
+        plan,verified_modal_proof=selected
+        plan['local_only_action']=True
+        source='gemini-interactive-curiosity'
+    elif os.getenv("SAUCE_STAGEHAND_DISCOVERY") == "1":
         from backend.stagehand_discovery import run_stagehand_discovery
         stagehand_plan = run_stagehand_discovery(report, private)
-    if stagehand_plan:
+    if curious_interactive:
+        pass
+    elif stagehand_plan:
         plan,calls,source = stagehand_plan,1,"stagehand-observed-id"
     else:
         from backend.url2video import previous_feedback
         plan,calls,source = direction(report,previous_feedback(folder.parent),
                                       curiosity_dir=None if cinematic_only else private/'curiosity')
-    verified_modal_proof=None
     if cinematic_only and source=='safe-public-modal-proposal':
         from backend.public_modal_search import investigate_modal_candidates
         found=investigate_modal_candidates(
@@ -246,7 +268,7 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
     if cinematic_only and plan['mode']!='interactive':
         raise NoVerifiedProductAction(
             "No independently verified public product interaction available for this URL")
-    steps=workflow(plan,report) if not plan.get('beats') else []
+    steps=workflow(plan,report) if not plan.get('beats') and not sequential else []
     checked=preflight(url,steps) if steps else []
     if len(checked)<len(steps):
         if cinematic_only:
@@ -255,7 +277,7 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
                         'title':plan['title'],'reason':'A selected control changed before recording'},report)
     # This opt-in probe runs before the expensive capture and only for
     # a vetted, non-submitting public control. Never a default or premium score.
-    if (os.getenv('SAUCE_VERIFY_VISIBLE_ACTION')=='1' or cinematic_only or stagehand_plan is not None) and plan['mode']=='interactive':
+    if not sequential and (os.getenv('SAUCE_VERIFY_VISIBLE_ACTION')=='1' or cinematic_only or stagehand_plan is not None) and plan['mode']=='interactive':
         from backend.source_action_preflight import probe_public_action
         selected_control=next((c for c in report['controls']
                                if c['id']==plan['action_ids'][0]),None)
@@ -339,6 +361,8 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
                 if cinematic_only:
                     raise NoVerifiedProductAction('Real slider outcome missing from source footage')
                 plan['mode']='showcase'
+    if sequential and not record.get('sequence_proof'):
+        raise NoVerifiedProductAction('Recorded sequence lost verified visual payoff')
     if not any(a.get('kind') in ('link','button','slider','tab') for a in record.get('actions',[])):
         if cinematic_only:
             raise RuntimeError('Cinematic film rejected: source recording lost actual product action')

@@ -89,13 +89,18 @@ def verified_detail_matrix(moment, t, size):
         raise ValueError("Real verified outcome required")
     w,h=size
     power=moment.amplitude(t)
-    z=1.+.55*power
     r=moment.bounds
+    # Wide transformations need substantially less detail zoom than a modal.
+    z=min(1.+.55*power,w/r["width"],h/r["height"])
     cx=r["x"]+r["width"]*.5
     cy=r["y"]+r["height"]*.5
-    x=max(w*(1.-z),min(0.,w*.5-z*cx))
+    xlo=max(w*(1.-z),-r["x"]*z)
+    xhi=min(0.,w-(r["x"]+r["width"])*z)
+    x=max(xlo,min(xhi,w*.5-z*cx))
     wanted=max(h*.25,min(h*.75,cy))
-    y=max(h*(1.-z),min(0.,wanted-z*cy))
+    ylo=max(h*(1.-z),-r["y"]*z)
+    yhi=min(0.,h-(r["y"]+r["height"])*z)
+    y=max(ylo,min(yhi,wanted-z*cy))
     # Never discard the observed payoff. Source coordinates are unaffected
     # by the decorative sky, acrylic shell or user-facing frame.
     if power>.001 and (r["x"]*z+x < -.01 or

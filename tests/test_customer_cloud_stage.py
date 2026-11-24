@@ -113,3 +113,17 @@ class CustomerCloudMomentTests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+
+
+def test_wide_real_result_caps_detail_zoom_and_stays_visible():
+    events=sample_events()
+    r={'x':576.7,'y':182.,'width':1343.3,'height':882.}
+    events[1]['resultRect']=r
+    m=verified_cloud_moment(events,5.,(1920,1080))
+    a=verified_detail_matrix(m,2.8,(1920,1080))
+    z=float(a[0,0])
+    assert 1.<z<=1080/882+.0001
+    assert z*r['x']+a[0,2]>=-.01
+    assert z*(r['x']+r['width'])+a[0,2]<=1920+.01
+    assert z*r['y']+a[1,2]>=-.01
+    assert z*(r['y']+r['height'])+a[1,2]<=1080+.01

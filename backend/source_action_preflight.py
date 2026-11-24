@@ -187,7 +187,10 @@ def visible_result_box(page,control):
     selectors=['[role="dialog"]','dialog[open]','[role="tabpanel"]']
     aria=page.locator(control['selector']).get_attribute('aria-controls')
     if aria and all(v.isalnum() or v in ('-','_') for v in aria):
-        selectors.append('[id="'+aria+'"]')
+        exact='[id="'+aria+'"]'
+        selectors=[exact] if control.get('kind')=='tab' else [exact,*selectors]
+    elif control.get('kind')=='tab':
+        return None
     for css in selectors:
         matches=page.locator(css)
         for i in range(min(8,matches.count())):
@@ -197,6 +200,27 @@ def visible_result_box(page,control):
                 if box and box['width']>=48 and box['height']>=36:
                     return box
     return None
+
+
+def same_local_tab_route(original, current):
+    """Allow only same-route browser-history UI state, never input URLs.
+
+    Callers must separately block post-load main-frame network navigation.
+    No query values are logged or accepted as new capture destinations.
+    """
+    from urllib.parse import parse_qsl
+    try:
+        a,b=urlsplit(original),urlsplit(current)
+        if (a.scheme,a.netloc,a.path)!=(b.scheme,b.netloc,b.path):
+            return False
+        if b.username or b.password or b.fragment or len(b.query)>1024:
+            return False
+        if b.query and any(re.search(r'token|secret|password|auth|session|email|key',k,re.I)
+                           for k,_ in parse_qsl(b.query,keep_blank_values=True,max_num_fields=12)):
+            return False
+        return True
+    except (ValueError,TypeError):
+        return False
 
 
 def probe_public_action(url: str, report: dict, control_id: str,
@@ -246,8 +270,11 @@ def probe_public_action(url: str, report: dict, control_id: str,
                 return ((a.scheme,a.netloc.lower(),a.path.rstrip('/')) ==
                         (b.scheme,b.netloc.lower(),b.path.rstrip('/'))
                         and not b.query and not b.username and not b.password)
+            loaded=False
             def route_guard(route):
                 request=route.request
+                if local_only and loaded and request.is_navigation_request():
+                    return route.abort("blockedbyclient")
                 if local_only and request.is_navigation_request():
                     if not same_route(request.url):
                         return route.abort("blockedbyclient")
@@ -260,6 +287,7 @@ def probe_public_action(url: str, report: dict, control_id: str,
             validate_public_url(page.url)
             if local_only and not same_route(page.url):
                 raise ValueError('Unexpected source route')
+            loaded=True
             page.wait_for_timeout(550)
             locator=page.locator(c['selector'])
             if locator.count()!=1 or not locator.is_visible():
@@ -284,9 +312,12 @@ def probe_public_action(url: str, report: dict, control_id: str,
             stable=page.screenshot(type='png',animations='disabled')
             locator.click(timeout=4200)
             page.wait_for_timeout(750)
-            validate_public_url(page.url)
-            if local_only and not same_route(page.url):
-                raise ValueError('Action left the verified public route')
+            if local_only and c['kind']=='tab' and same_local_tab_route(url,page.url):
+                validate_public_url(url)
+            else:
+                validate_public_url(page.url)
+                if local_only and not same_route(page.url):
+                    raise ValueError('Action left the verified public route')
             after_state=_fingerprint(page.evaluate(FINGERPRINT_JS))
             after_box=locator.bounding_box()
             after_scroll=page.evaluate('({x:scrollX,y:scrollY})')

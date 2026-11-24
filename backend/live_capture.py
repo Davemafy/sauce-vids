@@ -434,7 +434,13 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
    if not native_recorder:
     kwargs.update(record_video_dir=str(folder),record_video_size=quality['video_size'])
    context=b.new_context(**kwargs)
-   context.route('**/*',guard_route)
+   local_only=plan.get('local_only_action') is True
+   loaded=False
+   def capture_route(route):
+    if local_only and loaded and route.request.is_navigation_request():
+     return route.abort('blockedbyclient')
+    return guard_route(route)
+   context.route('**/*',capture_route)
    if passive_showcase:
     from scripts.session_capture import install_presentation_cleanup
     install_presentation_cleanup(context)
@@ -444,6 +450,7 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
    response=page.goto(url,wait_until='domcontentloaded',timeout=30000)
    if response and response.status>=400:raise RuntimeError('Source page returned HTTP '+str(response.status))
    validate_public_url(page.url)
+   loaded=True
    page.wait_for_timeout(600)
    if cursor_script:page.evaluate(cursor_script)
    if passive_showcase:
@@ -482,7 +489,14 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
     evidence.append({'phase':label,'time_s':round(time.monotonic()-start,2),
           'url':page.url.split('?')[0],'scroll':page.evaluate('Math.round(window.scrollY)')})
    mark('opening')
-   if plan.get('mode')=='interactive':
+   sequence_proof=None
+   if plan.get('sequence') and local_only:
+    from backend.curious_sequence import capture_sequence
+    sequence_events,sequence_proof=capture_sequence(page,url,plan['sequence'],video_begin,pointer_to)
+    editorial_events.extend(sequence_events)
+    events.append({'id':'sequence','kind':'button','label':'Observed local option selection'})
+    mark('sequence-result')
+   elif plan.get('mode')=='interactive':
     for ident in plan.get('action_ids',[])[:2]:
      c=actions.get(ident)
      if not c or not allowed(c,report['url']):continue
@@ -579,7 +593,9 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
         if(!pane.innerText.trim()&&!pane.querySelector('img,svg,canvas,video'))return null;
         return {x:r.x,y:r.y,width:r.width,height:r.height};
        }""",tab_target)
-       if page.url!=before or not region:
+       from backend.source_action_preflight import same_local_tab_route
+       same_page=(same_local_tab_route(before,page.url) if local_only else page.url==before)
+       if not same_page or not region:
         raise RuntimeError('Public tab did not reveal a visible local panel')
        editorial_events.extend([
         {'kind':'click','t':click_time,'label':c['text'],'semanticGoal':'Inspect public tab content'},
@@ -676,6 +692,7 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
       'requested_video_size':quality['video_size'],
       'viewport_css_size':quality['viewport'],
       'cursorless':cursorless,'presentation_cursor':'composited-arrow' if cursorless else 'hidden' if beats or passive_showcase else cursor_style}
+   if sequence_proof:receipt['sequence_proof']=sequence_proof
    if native_proof:
     # FPS is the actual recorded source stream, not the export bitrate or
     # postproduced frame rate. Original source hashes remain authoritative.

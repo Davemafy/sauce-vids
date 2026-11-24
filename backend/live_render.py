@@ -160,7 +160,7 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
  initial_trim=trim
  cursorless=receipt.get('cursorless') is True
  loupe=cursorless and not plan and os.getenv('SAUCE_SLIDER_LOUPE')=='1'
- if mode=='interactive' and not cursorless:
+ if mode=='interactive' and not cursorless and not receipt.get('sequence_proof'):
   trim=verified_action_intro_trim(receipt.get('editorial_events',[]),trim)
  if cursorless:
   slider=next(event for event in receipt['editorial_events']
