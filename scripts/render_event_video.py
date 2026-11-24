@@ -63,6 +63,7 @@ parser.add_argument("--cloud-overview",action="store_true",
                     help="Fixed Cloud Shadow stage for passive public showcases")
 parser.add_argument("--physical-cover-bake",type=Path,help="Opt-in calibrated Cycles cover material study")
 parser.add_argument("--physical-cover-sha256",help="Exact SHA256 of the calibration asset")
+parser.add_argument("--cursor-lens-study",action="store_true",help="Persistent recorded-pointer optical lens research")
 parser.add_argument("--motion-glass-study",action="store_true",help="Opt-in camera-travel convex cover research")
 args=parser.parse_args()
 if bool(args.physical_cover_bake)!=bool(args.physical_cover_sha256):
@@ -89,7 +90,7 @@ if args.film_plan:
 else:
     FILM_PLAN_DATA=None
     args.cursor_pack=args.cursor_pack or "founder-reference"
-if args.motion_glass_study and (FILM_PLAN_DATA is None or args.physical_cover_bake):
+if (args.motion_glass_study or args.cursor_lens_study) and (FILM_PLAN_DATA is None or args.physical_cover_bake or (args.motion_glass_study and args.cursor_lens_study)):
     parser.error("Motion glass requires a verified film plan and no other optical study")
 if args.physical_cover_bake and FILM_PLAN_DATA is None:
     parser.error("Physical cover requires a verified film plan")
@@ -179,13 +180,17 @@ if FILM_PLAN_DATA is not None:
             FILM_PLAN_DATA["studioStage"],MANIFEST,SRC,(INPUT_W,INPUT_H),
             (1920,1080),FILM_PLAN.duration,FPS)
 
-    if args.motion_glass_study:
+    if args.motion_glass_study or args.cursor_lens_study:
         if (STUDIO_STAGE is None or STUDIO_STAGE.stage_preset!="cloud_window_clearface_v1"
                 or REFERENCE_POINTER is None or ISOLATION is not None
                 or "domPlanes" in FILM_PLAN_DATA or "domPlane" in FILM_PLAN_DATA):
             raise ValueError("Motion glass study requires single-plane clearface and reference pointer")
         from motion_glass import MotionGlass
-        MOTION_GLASS=MotionGlass(STUDIO_STAGE,MANIFEST)
+        if args.cursor_lens_study:
+            from cursor_lens import CursorLens
+            MOTION_GLASS=CursorLens(STUDIO_STAGE,MANIFEST,REFERENCE_POINTER,FPS)
+        else:
+            MOTION_GLASS=MotionGlass(STUDIO_STAGE,MANIFEST)
     if args.physical_cover_bake:
         if (STUDIO_STAGE is None or STUDIO_STAGE.stage_preset!="cloud_window_clearface_v1"
                 or REFERENCE_POINTER is None or ISOLATION is not None

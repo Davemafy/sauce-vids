@@ -90,6 +90,8 @@ class MotionGlass:
         return energy_at(self.windows,t)
     def project(self,point,t):
         return forward(point,self.geometry,PEAK_SAG*self.energy(t))
+    def maps(self,t):
+        return inverse_map(self.stage.source_size,self.stage.output_size,PEAK_SAG*self.energy(t))
     def render(self,source,t):
         stage=self.stage; sw,sh=stage.source_size; ow,oh=stage.output_size
         quad=stage.quad(t)
@@ -100,13 +102,15 @@ class MotionGlass:
         h,w=source.shape[:2]
         H=cv2.getPerspectiveTransform(np.float32([[0,0],[w-1,0],[w-1,h-1],[0,h-1]]),quad)
         energy=self.energy(t)
-        mx,my,qx,qy=inverse_map(stage.source_size,stage.output_size,PEAK_SAG*energy)
+        mx,my,qx,qy=self.maps(t)
         # Direct inverse source lookup: one resampling pass, no double blur.
         I=np.linalg.inv(H)
         den=I[2,0]*mx+I[2,1]*my+I[2,2]
         sx=((I[0,0]*mx+I[0,1]*my+I[0,2])/den).astype(np.float32)
         sy=((I[1,0]*mx+I[1,1]*my+I[1,2])/den).astype(np.float32)
         screen=cv2.remap(source,sx,sy,cv2.INTER_CUBIC,borderMode=cv2.BORDER_REPLICATE)
+        return self.finish(screen,mx,my,qx,qy,energy)
+    def finish(self,screen,mx,my,qx,qy,energy):
         screen=reflect_face(screen,qx,qy,energy)
         mask=cv2.remap(self.mask,mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
         shadow=cv2.remap(self.shadow,mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
