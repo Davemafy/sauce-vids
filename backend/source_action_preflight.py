@@ -309,8 +309,19 @@ def probe_public_action(url: str, report: dict, control_id: str,
                 proof['reason']='Visible authentication barrier, not a public product outcome'
             # A full-screen gray modal backdrop is not 80% more useful
             # product content. Score only a browser-observed result container.
-            proof.update(measured_result_region(arr(before),arr(after),
-                                                 visible_result_box(page,c)))
+            try:
+                proof.update(measured_result_region(arr(before),arr(after),
+                                                     visible_result_box(page,c)))
+            except ValueError as exc:
+                if 'Result box was not fully visible' not in str(exc):
+                    raise
+                # Preserve the real before/after evidence and identify the
+                # exact reason the result cannot safely be framed. A clipped
+                # tab panel is not a verified cinematic result.
+                proof.update(result_area_fraction=0.0,
+                             changed_result_fraction=0.0, result_rect=None)
+                proof['decision']='result_not_fully_visible'
+                proof['reason']='Observed result container is outside the recorded viewport'
             proof.update({
                 'source_url':str(report.get('url',url)),
                 'source_control_id':control_id,

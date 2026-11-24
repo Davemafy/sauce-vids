@@ -100,9 +100,9 @@ def apply_visible_action_verdict(plan:dict,report:dict,proof:dict,
     if proof.get('decision')=='visible_outcome_candidate':
         return plan
     if cinematic_only:
-        raise RuntimeError(
-            'Actual public UI action has no verified visual payoff; '
-            'cinematic capture was stopped before recording')
+        raise NoVerifiedProductAction(
+            'Actual public UI action has no independently verified visible payoff; '
+            'cinematic capture stopped before recording')
     return normalize({'mode':'showcase','heading_ids':plan['heading_ids'],
                       'title':plan['title'],
                       'reason':'Chosen action had no verified visible result; '
@@ -175,13 +175,21 @@ def captured(folder:Path,url:str,actions:list[dict],*,tag:str='session'):
         raise RuntimeError('Browser capture contained no usable state sequence')
     return output
 
-def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto", cursor_pack="founder-reference"):
+class NoVerifiedProductAction(RuntimeError):
+    """Public page was accessible but did not demonstrate a real product action."""
+
+
+def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
+            cursor_pack="founder-reference", intent=None):
+    if intent not in (None, "product_demo", "website_preview"):
+        raise ValueError("Unknown customer film intent")
     validate_public_url(url)
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
     private=folder/'private';private.mkdir(parents=True,exist_ok=True)
     def stage(x):
         if progress:progress(x)
-    cinematic_only=os.getenv('SAUCE_CINEMATIC_ONLY')=='1'
+    cinematic_only=(os.getenv('SAUCE_CINEMATIC_ONLY')=='1' if intent is None
+                    else intent=="product_demo")
     checkpoint=load_render_checkpoint(folder,url)
     if checkpoint:
         if cinematic_only and checkpoint.get('cinematic_only') is not True:
@@ -207,7 +215,8 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto", cursor
     (folder/'direction.json').write_text(json.dumps({
        **plan,'ai_calls':calls,'direction_source':source},indent=2))
     if cinematic_only and plan['mode']!='interactive':
-        raise RuntimeError('Cinematic film rejected: marketing showcase is not real product demo')
+        raise NoVerifiedProductAction(
+            "No independently verified public product interaction available for this URL")
     steps=workflow(plan,report) if not plan.get('beats') else []
     checked=preflight(url,steps) if steps else []
     if len(checked)<len(steps):

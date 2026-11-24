@@ -16,7 +16,7 @@ import hmac,json,os,re,secrets,threading,time,socketserver,shutil
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlsplit
-from .url_engine import execute
+from .url_engine import execute, NoVerifiedProductAction
 from .url2video import inspect_url,validate_public_url,NeedsKey,NeedsAccess
 from .job_store import load_render_checkpoint, recover_jobs, save_job, write_render_checkpoint
 
@@ -49,11 +49,20 @@ def worker(job_id):
         job=JOBS[job_id]
         result=execute(job["url"],folder,progress=stage,
                        brief=job.get("brief",""),audio=job.get("audio","auto"),
-                       cursor_pack=job.get("cursor_pack","founder-reference"))
+                       cursor_pack=job.get("cursor_pack","founder-reference"),
+                       intent=job.get("intent","product_demo"))
         with LOCK:
             JOBS[job_id].update(result)
             JOBS[job_id]["updated_at"]=time.time()
             JOBS[job_id]["stage_started_at"]=time.time()
+            save(job_id)
+    except NoVerifiedProductAction:
+        with LOCK:
+            JOBS[job_id].update(
+                status="needs_product_demo_url",stage="needs_product_demo_url",
+                error="NoVerifiedProductAction",
+                message=("No safe verified product interaction was found at this public URL. "
+                         "Try an interactive public demo URL, or explicitly choose website preview."))
             save(job_id)
     except NeedsKey:
         with LOCK:
@@ -140,7 +149,7 @@ class Handler(BaseHTTPRequestHandler):
             response={key:value for key,value in job.items()
                       if key in ("id","url","stage","status","created_at",
                                  "updated_at","stage_started_at","reason",
-                                 "error","message","ai_calls","title","quality","note","render_mode","direction_source","capture_mode","video_type","narrated","revision_of")}
+                                 "error","message","ai_calls","title","quality","note","render_mode","direction_source","capture_mode","video_type","narrated","revision_of","intent")}
             if job.get("stage")=="rendering":
                 log=OUT/job_id/"render.log"
                 try:
@@ -192,6 +201,9 @@ class Handler(BaseHTTPRequestHandler):
             brief=body.get("brief","")
             audio=body.get("audio","auto")
             cursor_pack=body.get("cursorPack","founder-reference")
+            intent=body.get("intent","product_demo")
+            if intent not in ("product_demo","website_preview"):
+                return self.send_json(422,{"error":"Unknown film intent"})
             from backend.cursor_capture_js import CURSOR_STYLES
             if cursor_pack not in CURSOR_STYLES:
                 return self.send_json(422,{"error":"Choose a supported cursor style"})
@@ -204,7 +216,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json(429,{"error":"Sauce queue full"})
                 job_id=secrets.token_hex(12)
                 JOBS[job_id]={"id":job_id,"url":url,"brief":brief,"audio":audio,
-                              "cursor_pack":cursor_pack,"stage":"queued",
+                              "cursor_pack":cursor_pack,"intent":intent,"stage":"queued",
                               "status":"queued","created_at":time.time(),
                               "updated_at":time.time(),"stage_started_at":time.time()}
                 save(job_id)

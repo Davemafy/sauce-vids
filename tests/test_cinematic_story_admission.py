@@ -79,7 +79,7 @@ class CinematicStoryAdmission(unittest.TestCase):
                   patch("backend.url_engine.direction",return_value=(plan,0,"local")),
                   patch("backend.url2video.previous_feedback",return_value=[]),
                   patch("backend.url_engine.captured") as captured):
-                with self.assertRaisesRegex(RuntimeError,"marketing showcase"):
+                with self.assertRaisesRegex(RuntimeError,"verified public product interaction"):
                     execute(REPORT["url"],Path(tmp))
                 captured.assert_not_called()
 
