@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"scripts"))
 from cloud_shadow_stage import (PRESET,CLOUD,backdrop,window_geometry,
-                                card_mask,stage_plate)
+                                card_mask,glass_shell_mask,stage_plate)
 from spatial_studio_stage import load_studio_stage,render_studio_stage
 from studio_plan_bounded_repair import normalize_generated_studio_plan
 
@@ -63,9 +63,16 @@ def test_cloud_is_a_real_local_asset_and_fixed_rounded_card():
     assert cloud.shape==(1080,1920,3)
     assert cloud[0,0,0]>cloud[0,0,2]  # actual blue-sky palette
     assert np.array_equal(stage[0,0],cloud[0,0])
-    assert np.mean(stage[y1+18,x0+60:x1-60]) < np.mean(cloud[y1+18,x0+60:x1-60])
-    # Shell's glossy rim is outside the card, never overlaid on real UI.
-    assert np.all(card_mask((2880,1800),(1920,1080))[y0+2,x0+2]==0)
+    # The new acrylic shell extends past the browser: y1+18 is translucent
+    # material, not a shadow pixel. Its genuine diffused shadow falls OUTSIDE
+    # the complete glass silhouette.
+    shell=glass_shell_mask((2880,1800),(1920,1080))
+    pad=round(1080*.024)
+    assert shell[y1+pad-6,x0+200]==255
+    assert shell[y1+pad+8,x0+200]==0
+    assert np.mean(stage[y1+pad+8,x0+60:x1-60]) < np.mean(cloud[y1+pad+8,x0+60:x1-60])
+    # Shell's glazed rim is exterior to the card, never overlaid on real UI.
+    assert card_mask((2880,1800),(1920,1080))[y0+2,x0+2]==0
 
 
 def test_fixed_shell_but_moving_inner_source_uses_original_pixels(source):
