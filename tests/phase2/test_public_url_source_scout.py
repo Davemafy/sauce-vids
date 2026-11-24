@@ -165,3 +165,33 @@ def test_natural_real_ui_switch_not_an_editorial_cut(verified_click_video,tmp_pa
     writer.release();inp.release()
     bad=analyze(extra,evidence=ev,seconds=12)
     assert "ABRUPT_CUT_CANDIDATE" in [f["code"] for f in bad["findings"]]
+
+
+def test_native_draw_stroke_requires_real_release_motion_and_result(verified_click_video):
+    source,raw=verified_click_video
+    record=json.loads(raw.read_text())
+    box={"x":0,"y":0,"width":320,"height":180}
+    record.update(schema="sauce-native-draw-research-v1",before_paths=0,
+        after_paths=1,surface_pixel_change=.05,decoded_surface_pixel_change=.05)
+    record["events"]=[
+        {"kind":"pointerdown","actionKind":"draw_stroke","t":2.15,
+         "label":"draw","targetRect":box},
+        {"kind":"pointerup","label":"draw","t":2.75},
+        {"kind":"verified_result","label":"draw","t":3.05,
+         "resultRect":box,"evidence":"fixture stroke result"}]
+    record["pointer_samples"]=[{"t":round(.05+i*.02,4),
+         "x":float(40+200*min(1,max(0,(.05+i*.02-2.15)/.6))),"y":80.}
+         for i in range(200)]
+    raw.write_text(json.dumps(record))
+    result=convert(source,raw)
+    assert result["events"][0]["kind"]=="draw_stroke"
+    assert result["events"][0]["end"]==2.75
+    for bad in [
+        {**record,"after_paths":0},
+        {**record,"decoded_surface_pixel_change":0},
+        {**record,"events":[record["events"][0],record["events"][2]]},
+        {**record,"pointer_samples":[{**p,"x":40.} for p in record["pointer_samples"]]},
+    ]:
+        raw.write_text(json.dumps(bad))
+        with pytest.raises(ValueError,match="Drawing"):
+            convert(source,raw)

@@ -73,13 +73,33 @@ def convert(source,receipt):
                 for p in pts):
                 raise ValueError("Recorded pointer does not approach observed control")
             kind=press.get("actionKind","slider_change")
-            if kind not in ("click","slider_change"):
+            if kind not in ("click","slider_change","draw_stroke"):
                 raise ValueError("Unrecognized original source action kind")
             if kind=="click":
                 released=press.get("release")
                 if (type(released) not in (int,float) or
                     not start<released<=end or released-start>.75):
                     raise ValueError("Click must have a true original timed release")
+                final_time=float(released)
+            elif kind=="draw_stroke":
+                released=press.get("release")
+                counts=(old.get("before_paths"),old.get("after_paths"))
+                changes=(old.get("surface_pixel_change"),old.get("decoded_surface_pixel_change"))
+                if (old.get("schema")!="sauce-native-draw-research-v1"
+                    or type(released) not in (int,float)
+                    or not start+.15<released<=end
+                    or target!=result
+                    or any(type(n) is not int or n<0 for n in counts)
+                    or counts[1]<=counts[0]
+                    or any(type(v) not in (int,float) or not .004<v<=1 for v in changes)):
+                    raise ValueError("Drawing requires an actual released stroke and independent surface proof")
+                stroke=[p for p in pts if start<=p["t"]<=released]
+                x,y,bw,bh=(target[k] for k in ("x","y","width","height"))
+                if (len(stroke)<12 or any(not (x<=p["x"]<=x+bw and y<=p["y"]<=y+bh) for p in stroke)
+                    or math.hypot(max(p["x"] for p in stroke)-min(p["x"] for p in stroke),
+                                  max(p["y"] for p in stroke)-min(p["y"] for p in stroke))<.15*math.hypot(bw,bh)
+                    or stroke[-1]["t"]<released-.16):
+                    raise ValueError("Drawing pointer stroke lacks bounded continuous source travel")
                 final_time=float(released)
             else:
                 if "release" in press:
@@ -108,6 +128,8 @@ def convert(source,receipt):
                 action["observedPublicPrice"]=price
             actions.append(action)
     if outstanding or not 1<=len(actions)<=6:raise ValueError("Incomplete action chain")
+    if any(e["kind"]=="draw_stroke" for e in actions) and len(actions)!=1:
+        raise ValueError("One independently verified drawing stroke per research receipt")
     cap=cv2.VideoCapture(str(source))
     if not cap.isOpened():raise ValueError("Cannot decode source")
     changes=[]
