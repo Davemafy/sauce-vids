@@ -85,3 +85,30 @@ class RealPipelineDecision(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'stopped before recording'):
             apply_visible_action_verdict(plan,report,{'decision':'no_proven_visible_outcome'},
                                          cinematic_only=True)
+
+
+class AuthenticationBarrierTests(unittest.TestCase):
+    def test_observed_theme_picker_login_dialog(self):
+        from backend.source_action_preflight import authentication_barrier
+        self.assertTrue(authentication_barrier([{
+            "text": "Welcome back\nSign in to your account to continue\nContinue with Google\nContinue with GitHub",
+            "password": False}]))
+        self.assertTrue(authentication_barrier([{"text": "Authentication is required"}]))
+        self.assertTrue(authentication_barrier([{"text": "Sign in", "password": True}]))
+
+    def test_ordinary_setup_and_preview_are_not_authentication_barriers(self):
+        from backend.source_action_preflight import authentication_barrier
+        self.assertFalse(authentication_barrier([]))
+        self.assertFalse(authentication_barrier([{"text": "Connect your agent\nCopy configuration"}]))
+        self.assertFalse(authentication_barrier([{"text": "Preview component\nSign in button"}]))
+        self.assertFalse(authentication_barrier([{"text": "Welcome back\nYour dashboard"}]))
+
+    def test_authentication_receipt_cannot_admit_interactive_film(self):
+        from backend.url_engine import apply_visible_action_verdict
+        plan={"mode":"interactive","action_ids":["a0"],"heading_ids":["h0"],"title":"Sample"}
+        report={"title":"Sample","url":"https://example.com/","controls":[],
+                "headings":[{"id":"h0","selector":"h1","text":"Sample"}]}
+        proof={"decision":"authentication_required"}
+        self.assertEqual(apply_visible_action_verdict(plan,report,proof)["mode"],"showcase")
+        with self.assertRaisesRegex(RuntimeError,"stopped before recording"):
+            apply_visible_action_verdict(plan,report,proof,cinematic_only=True)

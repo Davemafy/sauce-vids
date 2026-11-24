@@ -11,6 +11,7 @@ contents or screenshots appear in public release receipts.
 from __future__ import annotations
 import hashlib
 import json
+import re
 from pathlib import Path
 import cv2
 import numpy as np
@@ -20,6 +21,45 @@ WIDTH, HEIGHT = 320, 180
 MASK_THRESHOLD = 25
 MIN_DOM_VISIBLE_DELTA = .006
 MIN_GRAPHIC_DELTA = .065
+
+
+# Restrict this check to actual visible modal content, not the page's ordinary
+# Sign In header or illustrative login forms in a product preview.
+AUTH_REQUIRED = re.compile(
+    r"\b(?:sign\s*in|log\s*in|create an account|register)\s+(?:to\s+(?:your account\s+to\s+)?(?:continue|access|use|unlock|proceed)|required)\b"
+    r"|\b(?:authentication|sign[- ]?in|log[- ]?in)\s+(?:is\s+)?required\b",
+    re.I)
+AUTH_PROVIDER = re.compile(r"\b(?:continue|sign\s*in|log\s*in)\s+with\s+(?:google|github|apple|microsoft|email)\b", re.I)
+AUTH_TITLE = re.compile(r"\b(?:welcome back|sign\s*in|log\s*in|create an account)\b", re.I)
+
+
+def authentication_barrier(dialogs):
+    """Conservative modal-only auth signal; no textual page data in receipts."""
+    for item in dialogs:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text", "")
+        if not isinstance(text, str):
+            continue
+        text = " ".join(text.split())
+        if AUTH_REQUIRED.search(text):
+            return True
+        if AUTH_TITLE.search(text) and (AUTH_PROVIDER.search(text) or item.get("password") is True):
+            return True
+    return False
+
+
+def visible_authentication_barrier(page):
+    return authentication_barrier(page.evaluate("""() => {
+      const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);
+        return r.width>0&&r.height>0&&s.visibility==='visible'&&s.display!=='none'&&+s.opacity>0
+          &&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight};
+      return [...document.querySelectorAll('[role="dialog"],dialog[open],[aria-modal="true"]')]
+        .filter(visible).slice(0,12).map(e=>({
+          text:(e.innerText||'').slice(0,4000),
+          password:[...e.querySelectorAll('input[type="password"]')].some(visible)
+        }));
+    }"""))
 
 
 def image_change(before: np.ndarray, after: np.ndarray) -> float:
@@ -209,6 +249,13 @@ def probe_public_action(url: str, report: dict, control_id: str,
             # pixel-delta score wrongly calls that travel a product payoff.
             locator.scroll_into_view_if_needed(timeout=4200)
             page.wait_for_timeout(450)
+            if visible_authentication_barrier(page):
+                return {"schema":"sauce-source-action-preflight-v1",
+                        "decision":"authentication_required",
+                        "source_url":str(report.get("url",url)),
+                        "source_control_id":control_id,
+                        "control_kind":c["kind"],
+                        "human_film_approval":False}
             before_box=locator.bounding_box()
             before_scroll=page.evaluate('({x:scrollX,y:scrollY})')
             before_state=_fingerprint(page.evaluate(FINGERPRINT_JS))
@@ -240,6 +287,9 @@ def probe_public_action(url: str, report: dict, control_id: str,
                 proof['decision']='viewport_shift_ambiguous'
                 proof['reason']='Scroll/layout shift confounded visible product change'
             proof['viewport_shift_px']=round(shift,3) if np.isfinite(shift) else None
+            if visible_authentication_barrier(page):
+                proof['decision']='authentication_required'
+                proof['reason']='Visible authentication barrier, not a public product outcome'
             # A full-screen gray modal backdrop is not 80% more useful
             # product content. Score only a browser-observed result container.
             proof.update(measured_result_region(arr(before),arr(after),
