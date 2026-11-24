@@ -384,7 +384,8 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
              actions.get(selected[0],{}).get('kind')=='slider')
  beats=plan.get('beats',[]) if plan.get('mode')=='showcase' else []
  from backend.cursor_capture_js import build_cursor_script
- cursor_script=('' if cursorless or beats else
+ passive_showcase=plan.get('mode')=='showcase' and not beats
+ cursor_script=('' if cursorless or beats or passive_showcase else
                 ARROW_CURSOR_JS if cursor_style in ('arrow','tabler-legacy') else
                 CURSOR_JS if cursor_style=='circle' else
                 build_cursor_script(cursor_style))
@@ -398,6 +399,9 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
     device_scale_factor=quality['dpr'],record_video_dir=str(folder),
     record_video_size=quality['video_size'],service_workers='block')
    context.route('**/*',guard_route)
+   if passive_showcase:
+    from scripts.session_capture import install_presentation_cleanup
+    install_presentation_cleanup(context)
    if cursor_script:context.add_init_script(cursor_script)
    video_begin=time.monotonic()
    page=context.new_page()
@@ -406,6 +410,19 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
    validate_public_url(page.url)
    page.wait_for_timeout(600)
    if cursor_script:page.evaluate(cursor_script)
+   if passive_showcase:
+    page.evaluate(r"""() => {
+      for (const e of document.querySelectorAll('body *')) {
+        if (getComputedStyle(e).position !== 'fixed') continue;
+        const r=e.getBoundingClientRect(), t=e.innerText||'';
+        if (r.width<120 || r.height<30 || r.height>innerHeight*.4 ||
+            r.width*r.height>innerWidth*innerHeight*.32 || r.bottom<innerHeight*.7 ||
+            !/^\s*(cookies?\s*(?:&|and)\s*analytics|cookie (?:consent|preferences|notice)|we use cookies)\b/i.test(t)) continue;
+        const buttons=[...e.querySelectorAll('button')].map(b=>b.innerText||'').join(' ');
+        if (/accept|allow/i.test(buttons) && /necessary|reject|decline|essential/i.test(buttons))
+          e.style.setProperty('visibility','hidden','important');
+      }
+    }""")
    video=page.video
    if video is None:raise RuntimeError('Browser video recording unavailable')
    start=time.monotonic()
@@ -545,7 +562,16 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
    subject_shots=record_subjects(page,beats,video_begin) if beats else []
    if not subject_shots and (not events or all('skipped' in x for x in events)):
     # Public-site preview when there is no safe meaningful app action.
-    positions=[headings[x]['y'] for x in plan.get('heading_ids',[])[:2] if x in headings]
+    positions=[]
+    for ident in plan.get('heading_ids',[])[:2]:
+     h=headings.get(ident)
+     if not h:continue
+     loc=page.locator(h['selector'])
+     if loc.count()!=1 or not loc.is_visible():continue
+     label=' '.join(loc.inner_text().split())[:110]
+     if label!=h['text']:continue
+     positions.append(round(loc.evaluate("e=>e.getBoundingClientRect().top+scrollY")))
+    positions=sorted(set(positions))
     height=page.evaluate('document.documentElement.scrollHeight')
     if height>1600 and (len(positions)<2 or max(positions)<550):
      positions=[min(height-720,round(height*.32)),min(height-720,round(height*.64))]
@@ -553,7 +579,7 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
      positions=[min(height-720,round(height*.35)),min(height-720,round(height*.66))]
     for i,y in enumerate(positions[:2]):
      smooth_to(page,max(0,y-210))
-     pointer_to(page,900-i*240,340+i*75)
+     if not passive_showcase:pointer_to(page,900-i*240,340+i*75)
      page.wait_for_timeout(360)
      mark('read-'+str(i))
    if editorial_events:
@@ -574,7 +600,7 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
       'capture_quality':quality['quality'],'source_dpr':quality['dpr'],
       'requested_video_size':quality['video_size'],
       'viewport_css_size':quality['viewport'],
-      'cursorless':cursorless,'presentation_cursor':'composited-arrow' if cursorless else 'hidden' if beats else cursor_style}
+      'cursorless':cursorless,'presentation_cursor':'composited-arrow' if cursorless else 'hidden' if beats or passive_showcase else cursor_style}
    (private/'continuous-capture.json').write_text(json.dumps(receipt,indent=2))
    return receipt
   finally:b.close()

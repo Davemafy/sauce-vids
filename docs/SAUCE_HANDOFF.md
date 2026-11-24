@@ -1,5 +1,12 @@
 # Sauce — living handoff for new agents and new chats
 
+## 2026-11-24 — Autonomous Paldey public showcase + Cloud Shadow bridge (diagnostic)
+
+The previous public-site showcase bypassed the cloud compositor and used a neutral matte. On the existing persistent worker, the URL pipeline now ranks observed section headings without requiring an LLM, re-resolves actual heading selectors/positions in the capture viewport, uses existing smooth scroll, hides the unused passive pointer, and suppresses compact recognizable cookie-consent presentation chrome without making a consent choice. Passive no-event showcase footage now enters the existing Cloud Shadow asset/rounded shell composition without fake interaction events or fake browser chrome; the existing event-driven stage path remains separate. The Gemini showcase prompt now emphasizes product/workflow sections; the separate experimental persistent multi-round loop is not merged by this change. Encoded QA now writes a source-hash-bound receipt for this passive path; it is not premium approval or automated repair.
+
+Fresh end-to-end `execute('https://paldey.com/', out, audio='clean')` with high capture and Gemini disabled, zero manual heading IDs: selected h2/h3 (features and four-step workflow). Genuine DPR2 1920x1080 source recorded at 25fps (source SHA256 `2d9bb640f5ad700edbaa2ec142ba036664358f0470bdc9fe0848a7c14157a31c`); exported H264 1920x1080/60 resampled master 8.15s, SHA256 `7347aed589f4bb7e3bec82434e79fca3e73ba6363c36ee14b8d220605975a0bc`. Full FFmpeg decode passed; inspected encoded frames at 0.8/3.5/6.8s, actual cobalt cloud shell and no cookie notice, real Paldey sections. Signed owner-only link verified HTTP206/unsigned403, expires after 72h; worker output `.sauce-stagehand-private/paldey-auto-cloud-v2-20261124/export/master-1080p60.mp4`. Targeted tests: 9 explorer unittest and 24 cloud/native-source pytest passed. No production service restart. QA **REJECT**: STATIC_OPENING_2S (p80 0.22), REPEATED_OR_STATIC_FRAMES (0.765), NO_AUDIO_STREAM (intentional clean export). No product action because actual app redirects to login; text remains small; native60 capture and autonomous editorial refinement still unproven. Keep human review mandatory.
+
+
 
 ## 2026-11-24 — Reference sky-filled cloud-glass OBJECT (not a border)
 

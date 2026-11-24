@@ -1,6 +1,6 @@
 import os,unittest
 from unittest.mock import patch
-from backend.product_explorer import allowed,normalize,workflow
+from backend.product_explorer import allowed,normalize,workflow,showcase_headings
 from backend.url_engine import direction
 
 class ExplorerContracts(unittest.TestCase):
@@ -42,6 +42,21 @@ class ExplorerContracts(unittest.TestCase):
         plan=normalize({'mode':'interactive','action_ids':['nonexistent']},self.source)
         self.assertEqual(plan['mode'],'showcase')
         self.assertEqual(workflow(plan,self.source)[0]['action'],'hover')
+
+    def test_showcase_selects_distinct_product_sections_without_model(self):
+        self.source["height"]=4300
+        self.source["headings"]=[
+            {"id":"h0","tag":"h1","text":"Create beautiful reports","y":90},
+            {"id":"h1","tag":"h2","text":"Trusted by teams","y":620},
+            {"id":"h2","tag":"h2","text":"Features for faster analysis","y":1000},
+            {"id":"h3","tag":"h3","text":"Quick export","y":1150},
+            {"id":"h4","tag":"h2","text":"From raw data to decisions in three steps","y":2200},
+            {"id":"h5","tag":"h2","text":"Frequently asked questions","y":3100}]
+        self.assertEqual(showcase_headings(self.source),["h2","h4"])
+        with patch.dict(os.environ,{"GEMINI_API_KEY":""}):
+            plan,_,_=direction(self.source)
+        self.assertEqual(plan["heading_ids"],["h2","h4"])
+        self.assertEqual(plan["mode"],"showcase")
 
     def test_missing_model_credentials_still_produces_evidence_only_plan(self):
         with patch.dict(os.environ,{'GEMINI_API_KEY':''}):

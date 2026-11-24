@@ -246,3 +246,19 @@ def render_cloud_stage(stage, source, t):
     alpha = m.astype(np.float32)[:, :, None] / 255
     return np.uint8(np.clip(board.astype(np.float32)*(1-alpha)
                             + rendered.astype(np.float32)*alpha, 0, 255))
+
+
+def render_cloud_overview(source, output_size=(1920,1080)):
+    """Passive scroll-only stage; no action or invented camera target."""
+    if source.ndim!=3 or source.shape[2]!=3 or source.dtype!=np.uint8:
+        raise ValueError("Expected genuine decoded BGR browser frame")
+    size=(source.shape[1],source.shape[0])
+    x0,y0,x1,y1,_=window_geometry(size,output_size)
+    board=stage_plate(size,output_size).copy()
+    screen=cv2.resize(source,(x1-x0,y1-y0),interpolation=cv2.INTER_AREA
+                      if x1-x0<=size[0] else cv2.INTER_CUBIC)
+    mask=card_mask(size,output_size)[y0:y1,x0:x1,None].astype(np.uint16)
+    dst=board[y0:y1,x0:x1]
+    dst[:]=((screen.astype(np.uint16)*mask+
+             dst.astype(np.uint16)*(255-mask)+127)//255).astype(np.uint8)
+    return board

@@ -131,6 +131,27 @@ def inspect(url,private):
    return report
   finally:b.close()
 
+def showcase_headings(report):
+ """Choose source-backed, separated product sections rather than logo walls."""
+ excluded=re.compile(r"frequently asked|\bfaq\b|cookie|privacy policy|terms of|contact us|copyright|pricing|sign in|sign up|trusted by|leading global institutions|testimonials|reviews",re.I)
+ narrative=re.compile(r"\b(features?|how it works|workflow|benefits?|everything you need|from .{1,80} to |steps?|what you can|what we do|built for|capabilities|solutions?|tools?|use cases?)\b",re.I)
+ rows=[]
+ for h in report.get("headings",[]):
+  y=h.get("y")
+  label=h.get("text","")
+  if not isinstance(label,str) or not isinstance(y,(int,float)) or y<500:
+   continue
+  if h.get("tag") not in ("h1","h2") or not 4<=len(label)<=180 or excluded.search(label):
+   continue
+  score=3*bool(narrative.search(label))+min(len(label.split()),12)*.12
+  rows.append((score,y,h["id"]))
+ selected=[]
+ for score,y,cid in sorted(rows,key=lambda r:(-r[0],r[1])):
+  if all(abs(y-old_y)>=480 for old_y,_ in selected):
+   selected.append((y,cid))
+  if len(selected)==2:break
+ return [cid for _,cid in sorted(selected)] or [h["id"] for h in report.get("headings",[])[:2]]
+
 def normalize(plan,report):
  if not isinstance(plan,dict):plan={}
  controls={x['id'] for x in report['controls']}
@@ -145,7 +166,7 @@ def normalize(plan,report):
  proposed_h=plan.get('heading_ids',[])
  if not isinstance(proposed_h,list):proposed_h=[]
  h=list(dict.fromkeys(x for x in proposed_h if isinstance(x,str) and x in headings))[:2]
- if not h:h=[x['id'] for x in report['headings'][:2]]
+ if not h:h=showcase_headings(report) if not chosen else [x['id'] for x in report['headings'][:2]]
  mode='interactive' if plan.get('mode')=='interactive' and chosen else 'showcase'
  return {'mode':mode,'action_ids':chosen,'heading_ids':h,
     'title':str(plan.get('title') or report.get('title') or 'Public website')[:95],

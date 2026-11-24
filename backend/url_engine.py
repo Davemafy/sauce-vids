@@ -33,7 +33,7 @@ Return exactly JSON:
  "heading_ids":["h0","h2"],
  "title":"accurate short title","reason":"short explanation"}.
 For interactive choose one highest-value safe action_id only; for showcase
-choose 1-2 meaningful heading IDs. Do not invent a click outcome.
+choose 1-2 meaningful heading IDs. What actually helps a curious viewer understand the product? Compare features and workflow sections; avoid logo walls, FAQ, pricing and signup pitches. Do not invent a click outcome.
 """
 
 def direction(report:dict,feedback:list[dict]|None=None):

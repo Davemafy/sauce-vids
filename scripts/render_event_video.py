@@ -59,7 +59,14 @@ parser.add_argument("--camera-profile",choices=["standard","screenstudio","actio
 parser.add_argument("--presentation",choices=["window","fullscreen"],default="window",
                     help="Window uses a licensed browser frame; fullscreen preserves raw product pixels without invented chrome")
 parser.add_argument("--stage-image",type=Path,help="Operator-supplied backdrop for the window presentation")
+parser.add_argument("--cloud-overview",action="store_true",
+                    help="Fixed Cloud Shadow stage for passive public showcases")
 args=parser.parse_args()
+if args.cloud_overview and (args.film_plan or args.stage_image or args.presentation!="window"
+        or args.glass_loupe or args.slider_framing or args.recorded_pointer
+        or args.anchored_result_cut or args.verified_workflow_editorial or args.guided_result
+        or args.result_focus or args.trim_real_idle_intro):
+    parser.error("Passive cloud overview cannot be mixed with event-driven edits")
 if args.film_plan:
     if any((args.anchored_result_cut,args.trim_real_idle_intro,args.verified_workflow_editorial,
             args.guided_result,args.slider_framing,args.result_focus,args.glass_loupe,
@@ -104,6 +111,9 @@ MANIFEST_PATH=(args.manifest or ROOT/"linear-interactions.json").resolve()
 if not SRC.is_file() or not MANIFEST_PATH.is_file():
     parser.error("Existing --video and --manifest inputs are required")
 MANIFEST=json.loads(MANIFEST_PATH.read_text())
+if args.cloud_overview and (MANIFEST.get("events") or MANIFEST.get("pointer_samples")
+                            or MANIFEST.get("edit_camera")):
+    parser.error("Passive cloud overview requires a recording with no interaction claims")
 probe=json.loads(subprocess.check_output([
     "ffprobe","-v","error","-select_streams","v:0",
     "-show_entries","stream=width,height,avg_frame_rate:format=duration",
@@ -467,6 +477,9 @@ def compose_window(source,t,static=False):
     return stage
 
 def apply(source,t,static=False,plate_frame=None):
+    if args.cloud_overview:
+        from cloud_shadow_stage import render_cloud_overview
+        return render_cloud_overview(source,(MASTER_W,MASTER_H))
     from recorded_pointer import pointer_role_at
     pointer_role = pointer_role_at(MANIFEST,t) if POINTER is not None else "arrow"
     if STUDIO_STAGE is not None:
@@ -596,7 +609,8 @@ def diagnostics():
        "max_translation_acceleration_px_per_frame_sq":
              round(float(np.max(np.abs(accel[:,[2,5]]),initial=0)),4),
        "max_zoom_per_frame":round(float(np.max(np.abs(vel[:,0]),initial=0)),8),
-       "frame_source":("unmodified browser recording" if args.presentation=="fullscreen" else "Shotcandy MIT browser-dark.svg"),
+       "frame_source":("unmodified browser recording" if args.presentation=="fullscreen" or args.cloud_overview else "Shotcandy MIT browser-dark.svg"),
+       "stagePreset":"cloud_shadow_v1" if args.cloud_overview else None,
        "camera_profile":("json-film-plan-v1" if FILM_PLAN is not None else
                          "verified-workflow-editorial" if WORKFLOW_SHOT else
                          "guided-result" if GUIDED_SHOT else args.camera_profile),

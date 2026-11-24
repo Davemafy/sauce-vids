@@ -146,3 +146,17 @@ def test_focused_source_fills_rounded_window_without_exterior_gaps(source):
     frame=render_studio_stage(stage,original,2.4)
     assert frame[(y0+y1)//2,x1-5].min()>5
     assert frame[y1-5,(x0+x1)//2].min()>5
+
+
+def test_passive_cloud_overview_preserves_source_and_stage():
+    from cloud_shadow_stage import render_cloud_overview
+    frame=np.full((360,640,3),(44,88,220),np.uint8)
+    frame[:,320:]=(190,91,33)
+    original=frame.copy()
+    result=render_cloud_overview(frame,(640,360))
+    x0,y0,x1,y1,_=window_geometry((640,360),(640,360))
+    assert result.shape==frame.shape
+    np.testing.assert_array_equal(frame,original)
+    np.testing.assert_array_equal(result[0,0],backdrop(640,360)[0,0])
+    np.testing.assert_array_equal(result[(y0+y1)//2,x0+40],frame[180,40])
+    np.testing.assert_array_equal(result[(y0+y1)//2,x1-40],frame[180,600])

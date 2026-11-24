@@ -9,9 +9,14 @@ No credentials, input values or sensitive URL query strings in the trace.
 from __future__ import annotations
 import argparse,hashlib,json,os,re,time
 from pathlib import Path
-from session_contract import SCHEMA,safe_url,validate_actions
-from brand_extractor import extract_brand_tokens
-from cinematic_spec import enforce_hidpi,DPR_CHOICES,DEFAULT_DPR
+if __package__:
+    from .session_contract import SCHEMA,safe_url,validate_actions
+    from .brand_extractor import extract_brand_tokens
+    from .cinematic_spec import enforce_hidpi,DPR_CHOICES,DEFAULT_DPR
+else:
+    from session_contract import SCHEMA,safe_url,validate_actions
+    from brand_extractor import extract_brand_tokens
+    from cinematic_spec import enforce_hidpi,DPR_CHOICES,DEFAULT_DPR
 from playwright.sync_api import sync_playwright
 
 # Presentation-only scrollbar suppression for captured mockup surfaces.

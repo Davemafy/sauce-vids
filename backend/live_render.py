@@ -189,6 +189,9 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
     '--video',str(prepared),'--manifest',str(manifest),'--output',str(composed),
     '--cursor-pack',compositor_cursor,
     '--camera-profile','action-first','--presentation','window']
+ cloud_overview=(mode=='showcase' and not events and not cursorless and not subjects)
+ if cloud_overview:
+  command+=['--cloud-overview']
  if loupe:
   command+=['--glass-loupe']
  elif cursorless:
@@ -200,7 +203,7 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
  metrics=json.loads((work/'camera-metrics.json').read_text())
  if loupe and not metrics['glass_loupe_shots']:
   raise RuntimeError('Recorded slider evidence could not produce a glass shot')
- if not cursorless or loupe:
+ if (not cursorless or loupe) and not cloud_overview:
   shutil.copyfile(work/'SHOTCANDY-LICENSE.txt',out/'SHOTCANDY-LICENSE.txt')
  composed.replace(master)
  verify_mp4(master,1920,1080,60)
@@ -236,7 +239,7 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
  build_web_player(Path(__file__).parents[1]/'docs/sauce-premium-player-template.html',
                    out,title,story,duration)
  result={
-  'render_mode':'continuous-browser-capture','presentation':'slider-framing' if cursorless and not loupe else 'floating-browser',
+  'render_mode':'continuous-browser-capture','presentation':'cloud-shadow-overview' if cloud_overview else 'slider-framing' if cursorless and not loupe else 'floating-browser',
   'verified_camera_shots':metrics['zoom_shots'],
   'subject_shot_count':len(subjects),
   'verified_glass_shots':metrics['glass_loupe_shots'],'source_url':safe_url(receipt['source_url']),
@@ -262,6 +265,16 @@ def _render(source_dir,out,title,story,mode,brief,audio,work,edit_plan,cursor_pa
   result['edit_plan']={'schema':edit_plan['schema'],
                        'checksum':hashlib.sha256(json.dumps(edit_plan,sort_keys=True).encode()).hexdigest(),
                        'resolved_camera':plan_camera}
+ if cloud_overview:
+  from scripts.quality_preview_supervisor import analyze
+  qa=analyze(master,evidence={
+    "source_path":str(src),"source_sha256":receipt["sha256"],
+    "event_manifest_path":str(source_dir/'continuous-capture.json'),
+    "event_manifest_sha256":file_digest(source_dir/'continuous-capture.json')})
+  (out/'encoded-quality.json').write_text(json.dumps(qa,indent=2))
+  result["encoded_quality_verdict"]=qa["verdict"]
+  result["encoded_quality_findings"]=[f["code"] for f in qa["findings"]]
+  result["creative_approved"]=False
  (out/'release.json').write_text(json.dumps(result,indent=2))
  return result
 
