@@ -33,7 +33,7 @@ vec2 bend(vec2 p){
   return q;
 }
 vec3 panel(vec2 p){
-  if(polished==2) {
+  if(polished>=2) {
     p/= .965;
     if(any(greaterThan(abs(p),vec2(1.))))return vec3(.0025);
   }
@@ -45,7 +45,7 @@ void main(){
   vec2 world=(uv-.5)*2.*aspect;
   vec2 q=bend(world/halfSize);
   vec2 phys=q*halfSize;
-  float radius=polished==2?.085:.112;
+  float radius=polished>=2?.085:.112;
   float d=box(phys,halfSize,radius);
   float a=1.-smoothstep(-.001,.001,d);
   vec3 bg=blackStage==1?vec3(.001):lin(texture(skyTex,vec2(uv.x,1.-uv.y)).rgb);
@@ -59,7 +59,7 @@ void main(){
   // z(q) is a convex glass sag plus rolled shoulder. Its slope
   // defines the normal used by the dielectric ray calculation.
   vec2 slope=sag>0.?3.0*sag*q/halfSize:.21*q;
-  if(polished==2){
+  if(polished>=2){
     shoulder=exp(min(d,0.)/.062);
     slope*=.45;
   }
@@ -68,7 +68,7 @@ void main(){
   float F=.04+.96*pow(1.-max(dot(n,V),0.),5.);
   // Snell refraction through a thin clear cover at three refractive indices.
   vec3 rr=refract(-V,n,1./1.505),rg=refract(-V,n,1./1.515),rb=refract(-V,n,1./1.532);
-  float opticalDepth=polished==2?.010*shoulder:.022;
+  float opticalDepth=polished>=2?.010*shoulder:.022;
   vec2 dr=rr.xy/max(-rr.z,.1)*opticalDepth/halfSize;
   vec2 dg=rg.xy/max(-rg.z,.1)*opticalDepth/halfSize;
   vec2 db=rb.xy/max(-rb.z,.1)*opticalDepth/halfSize;
@@ -106,7 +106,7 @@ void main(){
     light=transmitted*(1.-min(F*.38,.24))*(1.-bottom*.15)
        +sheen+halo*.25+vec3(.92,.96,1.)*edge*.12;
   }
-  if(polished==2){
+  if(polished>=2){
     vec2 r=reflected.xy;
     // Two area-light reflections, localized to the rolled optical shoulder.
     float roll=exp(min(d,0.)/.040);
@@ -123,6 +123,34 @@ void main(){
     float shoulderLight=crest*directional*.075;
     vec3 optical=vec3(.88,.94,1.)*(upper+side+grazing*.09+shoulderLight);
     light=transmitted*(1.-min(F*.22,.12))*(1.-depth*.10)+optical;
+  }
+  if(polished==3){
+    // Retain the identical source lookup, silhouette, sag and pointer map.
+    // Clear dielectric shoulder: Fresnel reflection plus energy entering
+    // through the narrow uncovered perimeter, not a tint on the UI.
+    float cosI=max(dot(n,V),0.);
+    float f0=pow((1.515-1.)/(1.515+1.),2.);
+    float fresnel=f0+(1.-f0)*pow(1.-cosI,5.);
+    vec2 ray=reflected.xy;
+    float outer=exp(min(d,0.)/.055);
+    float topPanel=exp(-pow((ray.x+.20)/.56,8.)-pow((ray.y-.82)/.11,4.));
+    float sidePanel=exp(-pow((ray.x-.85)/.095,4.)-pow((ray.y+.04)/.54,8.));
+    float leftPanel=exp(-pow((ray.x+.86)/.11,4.)-pow((ray.y-.23)/.44,8.));
+    // Environment energy only enters where the display does not occlude
+    // the glass. Sample a diffuse blue illumination, not cloud imagery.
+    float gap=smoothstep(.963,.972,max(abs(q.x+dg.x),abs(q.y+dg.y)));
+    vec3 environment=blackStage==1?vec3(.022,.025,.031):vec3(.055,.20,.66);
+    float internal=exp(-pow((d+.012)/.012,2.))*(.35+.65*max(n2.y,0.));
+    vec3 throughGlass=environment*(.36+.38*internal);
+    vec3 display=mix(transmitted,throughGlass,gap);
+    // Finite studio lights illuminate the curved face before the
+    // grazing silhouette; a small normal-facing component keeps
+    // the reflection visible on dark source without a uniform wash.
+    float specEnergy=(topPanel*1.25+sidePanel*1.05+leftPanel*.68)
+                     *(fresnel+.12)*outer;
+    // Clear center, very low absorption; no broad grey shoulder wash.
+    light=display*(1.-fresnel*.11)+vec3(.96,.98,1.)*specEnergy
+          +environment*internal*fresnel*.18;
   }
   vec3 result=mix(bg,light,a);
   // Spectral meniscus and broad optical bloom cross the silhouette,
@@ -161,21 +189,21 @@ if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw Err
 gl.bindFramebuffer(gl.FRAMEBUFFER,null);
 function tex(img,i,name){gl.activeTexture(gl.TEXTURE0+i);let t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,img);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.generateMipmap(gl.TEXTURE_2D);gl.uniform1i(gl.getUniformLocation(prog,name),i);}
 async function img(s){let i=new Image();i.src=s;await i.decode();return i}
-window.study=async (source,sky,black,bulge=0,polished=false)=>{gl.useProgram(prog);const s=await img(source);tex(s,0,'displayTex');tex(await img(sky),1,'skyTex');let h=polished===2?.84:bulge>0?.79:.86;gl.uniform1f(gl.getUniformLocation(prog,'sag'),bulge);gl.uniform1i(gl.getUniformLocation(prog,'polished'),Number(polished));gl.uniform2f(gl.getUniformLocation(prog,'halfSize'),h*s.width/s.height,h);gl.uniform1i(gl.getUniformLocation(prog,'blackStage'),black?1:0);gl.viewport(0,0,1920,1080);gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.useProgram(postProg);gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,hdr);gl.uniform1i(gl.getUniformLocation(postProg,"hdr"),2);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.finish();if(gl.getError()!==gl.NO_ERROR)throw Error('GL draw failed');return document.querySelector('canvas').toDataURL('image/png')};
+window.study=async (source,sky,black,bulge=0,polished=false)=>{gl.useProgram(prog);const s=await img(source);tex(s,0,'displayTex');tex(await img(sky),1,'skyTex');let h=polished>=2?.84:bulge>0?.79:.86;gl.uniform1f(gl.getUniformLocation(prog,'sag'),bulge);gl.uniform1i(gl.getUniformLocation(prog,'polished'),Number(polished));gl.uniform2f(gl.getUniformLocation(prog,'halfSize'),h*s.width/s.height,h);gl.uniform1i(gl.getUniformLocation(prog,'blackStage'),black?1:0);gl.viewport(0,0,1920,1080);gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.useProgram(postProg);gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,hdr);gl.uniform1i(gl.getUniformLocation(postProg,"hdr"),2);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.finish();if(gl.getError()!==gl.NO_ERROR)throw Error('GL draw failed');return document.querySelector('canvas').toDataURL('image/png')};
 // Numerically invert the SAME green-channel texture map as the shader.
 window.projectSource=(point,sw,sh,sag,polished=0)=>{
   if(!(sag>0 && sag<=.30))throw Error('Unsupported convex sag');
-  const h=polished===2?.84:.79,b=[h*sw/sh,h],r=polished===2?.085:.112;
+  const h=polished>=2?.84:.79,b=[h*sw/sh,h],r=polished>=2?.085:.112;
   const box=p=>{let x=Math.abs(p[0])-b[0]+r,y=Math.abs(p[1])-b[1]+r;return Math.hypot(Math.max(x,0),Math.max(y,0))+Math.min(Math.max(x,y),0)-r;};
-  const target=[2*point[0]/sw-1,1-2*point[1]/sh].map(x=>x*(polished===2?.965:1));
+  const target=[2*point[0]/sw-1,1-2*point[1]/sh].map(x=>x*(polished>=2?.965:1));
   function sample(q){
     let p=q.map((x,i)=>x*b[i]),d=box(p),g=[box([p[0]+.001,p[1]])-box([p[0]-.001,p[1]]),box([p[0],p[1]+.001])-box([p[0],p[1]-.001])].map(x=>x+1e-7);
-    let l=Math.hypot(...g),shoulder=Math.exp(Math.min(d,0)/(polished===2?.062:.045));
-    let n=q.map((x,i)=>3*sag*x/b[i]*(polished===2?.45:1)+g[i]/l*shoulder*3.1).concat(1);
+    let l=Math.hypot(...g),shoulder=Math.exp(Math.min(d,0)/(polished>=2?.062:.045));
+    let n=q.map((x,i)=>3*sag*x/b[i]*(polished>=2?.45:1)+g[i]/l*shoulder*3.1).concat(1);
     l=Math.hypot(...n);n=n.map(x=>x/l);
     let eta=1/1.515,dot=-n[2],k=Math.sqrt(1-eta*eta*(1-dot*dot));
     let ray=n.map((x,i)=>eta*(i===2?-1:0)-(eta*dot+k)*x);
-    return q.map((x,i)=>x+ray[i]/Math.max(-ray[2],.1)*(polished===2?.010*shoulder:.022)/b[i]);
+    return q.map((x,i)=>x+ray[i]/Math.max(-ray[2],.1)*(polished>=2?.010*shoulder:.022)/b[i]);
   }
   let q=target.slice();
   for(let i=0;i<20;i++){
