@@ -90,6 +90,27 @@ class Phase2NativeDirectorTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     source_event_director.direction(video,manifest)
 
+    def test_longer_film_requires_multiple_verified_outcomes(self):
+        import source_event_director
+        with tempfile.TemporaryDirectory() as td:
+            video,manifest=self.setup_temp(td)
+            record=json.loads(manifest.read_text())
+            first=record["events"][0]
+            record["duration"]=30.
+            record["events"]=[dict(first,start=t,end=t+.1,t=t+1.) for t in (2.,8.,15.,22.)]
+            packet={"actualCapture":{"durationSeconds":30.,"nativeFps":60,
+                     "resolution":[2880,1800],
+                     "pointerProvenance":{"recordedPointerTrackAvailable":True}}}
+            with patch("film_director_capabilities.build_contract",return_value=packet):
+                manifest.write_text(json.dumps(record))
+                plan=source_event_director.direction(video,manifest)
+                self.assertEqual(plan["durationSeconds"],30.)
+                self.assertEqual(plan["audio"]["eventIndices"],[0,1,2,3])
+                for n in (1,2):
+                    manifest.write_text(json.dumps(dict(record,events=record["events"][:n])))
+                    with self.assertRaises(ValueError):
+                        source_event_director.direction(video,manifest)
+
     def test_no_fake_compact_camera_for_whole_viewport_change(self):
         with tempfile.TemporaryDirectory() as td:
             video,manifest=self.setup_temp(td)

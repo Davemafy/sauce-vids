@@ -277,12 +277,26 @@ def test_redundant_default_center_and_default_quintic_only_are_mechanical(source
     assert unchanged["studioStage"]["camera"][1]["easing"]=="linear"
 
 
-def test_encoded_video_reject_feedback_preserves_original_film_and_retries(source_pair,tmp_path,monkeypatch):
+@pytest.mark.parametrize("duration",[2.,30.])
+def test_encoded_video_reject_feedback_preserves_original_film_and_retries(source_pair,tmp_path,monkeypatch,duration):
     """Real rejection is retained and supplied to the next director attempt."""
     import auto_direct_studio_film as director
     import quality_preview_supervisor as supervisor
     src,manifest=source_pair
+    if duration==30.:
+        writer=cv2.VideoWriter(str(src),cv2.VideoWriter_fourcc(*"mp4v"),25,(320,180))
+        assert writer.isOpened()
+        for i in range(750):
+            frame=np.full((180,320,3),205,np.uint8)
+            if i>25:frame[20:160,120:300]=(30,40,240)
+            writer.write(frame)
+        writer.release()
+        data=json.loads(manifest.read_text())
+        data["duration"]=duration
+        manifest.write_text(json.dumps(data))
     plan=valid_plan(src,manifest)
+    plan["durationSeconds"]=duration
+    plan["camera"][-1]["at"]=duration
     attempts=[]
     feedbacks=[]
     def model(s,packet,model,key,feedback):
@@ -301,6 +315,7 @@ def test_encoded_video_reject_feedback_preserves_original_film_and_retries(sourc
         from subprocess import CompletedProcess
         return CompletedProcess(cmd,0,stdout="verified film")
     def qa(path,*,evidence,seconds):
+        assert seconds==duration
         if len(attempts)==1:
             return {"verdict":"REJECT","findings":[
                 {"code":"WASHED_OUT_FRAMES","detail":{"fraction":.8}}]}

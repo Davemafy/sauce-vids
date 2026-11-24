@@ -314,7 +314,7 @@ def run_unattended(source,manifest,brief,out,*,model,key,max_attempts=MAX_ATTEMP
                           "event_manifest_path":str(manifest),
                           "event_manifest_sha256":sha(manifest)}
                 quality=analyze(film,evidence=evidence,
-                                seconds=min(15.,packet["actualCapture"]["durationSeconds"]))
+                                seconds=packet["actualCapture"]["durationSeconds"])
                 (out/"encoded-visual-qa.json").write_text(json.dumps(quality,indent=2)+"\n")
                 record["encodedVisualVerdict"]=quality["verdict"]
                 record["encodedVisualFindings"]=[finding["code"]
