@@ -114,3 +114,28 @@ def test_pre_film_failures_are_structured_and_never_export_raw_reasons(tmp_path)
     assert "secret bearer token" not in safe
     assert "PRIVATE_UNTRUSTED_PROMPT" not in safe
     assert all(c["premium_reference_eligible"] is False for c in result["cases"])
+
+
+def test_research_sibling_report_and_duplicate_best_evidence(tmp_path):
+    root,sha,b=sample(tmp_path)
+    other=root/"a-first"/"experiment";other.mkdir(parents=True)
+    (other/b.name).write_bytes(b.read_bytes())
+    # Existing report can live next to a flat research master instead of export.
+    b.parent.joinpath("encoded-quality.json").rename(other/"encoded-quality.json")
+    corpus,_=build({"research":root},[])
+    row=corpus["cases"][0]
+    assert row["quality"]["machine_verdict"]=="REJECT"
+    assert row["evidence"]["release_film_binding"]=="sha_match"
+    assert row["media"]["observed_action_count_from_release"]==3
+
+
+def test_conflicting_hash_bound_reports_remain_unlabeled(tmp_path):
+    root,sha,b=sample(tmp_path)
+    other=root/"other";other.mkdir()
+    (other/"encoded-quality.json").write_text(json.dumps({
+        "film_sha256":sha,"verdict":"PASS","findings":[]}))
+    corpus,_=build({"research":root},[])
+    row=corpus["cases"][0]
+    assert row["quality"]["machine_verdict"] is None
+    assert row["evidence"]["qa_binding"]=="conflicting_reports"
+    assert row["quality"]["premium_reference_eligible"] is False
