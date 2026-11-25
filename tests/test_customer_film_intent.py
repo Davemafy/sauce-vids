@@ -32,9 +32,9 @@ class StopBeforeRecord(Exception):
 
 
 class CustomerFilmIntentTests(unittest.TestCase):
-    def test_default_customer_demo_denies_unsupported_showcase_before_capture(self):
+    def test_explicit_legacy_15s_demo_denies_unsupported_showcase_before_capture(self):
         with TemporaryDirectory(prefix="sauce-customer-demo-") as tmp:
-            with (patch.dict(os.environ,{"SAUCE_CINEMATIC_ONLY":"0"}),
+            with (patch.dict(os.environ,{"SAUCE_CINEMATIC_ONLY":"0","SAUCE_CUSTOMER_STORY_SECONDS":"15"}),
                   patch("backend.url_engine.validate_public_url"),
                   patch("backend.url_engine.inspect",return_value=REPORT),
                   patch("backend.url_engine.direction",
