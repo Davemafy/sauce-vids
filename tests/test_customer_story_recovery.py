@@ -11,8 +11,13 @@ def response(ids):
     return json.dumps({"ids":ids,"story":"Observed product transformation","hero_action_id":ids[0] if ids else None})
 
 def test_replan_keeps_safety_and_editorial_call_budget(tmp_path,monkeypatch):
-    conv=Mock();conv.calls=2
-    conv.ask.side_effect=[response(["a0","a2","a3","a4"]),'{"accept":true}']
+    monkeypatch.delenv("SAUCE_CUSTOMER_EDITORIAL_DIRECTION",raising=False)
+    conv=Mock();conv.calls=2;conv.provider_name="Gemini";conv.data={"model":"gemini-3.1-flash-lite"}
+    ids=["a0","a2","a3","a4"]
+    editorial={"backdrop":"muted","duration_seconds":26,
+               "beats":[{"action_id":i,"framing":"detail" if i=="a0" else "wide",
+                         "pace":"readable","purpose":"Show observed transformation "+i} for i in ids]}
+    conv.ask.side_effect=[response(ids),json.dumps({"accept":True,"reason":"Connected evidence",**editorial})]
     seen=[]
     def probe(plan,out):
         ids=[a["id"] for a in plan["actions"]];seen.append(ids)
@@ -29,6 +34,8 @@ def test_replan_keeps_safety_and_editorial_call_budget(tmp_path,monkeypatch):
     assert [c.kwargs["phase"] for c in conv.ask.call_args_list]==["story-replan","story-editorial"]
     assert json.loads((tmp_path/"direction.json").read_text())==result[0]
     assert (tmp_path/"attempt-1/direction.json").is_file()
+    assert result[0]["editorial"]==editorial
+    assert conv.ask.call_args_list[1].kwargs["response_schema"]["properties"]["beats"]["items"]["properties"]["action_id"]["enum"]==ids
 
 @pytest.mark.parametrize("reason",["Authentication barrier","Sensitive menu","Unsettled starting state"])
 def test_nonvisual_failure_never_replans(tmp_path,monkeypatch,reason):
