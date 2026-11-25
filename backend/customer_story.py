@@ -70,6 +70,10 @@ def director_brief(brief="", *, provider="gemini"):
 
 class StoryRejected(ValueError):pass
 
+class LocalRadioOutcomeUnverified(StoryRejected):
+    """A guarded local menu was dismissed, but the new value lacks DOM proof."""
+
+
 class WeakVisualOutcome(StoryRejected):
     """A safe action completed, but stable actual pixels showed insufficient payoff."""
     def __init__(self,delta,after):
@@ -502,8 +506,8 @@ def apply(page,url,action,picker,click):
         click(hits[0],label);dismiss_picker(page,scope)
         assert_local(page,url)
         rows=[h for k,h in menu_triggers(page) if k==group]
-        require(len(rows)==1 and label in [x.strip() for x in rows[0].inner_text().splitlines()[1:]],
-                "Applied radio value not observed")
+        if len(rows)!=1 or label not in [x.strip() for x in rows[0].inner_text().splitlines()[1:]]:
+            raise LocalRadioOutcomeUnverified("Applied radio value not observed")
         return picker
     if action["kind"]=="option" and analytic_name(picker):
         require(analytic_option(picker,label),"Unrecognized analytical preset")
@@ -625,8 +629,19 @@ def compare_outcomes(catalog,metadata,opening,out,conv,creative):
             before=shot(p);p.wait_for_timeout(350);steady=shot(p)
             require(image_change(arr(before),arr(steady))<=.025,"Unsettled starting state")
             old=action_panel(p,action)
-            apply(p,metadata["url"],action,metadata["picker"],lambda loc,label:loc.click(timeout=3500))
             (d/"before.png").write_bytes(steady)
+            try:
+                apply(p,metadata["url"],action,metadata["picker"],lambda loc,label:loc.click(timeout=3500))
+            except LocalRadioOutcomeUnverified:
+                # This individual hypothesis has no admissible result. Its
+                # disposable browser is closed; the next probe starts fresh.
+                # Auth, navigation, ambiguous targets and click failures still
+                # propagate. Connected replay and capture still fail closed.
+                assert_local(p,metadata["url"])
+                records.append({"id":action["id"],"status":"unverified",
+                                "reason":"Applied radio value not observed"})
+                save(trial/"comparison.json",records)
+                continue
             localized={}
             try:
                 after,box,delta,_=verify(p,metadata["url"],steady,old,shot,allow_localized=action["kind"]=="option",proof_metrics=localized)
