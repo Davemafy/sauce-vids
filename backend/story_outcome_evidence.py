@@ -43,10 +43,11 @@ def diverse_candidates(catalog,limit=8):
     return diverse_candidates_round_robin(dict(enumerate(orders)),limit)
 
 def balance_hypotheses(catalog,requested,limit=8):
-    """Retain model preferences within groups; allocate broad probe coverage.
+    """Keep genuinely diverse model hypotheses; add coverage within the cap.
 
-    The compiler chooses a representative experiment, never the final story.
-    A large single picker remains unrestricted when no other groups exist.
+    Only override a concentrated proposal when the catalog supports broader
+    exploration. Catalog order must not silently evict a diverse proposal.
+    All candidates still require independently witnessed outcomes.
     """
     def group(a):return a.get("group") or a["kind"]
     groups={}
@@ -54,6 +55,21 @@ def balance_hypotheses(catalog,requested,limit=8):
     if len(groups)<2:return requested[:limit]
     preferred={}
     for a in requested:preferred.setdefault(group(a),[]).append(a)
+    if len(preferred)>=min(3,len(groups),limit):
+        result=list(requested[:limit])
+        if len(result)>=limit:return result
+        seen={a["id"] for a in result}
+        represented={group(a) for a in result}
+        # Spend spare capacity on independent capabilities, not catalog-first
+        # substitutions that remove the director's selected transformations.
+        extra=diverse_candidates([a for a in catalog if group(a) not in represented],
+                                 limit-len(result))
+        result.extend(extra)
+        seen.update(a["id"] for a in extra)
+        if len(result)<limit:
+            result.extend(diverse_candidates([a for a in catalog if a["id"] not in seen],
+                                             limit-len(result)))
+        return result
     for k,rows in groups.items():
         # Keep model preferences first, then alternatives spread through list.
         seen={r["id"] for r in preferred.get(k,[])}
