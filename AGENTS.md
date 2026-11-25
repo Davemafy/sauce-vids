@@ -11,6 +11,16 @@ For a **new chat or recovered worker**, use `docs/SAUCE_NEW_CHAT.md` as the shor
 4. Compare working-tree status with `origin/main`; preserve unrelated local changes and private artifacts. **Main only**; do not create branches by default.
 5. Identify the actual output pipeline. Changing the web player does NOT change pixels in the MP4. Never substitute preview CSS for composition work.
 
+## Mandatory integrated delivery loop (owner decision, 2026-11-25)
+
+One engine, one customer pipeline, main only. Before submitting any customer-quality trial, verify the actual running Vultr service's build/commit identity, effective director and feature configuration against the intended current main. A current Git checkout alone is not deployment proof.
+
+- Reconcile outstanding worker changes against main, preserve existing work, and run relevant tests. Integrate accepted changes into the real customer entry point.
+- Deploy the integrated revision to the existing authorized private customer service using a reversible rollout, preserving active jobs, credentials, private artifacts and the last known working release. Verify process restart, loaded version, health and actual API smoke test. If deployment is blocked or unsafe, report it explicitly and stop counting old-service jobs as current-engine evidence. Do not expand public access or remove owner approval gates.
+- Submit fresh ICP URLs through that exact verified customer API. No hand-authored plans, manually selected actions or recycled captures as customer acceptance evidence. Diagnostics may isolate defects but must be labelled and never count as customer success.
+- Inspect the actual encoded films against premium references, distinguish model decisions from engine defects, repair the shared engine, integrate and repeat. Record commit, deployed build identity, director/configuration, job IDs, exact review artifacts and honest quality verdict in the living handoff.
+- Passing tests, merging code, or producing a marketing showcase does not establish premium film quality. Preserve Claude-first owner direction and existing safety, source-truth and private release gates.
+
 ## Commercial engineering objective (owner decision, 2026-11-17)
 
 **Optimize for a credible first paying customer within seven days of a quality-approved launch, while remaining viable for six months with no revenue.** This is a target, not a forecast or a reason to expose unapproved films.
