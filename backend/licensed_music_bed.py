@@ -88,7 +88,7 @@ def licensed_music_from_env():
                          vals[2],entry["source"])
 
 
-def add_music_to_master(master:Path, track:LicensedMusic, duration:float):
+def add_music_to_master(master:Path, track:LicensedMusic, duration:float, *, preserve_foley=False):
     """Mix a quiet, originally licensed track; preserve *exact* H264 picture.
 
     Silent soundbeds to cheat QA are not allowed. Source audio is actual CC0
@@ -103,10 +103,17 @@ def add_music_to_master(master:Path, track:LicensedMusic, duration:float):
         raise ValueError("Refusing to overwrite an existing music remix")
     ending=max(.3,float(duration)-.45)
     fade=f"volume=0.19,afade=t=in:st=0:d=0.22,afade=t=out:st={ending:.3f}:d=0.43,aresample=48000"
+    filters=f"[1:a:0]{fade}[music]"
+    output="[music]"
+    if preserve_foley:
+        # Keep the original event clock. No replacement of verified cues;
+        # limiter latency compensation keeps the mix aligned to the picture.
+        filters+=";[0:a:0]aresample=48000[fx];[fx][music]amix=inputs=2:duration=first:normalize=0,alimiter=limit=.9:level=0:latency=1[mix]"
+        output="[mix]"
     argv=["ffmpeg","-hide_banner","-loglevel","error","-xerror","-nostdin",
           "-i",str(master),"-i",str(track.path),"-filter_complex",
-          f"[1:a:0]{fade}[music]",
-          "-map","0:v:0","-map","[music]",
+          filters,
+          "-map","0:v:0","-map",output,
           "-c:v","copy","-c:a","aac","-ar","48000","-ac","2",
           "-b:a","128k","-t",str(round(duration,5)),
           "-movflags","+faststart",str(temp)]

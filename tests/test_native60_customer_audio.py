@@ -161,6 +161,32 @@ class LicenseAndMusicTests(unittest.TestCase):
         self.assertEqual(res['streams'][1]['codec_name'],'aac')
         self.assertEqual(res['streams'][1]['sample_rate'],'48000')
 
+    def test_pinned_music_can_preserve_existing_foley(self):
+        master=Path(self.tmp.name)/'source-with-foley.mp4'
+        subprocess.run(['ffmpeg','-v','error','-y','-f','lavfi','-i',
+          'color=c=blue:s=320x180:r=60:d=3','-f','lavfi','-i',
+          'sine=f=1100:r=48000:d=3','-t','3','-c:v','libx264','-c:a','aac',
+          '-pix_fmt','yuv420p',str(master)],check=True,timeout=25)
+        subprocess.run(['ffmpeg','-v','error','-y','-f','lavfi','-i',
+          'sine=f=330:r=48000:d=4','-ac','2','-c:a','libmp3lame',
+          str(self.audio)],check=True,timeout=25)
+        track=LicensedMusic(self.audio,'tent','Tent','Play House',
+            'https://freemusicarchive.org/music/play-house/songs-1/tent-1/',
+            'CC0-1.0',sha(self.audio.read_bytes()),sha(self.proof.read_bytes()),
+            'https://freemusicarchive.org/music/play-house/songs-1/tent-1/')
+        def picture():
+            return subprocess.check_output(['ffmpeg','-v','error','-i',str(master),
+              '-map','0:v','-c','copy','-f','md5','-'],timeout=20)
+        before=picture()
+        add_music_to_master(master,track,3,preserve_foley=True)
+        self.assertEqual(before,picture())
+        pcm=np.frombuffer(subprocess.check_output(['ffmpeg','-v','error','-ss','1',
+          '-i',str(master),'-t','1','-vn','-ac','1','-ar','48000','-f','f32le','-'],
+          timeout=20),dtype='<f4')[:48000]
+        spec=np.abs(np.fft.rfft(pcm))
+        self.assertGreater(spec[1100],500)  # original 1100Hz event-audio stand-in
+        self.assertGreater(spec[330],100)   # independently licensed music stand-in
+
 
 if __name__=='__main__':
     unittest.main()

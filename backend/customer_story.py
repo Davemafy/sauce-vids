@@ -412,6 +412,8 @@ def capture(url,plan,proofs,out):
             loc.scroll_into_view_if_needed(timeout=3000);p.wait_for_timeout(100);r=loc.bounding_box()
             require(r and 0<=r["x"]<r["x"]+r["width"]<=W and 0<=r["y"]<r["y"]+r["height"]<=H,
                     "Target clipped before click")
+            # Preserve the real stationary interval before a new approach.
+            move(*pos)
             sx,sy=pos;tx=r["x"]+r["width"]/2;ty=r["y"]+r["height"]/2;start=time.monotonic()
             for i in range(1,13):
                 q=i/12;q=q*q*(3-2*q)
@@ -470,17 +472,34 @@ def render(folder,source,manifest,plan,calls,progress,audio):
                            cwd=ROOT,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=timeout)
     progress("rendering")
     run("source_event_director.py","--source",source,"--manifest",manifest,"--out",filmplan)
-    common=("--video",source,"--manifest",manifest,"--film-plan",filmplan)
+    common=("--video",source,"--manifest",manifest,"--film-plan",filmplan,"--customer-craft-contract")
     run("render_event_video.py",*common,"--validate-only")
     run("render_event_video.py",*common,"--output",master)
-    # No unsupported narration or unlicensed automatic audio.
-    from backend.licensed_music_bed import licensed_music_from_env,add_music_to_master
-    track=licensed_music_from_env() if audio=="auto" else None
-    if track:add_music_to_master(master,track,SECONDS)
+    # Optional owner-provisioned CC0 catalog, using the existing verified
+    # picture-locked mixer (preserves real event Foley, unlike music replacement).
+    music_root=os.getenv("SAUCE_CUSTOMER_MUSIC_ROOT") if audio=="auto" else None
+    if music_root:
+        mixes=private/"music"
+        run("soundtrack_catalog.py","--root",music_root,"--film",master,
+            "--foley",export/"source-verified-event-foley.wav","--receipt",export/"source-verified-foley-receipt.json",
+            "--role","transformation","--out",mixes,"--foley-gain",.7,timeout=120)
+        chosen=json.loads((mixes/"catalog.json").read_text())["selection"]["chosen"]
+        # The existing catalog already verifies compressed picture identity.
+        import shutil
+        shutil.copyfile(mixes/(chosen+".mp4"),master)
+    else:
+        from backend.licensed_music_bed import licensed_music_from_env,add_music_to_master
+        track=licensed_music_from_env() if audio=="auto" else None
+        chosen=track.id if track else None
+        if track:add_music_to_master(master,track,SECONDS,preserve_foley=True)
     from scripts.quality_preview_supervisor import analyze
     q=analyze(master,{"source_path":str(source),"source_sha256":sha(source),
           "event_manifest_path":str(manifest),"event_manifest_sha256":sha(manifest)},seconds=SECONDS)
+    from scripts.customer_craft_contract import split_findings
+    q["responsibility"]=split_findings(q)
     save(export/"encoded-quality.json",q)
+    if q["responsibility"]["technical"]:
+        raise RuntimeError("Customer craft rejected encoded technical defects: "+",".join(q["responsibility"]["technical"]))
     subprocess.run(["ffmpeg","-v","error","-xerror","-i",str(master),"-f","null","-"],check=True,timeout=100)
     subprocess.run(["ffmpeg","-v","error","-i",str(master),"-vf","scale=1280:720:flags=lanczos,fps=30",
         "-c:v","libx264","-preset","fast","-crf","18","-c:a","aac","-movflags","+faststart",str(export/"preview.mp4")],check=True,timeout=120)
@@ -488,7 +507,9 @@ def render(folder,source,manifest,plan,calls,progress,audio):
         "film_mode":"interactive","observed_actions":len(plan["actions"]),"recorded_source_fps":"60/1","master_fps":60,
         "render_mode":"native-source-event-story","encoded_quality_verdict":q["verdict"],
         "encoded_quality_findings":[x["code"] for x in q["findings"]],"creative_approved":False,
-        "source_duration_seconds":SECONDS,"film_sha256":sha(master),"plan_sha256":sha(filmplan)}
+        "source_duration_seconds":SECONDS,"film_sha256":sha(master),"plan_sha256":sha(filmplan),
+        "craft_contract":json.loads((export/"camera-metrics.json").read_text())["customerCraft"],
+        "soundtrack":chosen,"encoded_quality_responsibility":q["responsibility"]}
     save(export/"release.json",release)
     from backend.url_engine import customer_quality_summary
     progress("needs_review")

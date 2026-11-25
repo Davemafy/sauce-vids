@@ -62,6 +62,7 @@ parser.add_argument("--presentation",choices=["window","fullscreen"],default="wi
 parser.add_argument("--stage-image",type=Path,help="Operator-supplied backdrop for the window presentation")
 parser.add_argument("--cloud-overview",action="store_true",
                     help="Fixed Cloud Shadow stage for passive public showcases")
+parser.add_argument("--customer-craft-contract",action="store_true",help="Require full native source, all-event visibility and bounded Foley for customer stories")
 parser.add_argument("--customer-cloud-stage",action="store_true",
                     help="Opt-in cobalt full-glass stage for a verified real customer interaction")
 parser.add_argument("--physical-cover-bake",type=Path,help="Opt-in calibrated Cycles cover material study")
@@ -768,6 +769,12 @@ def diagnostics():
                 raise ValueError("Studio camera hides the real recorded cursor at the verified action")
         if max60>45:
             raise ValueError("Studio camera is too abrupt; revise JSON camera keys")
+    if args.customer_craft_contract:
+        if (STUDIO_STAGE is None or FILM_PLAN_DATA is None or args.preview is not None
+                or args.physical_cover_bake or MOTION_GLASS is not None):
+            raise ValueError("Customer craft contract requires an unmodified whole-window film plan")
+        from customer_craft_contract import verify_plan
+        metrics["customerCraft"]=verify_plan(FILM_PLAN_DATA,MANIFEST,STUDIO_STAGE,POINTER,FPS,frames,TRIM_FRAMES)
     if CUSTOMER_CLOUD_MOMENT is not None:
         # The standard 2D Shotcandy camera is deliberately BYPASSED for the
         # customer full-glass stage. Report the *actual* verified physical

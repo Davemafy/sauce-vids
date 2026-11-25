@@ -96,6 +96,9 @@ def direction(video:Path,manifest:Path):
        }
     }
     if long_story:
+        # Audible, restrained defaults for the long customer edit. Source
+        # event times are unchanged; a quiet soundtrack is mixed separately.
+        plan["audio"].update(clickGain=.44,motionGain=.22,masterGain=.78)
         # Preserve product context across a continuous long workflow. A
         # large result in one panel is not permission to crop the editor.
         def whole(at,view,start=None):
