@@ -19,7 +19,7 @@ from backend.curious_sequence import (discover,exact,open_picker,dismiss_picker,
 from backend.curious_showcase import Conversation,MAX_CALLS
 from backend.curious_interactive import parse
 from backend.product_explorer import CHROME
-from backend.story_discovery import route_robots_allowed,focused_route_allowed
+from backend.story_discovery import route_robots_allowed,focused_route_allowed,focused_routes
 from backend.source_action_preflight import image_change,visible_authentication_barrier,same_local_tab_route
 from backend.native60_capture import FULL_CHROME,verify_live_terminal_frames
 from scripts.capture_safety import validate_public_url,guard_route
@@ -185,7 +185,7 @@ def scan_radio_menus(page,url):
     return balanced_menu_catalog(groups)
 
 @contextmanager
-def browser(url,*,display=None):
+def browser(url,*,display=None,include_robots=False):
     validate_public_url(url)
     with sync_playwright() as pw:
         b=pw.chromium.launch(headless=display is None,
@@ -231,9 +231,63 @@ def browser(url,*,display=None):
                 require(p.evaluate("()=>[innerWidth,innerHeight,devicePixelRatio]")==[W,H,D],"Wrong native viewport")
             require(not visible_authentication_barrier(p),"Authentication barrier")
             clear_welcome(p,actual)
-            yield p
+            yield (p,robots) if include_robots else p
         finally:
             c.close();b.close()
+
+def observed_product_entry_links(page,origin,robots,*,limit=8):
+    """Rank ONLY actually visible homepage anchors, never guessed destinations.
+
+    Scan anchors independently of the bounded clickable-button inventory, as
+    the latter omitted even the genuine 'Try It Now' links on tweakcn's home.
+    The candidate cannot be a redirect, cross-origin route, query, fragment,
+    auth route, download or robots-denied document.
+    """
+    rows=[]
+    for loc in page.locator('a[href]').all()[:100]:
+        if not loc.is_visible():continue
+        if not loc.evaluate("e=>!e.closest('form,[data-private],[data-secret],[data-sensitive]')&& !e.hasAttribute('download')"):continue
+        label=' '.join(loc.inner_text(timeout=1600).split())[:105]
+        href=loc.get_attribute('href') or ''
+        target=urljoin(page.url,href)
+        u=urlsplit(target)
+        if (not label or len(label)>105 or u.query or u.fragment
+                or not focused_route_allowed(target,origin)
+                or not robots.can_fetch('SauceBasicPreviewBot/0.1',target)):
+            continue
+        rows.append({'kind':'link','text':label,'href':target})
+    ranked=focused_routes(rows,origin)[:limit]
+    return [{'id':f'r{i}','url':u,
+             'label':next(x['text'] for x in rows if x['href']==u)}
+            for i,u in enumerate(ranked)]
+
+
+def resolve_public_product_entry(url,out,conv,creative):
+    """One separately observed public read-only navigation before any action.
+
+    Gemini only selects a witnessed anchor ID; source URL is retained and
+    target is reopened under the same independent browser/robots guards.
+    """
+    with browser(url,include_robots=True) as observed:
+        page,robots=observed
+        candidates=observed_product_entry_links(page,url,robots)
+        receipt={'submitted_url':url,'entry_candidates':candidates,
+                 'chosen_url':url,'model_selected':False}
+        if not candidates:
+            save(out/'entry-route.json',receipt)
+            return url
+        opening=shot(page)
+        raw=conv.ask(creative+" The customer submitted a public homepage. Choose the single observed read-only entry link most likely to open the real functional product, not documentation, pricing or blog. You may choose null if none proves an app entry. We will validate and reopen the actual public route independently. Do not invent an ID or URL. Reply JSON {id:'r0' or null, reason:'...'}. "+json.dumps([{'id':c['id'],'label':c['label'],'path':urlsplit(c['url']).path} for c in candidates]),
+                     media=(media(opening),),json_mode=True,phase='observed-product-entry',stop_on_rate_limit=True)
+        verdict=parse(raw)
+        choice=next((c for c in candidates if c['id']==verdict.get('id')),None)
+        if choice:
+            receipt.update(chosen_url=choice['url'],model_selected=True,
+                           chosen_label=choice['label'])
+        receipt['model_calls']=conv.calls
+        save(out/'entry-route.json',receipt)
+        return receipt['chosen_url']
+
 
 def tabs(page):
     rows=[]
@@ -329,8 +383,12 @@ def explore(url,out,progress,*,request=None,brief=""):
     creative=director_brief(brief)
     out.mkdir(mode=0o700,parents=True,exist_ok=False)
     conv=Conversation(out/"model",request=request)
+    submitted_url=url
+    url=resolve_public_product_entry(url,out,conv,creative)
+    # A landing page cannot be silently replaced by a guessed deep route.
+    # Its selected destination is reopened independently with all guards.
     with browser(url) as p:
-        submitted_url=url;url=p.url
+        url=p.url
         title=p.title()[:140];opening=shot(p)
         (out/"opening.png").write_bytes(opening)
         radio_catalog=scan_radio_menus(p,url)

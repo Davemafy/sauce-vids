@@ -75,3 +75,66 @@ def test_balanced_catalog_exposes_distinct_capabilities():
     rows=balanced_menu_catalog(groups,5)
     assert [r['group'] for r in rows]==['Style','Color','Radius','Style','Color']
     assert [r['id'] for r in rows]==['m0','m1','m2','m3','m4']
+
+def test_homepage_entry_candidates_are_observed_safe_and_robots_allowed():
+    from backend.customer_story import observed_product_entry_links
+    from urllib.robotparser import RobotFileParser
+    class A:
+        def __init__(self,text,url,visible=True):
+            self.text=text;self.url=url;self.visible=visible
+        def is_visible(self):return self.visible
+        def evaluate(self,expr):return True
+        def inner_text(self,timeout=None):return self.text
+        def get_attribute(self,name):return self.url if name=='href' else None
+    class L:
+        def __init__(self,items):self.items=items
+        def all(self):return self.items
+    class P:
+        url='https://example.com/'
+        def locator(self,selector):
+            assert selector=='a[href]'
+            return L([
+                A('Try editor','/editor/theme'),
+                A('Private editor','/editor/private'),
+                A('Do not open','https://othersite.com/editor'),
+                A('Auth app','/account/settings'),
+                A('Tracking','/editor/theme?token=abc'),
+                A('Section','/editor/theme#secret'),
+                A('Hidden editor','/editor/hidden',False),
+                A('Docs','/docs'),
+            ])
+    robots=RobotFileParser();robots.parse(['User-agent: *','Disallow: /editor/private'])
+    found=observed_product_entry_links(P(),P.url,robots)
+    assert found==[{'id':'r0','url':'https://example.com/editor/theme','label':'Try editor'}]
+
+
+def test_gemini_only_selects_a_real_observed_entry_id(monkeypatch,tmp_path):
+    import backend.customer_story as s
+    from contextlib import contextmanager
+    from urllib.robotparser import RobotFileParser
+    class Page:pass
+    class FakeConv:
+        calls=1
+        def __init__(self,reply):self.reply=reply
+        def ask(self,*args,**kwargs):
+            assert kwargs['phase']=='observed-product-entry'
+            assert 'r0' in args[0] and '/editor/theme' in args[0]
+            return json.dumps({'id':self.reply,'reason':'Observed product interface'})
+    @contextmanager
+    def fake_browser(url,include_robots=False):
+        assert url=='https://example.com/'
+        assert include_robots
+        yield Page(),RobotFileParser()
+    monkeypatch.setattr(s,'browser',fake_browser)
+    monkeypatch.setattr(s,'observed_product_entry_links',lambda *args:[{
+        'id':'r0','url':'https://example.com/editor/theme','label':'Try It Now'}])
+    monkeypatch.setattr(s,'shot',lambda p:b'image')
+    monkeypatch.setattr(s,'media',lambda b:{'test':'image'})
+    got=s.resolve_public_product_entry('https://example.com/',tmp_path,FakeConv('r0'),'brief')
+    assert got=='https://example.com/editor/theme'
+    receipt=json.loads((tmp_path/'entry-route.json').read_text())
+    assert receipt['submitted_url']=='https://example.com/'
+    assert receipt['model_selected'] is True
+    other=tmp_path/'unknown';other.mkdir()
+    assert s.resolve_public_product_entry('https://example.com/',other,FakeConv('made_up'),'brief')=='https://example.com/'
+    assert json.loads((other/'entry-route.json').read_text())['model_selected'] is False
