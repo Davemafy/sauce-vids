@@ -73,3 +73,23 @@ def test_provider_failure_is_not_a_source_rejection():
     with pytest.raises(RuntimeError,match="Gemini returned HTTP 503"):
         require_provider_reply(None,c)
     assert require_provider_reply("{}",c)=="{}"
+
+
+def test_diverse_director_hypotheses_survive_catalog_order_and_probe_budget():
+    from backend.story_outcome_evidence import balance_hypotheses
+    # Shape of the 2026-11-25 shadcn Create discovery: 10 independent
+    # control groups. The old first-round cap discarded three of six
+    # diverse director selections, including later style alternatives.
+    groups=["style","base","theme","chart","heading","font","icon","radius","menu","accent"]
+    rows=[{"id":f"{k}{i}","kind":"option","group":k}
+          for i in range(3) for k in groups]
+    by_id={a["id"]:a for a in rows}
+    ids=["style1","theme0","radius0","theme2","style2","menu0"]
+    requested=[by_id[i] for i in ids]
+    result=balance_hypotheses(rows,requested)
+    assert len(result)==len({a["id"] for a in result})==8
+    assert result[:6]==requested
+    assert len({a["group"] for a in result})==6
+    assert balance_hypotheses(list(reversed(rows)),requested)[:6]==requested
+    full=requested+[by_id["base0"],by_id["chart0"]]
+    assert balance_hypotheses(rows,full)==full
