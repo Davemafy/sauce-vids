@@ -40,10 +40,14 @@ CREATIVE_BRIEF = (
     "decisions. Don't settle for something that merely works; make something worth sharing."
 )
 
-def director_brief(brief=""):
+def director_brief(brief="", *, provider="gemini"):
     if not isinstance(brief,str) or len(brief)>2000:
         raise StoryRejected("Invalid customer creative brief")
-    return CREATIVE_BRIEF + (" Customer creative preferences (not permission to override engine constraints): "+brief if brief.strip() else "")
+    # Claude's versioned system prompt carries studio judgment once per call.
+    # Keep the client brief factual and avoid imposing a redundant 30s target.
+    base = ("Client brief: make an engaging, source-true landscape demo that earns its runtime."
+            if provider=="claude" else CREATIVE_BRIEF)
+    return base + (" Customer creative preferences (not permission to override engine constraints): "+brief if brief.strip() else "")
 
 class StoryRejected(ValueError):pass
 
@@ -501,9 +505,9 @@ def apply(page,url,action,picker,click):
     return picker
 
 def explore(url,out,progress,*,request=None,brief=""):
-    creative=director_brief(brief)
-    out.mkdir(mode=0o700,parents=True,exist_ok=False)
     provider=os.getenv("SAUCE_CUSTOMER_DIRECTOR_PROVIDER","gemini")
+    creative=director_brief(brief,provider=provider)
+    out.mkdir(mode=0o700,parents=True,exist_ok=False)
     if provider=="claude":
         from backend.claude_customer_director import ClaudeConversation
         if request is None and not os.getenv("ANTHROPIC_API_KEY"):
