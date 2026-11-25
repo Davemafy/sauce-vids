@@ -241,6 +241,7 @@ class StudioStage:
     hero_peak_zoom:float=1.
     hero_peak_translation:tuple[float,float]=(0.,0.)
     backdrop_tone:str="cobalt"
+    detail_shots:tuple=()
 
     def _sample_keys(self,t):
         prev=self.camera[0]
@@ -295,11 +296,10 @@ class StudioStage:
         zoom=self.view_scale(t)
         ow,oh=self.output_size
         dx=ow*(1.-zoom)*.5;dy=oh*(1.-zoom)*.5
-        if self.hero_interval is not None and self.hero_interval[0]<=t<=self.hero_interval[1]:
-            p=max(0.,min(1.,(zoom-1.)/(self.hero_peak_zoom-1.)))
-            dx=p*self.hero_peak_translation[0]
-            dy=p*self.hero_peak_translation[1]
-            return np.float32([[zoom,0.,dx],[0.,zoom,dy]])
+        for _,begin,end,peak,translation in self.detail_shots:
+            if begin<=t<=end:
+                p=max(0.,min(1.,(zoom-1.)/(peak-1.)))
+                return np.float32([[zoom,0.,p*translation[0]],[0.,zoom,p*translation[1]]])
         # The payout region is real DOM geometry from an already confirmed
         # source event. In a true close-up, keep the *upper* result controls
         # legible, instead of enlarging the modal until its header vanishes.
@@ -325,9 +325,9 @@ class StudioStage:
         return np.float32([[zoom,0.,dx],[0.,zoom,dy]])
 
     def hero_backdrop_strength(self,t):
-        if self.hero_interval is None or not self.hero_interval[0]<=t<=self.hero_interval[1]:
-            return 0.
-        return max(0.,min(1.,(self.view_scale(t)-1.)/(self.hero_peak_zoom-1.)))
+        for _,begin,end,peak,_ in self.detail_shots:
+            if begin<=t<=end:return max(0.,min(1.,(self.view_scale(t)-1.)/(peak-1.)))
+        return 0.
 
     def shutter_times(self,t):
         """Same-source-frame camera exposure; never blend across a hard cut."""
@@ -480,7 +480,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
         from cloud_shadow_stage import backdrop
         # Fail closed rather than silently substituting a generic gradient.
         backdrop(*output_size)
-    motion=_fields(data.get("motion",{}),("profile","shutter","follow","immersive","heroEventIndex","backdropTone"),"studioStage.motion")
+    motion=_fields(data.get("motion",{}),("profile","shutter","follow","immersive","heroEventIndex","detailEventIndices","backdropTone"),"studioStage.motion")
     profile=motion.get("profile","classic")
     if profile not in ("classic","cinematic","reference-spring"):
         raise ValueError("Studio motion profile must be classic, cinematic or reference-spring")
@@ -610,8 +610,12 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
     # Localized detail is a narrow source-bound exception, not an arbitrary
     # camera-centering capability for model-authored plans.
     hero=motion.get("heroEventIndex")
-    hero_interval=None;hero_peak=1.;hero_translation=(0.,0.)
-    if "heroEventIndex" in motion and (type(hero) is not int or not immersive
+    hero_interval=None;hero_peak=1.;hero_translation=(0.,0.);detail_shots=[]
+    selected=motion.get("detailEventIndices",[hero] if hero is not None else [])
+    if (not isinstance(selected,list) or len(selected)>2 or any(type(i) is not int for i in selected)
+            or selected!=sorted(set(selected)) or ("detailEventIndices" in motion and (hero is not None or len(selected)!=2))):
+        raise ValueError("Detail events must be distinct ordered verified actions")
+    if ("heroEventIndex" in motion or "detailEventIndices" in motion) and (not selected or not immersive
             or profile!="cinematic" or stage_preset!="cloud_window_clearface_v1"):
         raise ValueError("Hero detail requires opted-in source-bound clearface motion")
     if immersive and profile=="cinematic":
@@ -625,23 +629,25 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
         from cloud_window_sky_stage import window_geometry
         x0,y0,x1,y1,_=window_geometry(source_size,output_size)
         detail_keys=[i for i,k in enumerate(parsed) if k.view_scale>1.075]
-        if hero is None:
-            if detail_keys:raise ValueError("Centered clearface overview dolly requires viewScale <=1.075")
-        else:
-            from customer_craft_contract import hero_geometry,HERO_MIN_ZOOM,HERO_MAX_ZOOM
-            _event(manifest,hero,duration)
-            if len(detail_keys)!=1 or not 0<detail_keys[0]<len(parsed)-1:
-                raise ValueError("Hero detail must have one verified peak and wide release")
-            i=detail_keys[0];k=parsed[i];prev=parsed[i-1];release=parsed[i+1]
-            fit,transform,_,begin,end=hero_geometry(manifest,hero,source_size,output_size)
+        if len(detail_keys)!=len(selected):
+            raise ValueError("Each source-bound detail requires exactly one verified peak")
+        from customer_craft_contract import hero_geometry,HERO_MIN_ZOOM,HERO_MAX_ZOOM
+        for event,i in zip(selected,detail_keys):
+            _event(manifest,event,duration)
+            if not 0<i<len(parsed)-1:raise ValueError("Detail must have a wide release")
+            k=parsed[i];prev=parsed[i-1];release=parsed[i+1]
+            fit,transform,_,begin,end=hero_geometry(manifest,event,source_size,output_size)
             if (not HERO_MIN_ZOOM<=k.view_scale<=min(fit,HERO_MAX_ZOOM)+1e-7
                     or prev.view_scale!=1. or release.view_scale!=1.
                     or k.start_at<begin-1e-7 or release.at>end+1/60
                     or release.start_at-k.at<.95
-                    or k.start_at>=k.at or release.start_at>=release.at):
-                raise ValueError("Hero detail exceeds verified geometry or available source hold")
-            hero_interval=(k.start_at,release.at)
-            hero_peak=k.view_scale;hero_translation=transform(hero_peak)
+                    or k.start_at>=k.at or release.start_at>=release.at
+                    or (detail_shots and k.start_at<detail_shots[-1][2])):
+                raise ValueError("Detail exceeds verified geometry or available source hold")
+            detail_shots.append((event,k.start_at,release.at,k.view_scale,transform(k.view_scale)))
+        if hero is not None:
+            _,start,end,hero_peak,hero_translation=detail_shots[0]
+            hero_interval=(start,end)
         max_view=max(k.view_scale for i,k in enumerate(parsed) if i not in detail_keys)
         if max_view*(x1-x0)>output_size[0]-24 or max_view*(y1-y0)>output_size[1]-24:
             raise ValueError("Overview dolly would clip the complete source aperture")
@@ -649,7 +655,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
               if profile=="reference-spring" else None)
     obj=StudioStage(tuple(parsed),rgb,grain,depth,reflection,index,intensity,seconds,
                     onset,pi,pp[2],visible,mode,context,source_size,output_size,duration,box,
-                    profile,shutter,fps,stage_preset,follower,immersive,hero,hero_interval,hero_peak,hero_translation,tone)
+                    profile,shutter,fps,stage_preset,follower,immersive,hero,hero_interval,hero_peak,hero_translation,tone,tuple(detail_shots))
     if follower is not None:
         # All source-declared follow actions, including actions beyond the
         # stage lighting event, must remain genuine, target-visible actions.
@@ -701,7 +707,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
         timeline=sorted({0.,duration,*[k.at for k in obj.camera],
                          *[k.start_at for k in obj.camera]})
         insufficient=[(at,obj.context_visibility(at)) for at in timeline
-                      if obj.context_visibility(at)<.935 and not (hero_interval is not None and hero_interval[0]<=at<=hero_interval[1])]
+                      if obj.context_visibility(at)<.935 and not any(start<=at<=end for _,start,end,_,_ in detail_shots)]
         if insufficient:
             at,fraction=min(insufficient,key=lambda row:row[1])
             raise ValueError(

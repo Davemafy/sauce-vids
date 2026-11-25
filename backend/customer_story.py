@@ -666,13 +666,14 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
         if failure is None:
             ids=[a["id"] for a in plan["actions"]]
             is_claude=getattr(conv,"provider_name",None)=="Claude"
+            directed_edit=is_claude or os.getenv("SAUCE_CUSTOMER_EDITORIAL_DIRECTION")=="1"
             task=creative+" Challenge this connected workflow against all real before/after evidence. Reject repetitive, decorative or navigation-only outcomes. "+json.dumps(proofs)
             kwargs={}
-            if is_claude:
+            if directed_edit:
                 task+=(" You are directing the edit, not operating a QA recorder. What single memorable outcome does the sequence prove? "
                        "If the actions merely cycle equivalent values, reject unless the contrast itself clearly demonstrates the core product value. "
                        "For an accepted workflow, assign each selected action in exact order a distinct editorial purpose (max 240 chars), "
-                       "framing wide (locked context), accent (small whole-window push), or detail (only the selected hero, source-fit close-up), "
+                       "framing wide (locked context), accent (small whole-window push), or detail (source-fit close-up; up to two detail beats, including the selected hero), "
                        "and pace quick, readable, or linger (relative source hold allocation, not timestamps). "
                        "Choose the shortest supported duration_seconds (22, 26 or 30, as permitted by the schema) that earns its runtime. "
                        "Use wide deliberately to avoid a push on every click; reserve attention for the actual payoff. "
@@ -686,13 +687,13 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
             verdict=parse(conv.ask(task,media=tuple(images),json_mode=True,phase="story-editorial",stop_on_rate_limit=True,**kwargs))
             save(trial/"editorial.json",verdict)
             require(verdict.get("accept") is True,"Editorial story not admitted")
-            if is_claude:
+            if directed_edit:
                 try:
                     plan["editorial"]=customer_editorial.validate(
                         {"backdrop":verdict.get("backdrop"),"duration_seconds":verdict.get("duration_seconds"),"beats":verdict.get("beats")},ids,plan["hero_action_id"])
                 except (ValueError,TypeError) as exc:
                     raise StoryRejected("Invalid model-authored editorial direction") from exc
-                plan["director_provider"]="claude"
+                plan["director_provider"]="claude" if is_claude else "gemini"
                 plan["director_model"]=conv.data.get("model")
             save(out/"direction.json",plan);save(out/"probe.json",proofs);save(out/"editorial.json",verdict)
             return plan,conv.calls,proofs

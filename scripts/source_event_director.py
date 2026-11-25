@@ -119,7 +119,7 @@ def direction(video:Path,manifest:Path,hero_event_index=None,editorial_intent=No
             if start is not None:k["startAt"]=start
             return k
         from customer_craft_contract import hero_geometry,hero_motion_budget,HERO_MIN_ZOOM
-        camera=[whole(0,1.)];detail_index=None
+        camera=[whole(0,1.)];detail_indices=[]
         for i,e in enumerate(events):
             begin=after_visible(e["t"])
             peak=native(begin+.45)
@@ -136,7 +136,7 @@ def direction(video:Path,manifest:Path,hero_event_index=None,editorial_intent=No
                 hold={"quick":.25,"readable":.75,"linger":1.6}[shot["pace"]]
                 if is_hero:hold=max(1.,hold)
                 peak=after_visible(begin+.60)
-            if is_hero and (beats is None or beats[i]["framing"]=="detail"):
+            if (is_hero and beats is None) or (beats is not None and beats[i]["framing"]=="detail"):
                 fit,transform,base,_,limit=hero_geometry(evidence,i,(source_w,source_h),(1920,1080))
                 # Back off only when the complete result/pointer or native
                 # source interval cannot support a safe close-up. Never force
@@ -146,8 +146,8 @@ def direction(video:Path,manifest:Path,hero_event_index=None,editorial_intent=No
                     seconds=hero_motion_budget(candidate,transform(candidate),base,(1920,1080))
                     # A close-up earns at least 1s of settled reading time.
                     if 2*seconds+1.05<=limit-begin:
-                        zoom=candidate;travel=seconds
-                        peak=after_visible(begin+seconds);detail_index=i
+                        zoom=candidate;travel=seconds;hold=max(hold,1.05)
+                        peak=after_visible(begin+seconds);detail_indices.append(i)
                         break
                     candidate=round(candidate-.025,3)
             release=native(min(next_press-.25,peak+hold+travel))
@@ -160,8 +160,10 @@ def direction(video:Path,manifest:Path,hero_event_index=None,editorial_intent=No
         plan["studioStage"]["motion"]={"profile":"cinematic","immersive":True,"shutter":0}
         if beats is not None:
             plan["studioStage"]["motion"]["backdropTone"]=tone
-        if detail_index is not None:
-            plan["studioStage"]["motion"]["heroEventIndex"]=detail_index
+        if len(detail_indices)==1:
+            plan["studioStage"]["motion"]["heroEventIndex"]=detail_indices[0]
+        elif detail_indices:
+            plan["studioStage"]["motion"]["detailEventIndices"]=detail_indices
         plan["studioStage"]["payoff"].update(mode="overview",minVisible=.99,minContextVisible=.99)
     if len(events)==1 and events[0]["kind"]=="draw_stroke":
         e=events[0]

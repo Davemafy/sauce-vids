@@ -32,8 +32,9 @@ def validate(data,ids,hero):
                 or beat["action_id"]!=action or beat["framing"] not in FRAMINGS or beat["pace"] not in PACES
                 or not isinstance(beat["purpose"],str) or not 1<=len(beat["purpose"].strip())<=240):
             raise ValueError("Editorial beat must reference the exact ordered action")
-        if beat["framing"]=="detail" and action!=hero:
-            raise ValueError("Detail requires selected verified hero")
+    details=[b["action_id"] for b in beats if b["framing"]=="detail"]
+    if len(details)>2 or (details and hero not in details):
+        raise ValueError("Detail requires the selected hero and at most one supporting payoff")
     return data
 
 def schedule(data,ids,hero):

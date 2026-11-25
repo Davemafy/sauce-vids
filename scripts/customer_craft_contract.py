@@ -118,22 +118,22 @@ def verify_plan(plan,manifest,stage,pointer,fps,frames,trim=0):
     hero=getattr(stage,"hero_detail_index",None)
     detail=np.zeros(frames,dtype=bool)
     hero_min=1.;hero_padding=None
-    if hero is not None:
+    for shot_index,begin,end,_,_ in getattr(stage,"detail_shots",()):
+        hero=shot_index
         if type(hero) is not int or not 0<=hero<len(events):
             raise ValueError("Invalid customer hero index")
-        interval=stage.hero_interval
-        if interval is None:raise ValueError("Missing source-bound hero detail interval")
-        begin,end=interval
-        detail=(timeline>=begin-1e-7)&(timeline<=end+1e-7)
+        current=(timeline>=begin-1e-7)&(timeline<=end+1e-7)
+        if np.any(detail & current):raise ValueError("Overlapping detail windows")
+        detail |= current
         e=events[hero];next_press=events[hero+1]["start"] if hero+1<len(events) else frames/fps
-        if begin<e["t"]-1e-7 or end>next_press-.20 or not detail.any():
+        if begin<e["t"]-1e-7 or end>next_press-.20 or not current.any():
             raise ValueError("Hero detail overlaps unverified source time")
         box=tuple(e["resultRect"][k] for k in ("x","y","width","height"))
         sw,sh=stage.source_size
         source=np.float32([[0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]])
         x,y,w,h=box
         pts=np.float32([[[x,y],[x+w,y],[x+w,y+h],[x,y+h]]])
-        for j in np.flatnonzero(detail):
+        for j in np.flatnonzero(current):
             t=timeline[j]
             # Check the entire transition, peak hold and release, not only a key.
             hero_min=min(hero_min,stage.region_visibility(t,box))
@@ -192,7 +192,7 @@ def verify_plan(plan,manifest,stage,pointer,fps,frames,trim=0):
             "minimumWindowMarginPx":round(margin,3),"maximumQuadSpeedPx":round(speed,4),
             "maximumQuadAccelerationPx":round(acceleration,4),
             "minimumTargetVisible":round(min_target,5),"minimumResultVisible":round(min_result,5),
-            "heroEventIndex":hero,"heroDetailFrames":int(detail.sum()),
+            "heroEventIndex":getattr(stage,"hero_detail_index",None),"detailEventIndices":[v[0] for v in getattr(stage,"detail_shots",())],"heroDetailFrames":int(detail.sum()),
             "heroMinimumResultVisible":round(hero_min,5),
             "heroMinimumPaddingPx":round(hero_padding,3) if hero_padding is not None else None,
             "creativeApproved":False}
