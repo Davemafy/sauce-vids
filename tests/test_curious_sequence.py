@@ -204,3 +204,50 @@ def test_fast_analytic_replay_uses_exact_observed_option(monkeypatch):
     assert events[0]['label']=='Last 24 hours'
     with pytest.raises(ValueError,match='Unrecognized analytical preset'):
         s.capture_sequence(page,args[1],{'picker':'Date range','option':'Custom range'},args[3],args[4],**kwargs)
+
+def test_analytic_probe_uses_exact_lookup_and_proof(tmp_path,monkeypatch):
+    from contextlib import contextmanager
+    import backend.curious_sequence as s
+    monkeypatch.setenv('SAUCE_CURIOUS_ANALYTICS','1')
+    page=Mock();scope=Mock();loc=Mock()
+    @contextmanager
+    def browser(*args):yield page
+    monkeypatch.setattr(s,'browser',browser)
+    monkeypatch.setattr(s,'shot',lambda p:b'before')
+    monkeypatch.setattr(s,'panels',lambda p:[])
+    monkeypatch.setattr(s,'native_analytic_picker',lambda *a:scope)
+    resolve=Mock(return_value=loc)
+    monkeypatch.setattr(s,'native_analytic_handle',resolve)
+    inventory=Mock(side_effect=AssertionError('Repeated inventory'))
+    monkeypatch.setattr(s,'option_items',inventory)
+    monkeypatch.setattr(s,'dismiss_picker',Mock())
+    applied=Mock()
+    monkeypatch.setattr(s,'assert_applied_option',applied)
+    proof={'change_above_baseline':.1}
+    monkeypatch.setattr(s,'observed_result',lambda *a,**kw:(b'after',proof,1.))
+    result=s.option_probe('https://example.com','Date range','Last 7 days',tmp_path/'p0')
+    assert result==proof
+    assert (tmp_path/'p0'/'after.png').read_bytes()==b'after'
+    resolve.assert_called_once_with(scope.element_handle.return_value,'Last 7 days',option=True)
+    loc.click.assert_called_once_with(timeout=4000)
+    applied.assert_called_once_with(page,'Last 7 days','Date range')
+    inventory.assert_not_called()
+    with pytest.raises(ValueError,match='Unrecognized'):
+        s.option_probe('https://example.com','Date range','Custom range',tmp_path/'p1')
+
+def test_probe_progress_survives_interruption(tmp_path,monkeypatch):
+    import json
+    import backend.curious_sequence as s
+    def probe(url,picker,option,path,existing=None):
+        if option=='second':raise KeyboardInterrupt()
+        return {'result_area_fraction':.5}
+    monkeypatch.setattr(s,'option_probe',probe)
+    monkeypatch.setattr(s,'_media',lambda *a:{})
+    conv=Mock()
+    with pytest.raises(KeyboardInterrupt):
+        s.compare_options('https://example.com','picker',['first','second'],tmp_path,conv,{})
+    d=json.loads((tmp_path/'probe-progress.json').read_text())
+    assert d['completed'][0]['status']=='verified'
+    assert d['active']=={'id':'p1','option':'second'}
+    assert d['creative_approved'] is False
+    conv.ask.assert_not_called()

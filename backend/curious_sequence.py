@@ -237,8 +237,14 @@ def option_probe(url,picker,option,path,existing=None):
     with browser(url,existing) as page:
         before=shot(page);page.wait_for_timeout(350);steady=shot(page)
         old=panels(page)
-        scope=open_picker(page,url,picker)
-        exact(option_items(page,scope,picker),option).click(timeout=4000)
+        if analytic_name(picker):
+            if not analytic_option(picker,option):
+                raise ValueError("Unrecognized analytical preset")
+            scope=native_analytic_picker(page,url,picker,lambda loc:loc.click(timeout=4000))
+            native_analytic_handle(scope.element_handle(timeout=1500),option,option=True).click(timeout=4000)
+        else:
+            scope=open_picker(page,url,picker)
+            exact(option_items(page,scope,picker),option).click(timeout=4000)
         dismiss_picker(page,scope);page.wait_for_timeout(350)
         assert_applied_option(page,option,picker)
         after,proof,_=observed_result(page,url,before,steady,old,time.monotonic())
@@ -248,9 +254,20 @@ def option_probe(url,picker,option,path,existing=None):
 
 def compare_options(url,picker,options,path,conv,receipt,existing=None):
     admitted={};media=[];rows=[]
+    # Keep completed probe evidence even if the worker deadline interrupts
+    # a later browser or model call. This checkpoint never authorizes replay.
+    def checkpoint(active=None):
+        dest=path/'probe-progress.json'
+        tmp=dest.with_suffix('.tmp')
+        tmp.write_text(json.dumps({'schema':'sauce-option-probe-progress-v1',
+            'completed':rows,'active':active,'creative_approved':False},indent=2))
+        os.chmod(tmp,0o600)
+        os.replace(tmp,dest)
     for i,option in enumerate(options):
         cid=f'p{i}';folder=path/cid
         row={'id':cid,'option':option,'status':'rejected'}
+        checkpoint({'id':cid,'option':option})
+        began=time.monotonic()
         try:
             proof=option_probe(url,picker,option,folder,existing)
             pair=[_media(folder/n,'image/png',4*1024*1024) for n in ('before.png','after.png')]
@@ -259,7 +276,9 @@ def compare_options(url,picker,options,path,conv,receipt,existing=None):
             media.extend(pair)
         except Exception as exc:
             row['error_type']=type(exc).__name__
+        row['elapsed_seconds']=round(time.monotonic()-began,3)
         rows.append(row)
+        checkpoint()
     receipt['option_probes']=rows
     if not admitted:return None
     raw=conv.ask("We tested your ideas in separate real browsers. Look at each verified BEFORE then AFTER image, in the order of the verified rows. Which actual transformation would stop a stranger scrolling? Prefer a useful populated product outcome with readable values and clear causal meaning. A blank chart, zero-data state, disappearance of content, loading screen or cleared view is not a compelling transformation merely because many pixels changed. If other candidates preserve useful data while revealing a new insight, prefer those. Is it readable and distinctive even at phone video size? Reject all if none is compelling. Do not infer results for failed probes. Return JSON with id (one verified p ID or null) and reason. "+json.dumps(rows,ensure_ascii=False),media=tuple(media),json_mode=True,phase='compare-real-options',stop_on_rate_limit=True)
