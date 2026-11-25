@@ -208,7 +208,10 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
         if progress:progress(x)
     cinematic_only=(os.getenv('SAUCE_CINEMATIC_ONLY')=='1' if intent is None
                     else intent=="product_demo")
-    if cinematic_only and os.getenv("SAUCE_CUSTOMER_STORY_SECONDS")=="30":
+    # Product-demo requests use the existing evidence-led 3–4-action director.
+    # An explicit 15s compatibility override can retain the narrow legacy path;
+    # public website previews never impersonate a product demonstration.
+    if cinematic_only and os.getenv("SAUCE_CUSTOMER_STORY_SECONDS", "30" if intent=="product_demo" else "15")=="30":
         from backend.customer_story import execute_story
         return execute_story(url,folder,stage,audio=audio,brief=brief)
     checkpoint=load_render_checkpoint(folder,url)
