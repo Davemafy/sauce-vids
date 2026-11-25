@@ -93,3 +93,68 @@ def test_diverse_director_hypotheses_survive_catalog_order_and_probe_budget():
     assert balance_hypotheses(list(reversed(rows)),requested)[:6]==requested
     full=requested+[by_id["base0"],by_id["chart0"]]
     assert balance_hypotheses(rows,full)==full
+
+
+def test_unverified_local_radio_isolated_only_in_disposable_probe(tmp_path,monkeypatch):
+    import json
+    from contextlib import contextmanager
+    from unittest.mock import Mock
+    import pytest
+    import backend.customer_story as s
+    rows=[{"id":f"a{i}","kind":"option","label":str(i),"group":"Menu"} for i in range(4)]
+    opened=[]
+    @contextmanager
+    def browser(url):
+        p=Mock();p.url=url;opened.append(p);yield p
+    monkeypatch.setattr(s,"browser",browser)
+    monkeypatch.setattr(s,"shot",lambda p:b"source")
+    monkeypatch.setattr(s,"arr",lambda b:np.zeros((8,8,3),np.uint8))
+    monkeypatch.setattr(s,"media",lambda b:b)
+    monkeypatch.setattr(s,"action_panel",lambda *a:{"x":0,"y":0,"width":8,"height":8})
+    guard=Mock()
+    monkeypatch.setattr(s,"assert_local",guard)
+    def apply(*args):
+        if len(opened)==2:raise s.LocalRadioOutcomeUnverified("Applied radio value not observed")
+    monkeypatch.setattr(s,"apply",apply)
+    verified=Mock(return_value=(b"changed",{"x":0,"y":0,"width":8,"height":8},.2,1))
+    monkeypatch.setattr(s,"verify",verified)
+    conv=Mock();conv.calls=2;conv.ask.return_value="{}"
+    metadata={"url":"https://example.com/","picker":None}
+    _,allowed=s.compare_outcomes(rows,metadata,b"opening",tmp_path,conv,"brief")
+    records=json.loads((tmp_path/"outcomes/comparison.json").read_text())
+    assert len(opened)==4 and len(allowed)==3 and verified.call_count==3
+    skipped=next(r for r in records if r["status"]=="unverified")
+    assert skipped["id"] not in {a["id"] for a in allowed}
+    assert len(conv.ask.call_args.kwargs["media"])==6
+    guard.assert_called_once()
+    # A failure of the public-route guard must never become a weak outcome.
+    out=tmp_path/"guarded";out.mkdir();opened.clear()
+    guard.side_effect=ValueError("Action left local public state or hit authentication")
+    with pytest.raises(ValueError,match="authentication"):
+        s.compare_outcomes(rows,metadata,b"opening",out,conv,"brief")
+    # The same missing postcondition in a connected replay remains fatal.
+    out=tmp_path/"replay";out.mkdir();opened.clear()
+    monkeypatch.setattr(s,"apply",Mock(side_effect=s.LocalRadioOutcomeUnverified("Applied radio value not observed")))
+    with pytest.raises(s.LocalRadioOutcomeUnverified):
+        s.probe_story({**metadata,"actions":rows},out)
+
+
+def test_radio_failure_is_typed_only_after_locality_check(monkeypatch):
+    from unittest.mock import Mock
+    import pytest
+    import backend.customer_story as s
+    p=Mock();scope=Mock();option=Mock();trigger=Mock()
+    trigger.inner_text.return_value="Menu\nDefault"
+    monkeypatch.setattr(s,"open_radio_menu",lambda *a:scope)
+    monkeypatch.setattr(s,"radio_options",lambda *a:[("Inverted",option)])
+    monkeypatch.setattr(s,"dismiss_picker",lambda *a:None)
+    monkeypatch.setattr(s,"menu_triggers",lambda *a:[("Menu",trigger)])
+    guard=Mock()
+    monkeypatch.setattr(s,"assert_local",guard)
+    action={"kind":"option","group":"Menu","label":"Inverted"}
+    with pytest.raises(s.LocalRadioOutcomeUnverified):
+        s.apply(p,"https://example.com/",action,None,Mock())
+    guard.assert_called_once()
+    guard.side_effect=ValueError("Action left local public state or hit authentication")
+    with pytest.raises(ValueError,match="authentication"):
+        s.apply(p,"https://example.com/",action,None,Mock())
