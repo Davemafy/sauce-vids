@@ -223,9 +223,12 @@ def render_cloud_stage(stage, source, t):
             # Grade only the stationary environment, never the actual UI.
             # Smoothly follow the source-bound hero camera envelope.
             strength=stage.hero_backdrop_strength(t) if hasattr(stage,"hero_backdrop_strength") else 0.
-            if strength>0:
+            tone=getattr(stage,"backdrop_tone","cobalt")
+            saturation,darkness={"cobalt":(0.,0.),"muted":(.55,.18),"graphite":(.94,.36)}[tone]
+            if strength>0 or saturation>0:
                 gray=cv2.cvtColor(sky,cv2.COLOR_BGR2GRAY)[:,:,None]
-                sky=(sky*(1-.24*strength)+gray*(.24*strength))*(1-.16*strength)
+                mix=1-(1-saturation)*(1-.24*strength)
+                sky=(sky*(1-mix)+gray*mix)*(1-darkness)*(1-.16*strength)
             board=np.uint8(np.clip(sky+movement,0,255))
         else:
             # Keep previous cloud presets' rendering behaviour identical.

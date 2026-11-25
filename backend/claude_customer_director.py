@@ -13,7 +13,7 @@ SYSTEM_PROMPT = (
     "Name the specific on-screen change that makes the benefit evident. "
     "Supporting actions should build toward or explain that payoff. "
     "Abstain when the task permits it and the evidence is too weak. "
-    "Sauce handles actual clicks, framing, timing, and audio."
+    "Direct the editorial emphasis and atmosphere when requested. Sauce executes clicks and converts semantic framing and pacing choices into verified source-clock motion; never supply invented coordinates or times."
 )
 
 

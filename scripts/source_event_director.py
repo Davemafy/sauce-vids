@@ -18,14 +18,14 @@ def sha(file):
     return dig.hexdigest()
 
 
-def direction(video:Path,manifest:Path,hero_event_index=None):
+def direction(video:Path,manifest:Path,hero_event_index=None,editorial_intent=None):
     from film_director_capabilities import build_contract
     packet=build_contract(video,manifest,
         "Produce a readable 16:9 real-source two-or-more-step product film")
     evidence=json.loads(Path(manifest).read_text())
     duration=packet["actualCapture"]["durationSeconds"]
     events=evidence.get("events",[])
-    long_story=25<duration<=30 and 3<=len(events)<=6
+    long_story=(25<duration<=30 or (editorial_intent is not None and 22<=duration<=30)) and 3<=len(events)<=6
     short_story=1<=len(events)<=4 and (6<=duration<=25 if len(events)==1 else 8<=duration<=25)
     if (not (long_story or short_story) or
         evidence.get("cursorless") is not True or
@@ -34,6 +34,16 @@ def direction(video:Path,manifest:Path,hero_event_index=None):
     if hero_event_index is not None and (not long_story or type(hero_event_index) is not int
             or not 0<=hero_event_index<len(events)):
         raise ValueError("Hero must reference a verified long-story event")
+    beats=None;tone="cobalt"
+    if editorial_intent is not None:
+        from customer_editorial import validate
+        if (not long_story or not isinstance(editorial_intent,dict) or set(editorial_intent)!={"ids","hero","editorial"}
+                or not isinstance(editorial_intent["ids"],list) or len(editorial_intent["ids"])!=len(events)
+                or hero_event_index is None or editorial_intent["hero"]!=editorial_intent["ids"][hero_event_index]):
+            raise ValueError("Editorial intent must map to the verified event sequence")
+        intent=validate(editorial_intent["editorial"],editorial_intent["ids"],editorial_intent["hero"])
+        if abs(intent["duration_seconds"]-duration)>1/60:raise ValueError("Editorial duration differs from verified capture")
+        beats=intent["beats"];tone=intent["backdrop"]
     for i,e in enumerate(events):
         if (not e.get("evidence") or e["start"]<.7 or
             e["t"]-e["start"]>3.5 or e["t"]>=duration-.9 or
@@ -118,7 +128,15 @@ def direction(video:Path,manifest:Path,hero_event_index=None):
             zoom=1.065 if is_hero else (1.035 if hero_event_index is not None else 1.065)
             hold=2.35 if is_hero else (.25 if hero_event_index is not None else .4)
             travel=.85
-            if is_hero:
+            if beats is not None:
+                shot=beats[i]
+                if shot["framing"]=="wide":
+                    continue
+                zoom=1.065 if is_hero else 1.05
+                hold={"quick":.25,"readable":.75,"linger":1.6}[shot["pace"]]
+                if is_hero:hold=max(1.,hold)
+                peak=after_visible(begin+.60)
+            if is_hero and (beats is None or beats[i]["framing"]=="detail"):
                 fit,transform,base,_,limit=hero_geometry(evidence,i,(source_w,source_h),(1920,1080))
                 # Back off only when the complete result/pointer or native
                 # source interval cannot support a safe close-up. Never force
@@ -140,6 +158,8 @@ def direction(video:Path,manifest:Path,hero_event_index=None):
         camera.append(whole(duration,1.))
         plan["studioStage"]["camera"]=camera
         plan["studioStage"]["motion"]={"profile":"cinematic","immersive":True,"shutter":0}
+        if beats is not None:
+            plan["studioStage"]["motion"]["backdropTone"]=tone
         if detail_index is not None:
             plan["studioStage"]["motion"]["heroEventIndex"]=detail_index
         plan["studioStage"]["payoff"].update(mode="overview",minVisible=.99,minContextVisible=.99)
@@ -170,9 +190,11 @@ def main():
     p.add_argument("--manifest",type=Path,required=True)
     p.add_argument("--out",type=Path,required=True)
     p.add_argument("--hero-event-index",type=int)
+    p.add_argument("--editorial-intent",type=Path)
     a=p.parse_args()
     if a.out.exists():raise ValueError("Refuse to replace existing creative work")
-    plan=direction(a.source.resolve(),a.manifest.resolve(),a.hero_event_index)
+    plan=direction(a.source.resolve(),a.manifest.resolve(),a.hero_event_index,
+                   json.loads(a.editorial_intent.read_text()) if a.editorial_intent else None)
     a.out.parent.mkdir(parents=True,exist_ok=True)
     a.out.write_text(json.dumps(plan,indent=2)+"\n")
     print(json.dumps({"filmPlan":str(a.out),"verifiedEvents":len(plan["audio"]["eventIndices"]),

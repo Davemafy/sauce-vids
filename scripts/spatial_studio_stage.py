@@ -240,6 +240,7 @@ class StudioStage:
     hero_interval:tuple[float,float]|None=None
     hero_peak_zoom:float=1.
     hero_peak_translation:tuple[float,float]=(0.,0.)
+    backdrop_tone:str="cobalt"
 
     def _sample_keys(self,t):
         prev=self.camera[0]
@@ -479,7 +480,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
         from cloud_shadow_stage import backdrop
         # Fail closed rather than silently substituting a generic gradient.
         backdrop(*output_size)
-    motion=_fields(data.get("motion",{}),("profile","shutter","follow","immersive","heroEventIndex"),"studioStage.motion")
+    motion=_fields(data.get("motion",{}),("profile","shutter","follow","immersive","heroEventIndex","backdropTone"),"studioStage.motion")
     profile=motion.get("profile","classic")
     if profile not in ("classic","cinematic","reference-spring"):
         raise ValueError("Studio motion profile must be classic, cinematic or reference-spring")
@@ -490,6 +491,10 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
                                       (profile not in ("reference-spring","cinematic") or
                                        stage_preset not in ("cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1","cloud_window_clearface_v1","cloud_luminous_display_v1"))):
         raise ValueError("Physical window push needs cloud stage and verified spring camera")
+    tone=motion.get("backdropTone","cobalt")
+    if tone not in ("cobalt","muted","graphite") or ("backdropTone" in motion and
+            (not immersive or profile!="cinematic" or stage_preset!="cloud_window_clearface_v1")):
+        raise ValueError("Unsupported source-preserving backdrop tone")
     shutter=_number(motion.get("shutter",0.),"studioStage.motion.shutter",0,.75)
     if stage_preset=="cloud_luminous_display_v1" and (immersive or shutter!=0 or profile!="cinematic"):
         raise ValueError("Luminous display requires a crisp rigid cinematic camera")
@@ -644,7 +649,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
               if profile=="reference-spring" else None)
     obj=StudioStage(tuple(parsed),rgb,grain,depth,reflection,index,intensity,seconds,
                     onset,pi,pp[2],visible,mode,context,source_size,output_size,duration,box,
-                    profile,shutter,fps,stage_preset,follower,immersive,hero,hero_interval,hero_peak,hero_translation)
+                    profile,shutter,fps,stage_preset,follower,immersive,hero,hero_interval,hero_peak,hero_translation,tone)
     if follower is not None:
         # All source-declared follow actions, including actions beyond the
         # stage lighting event, must remain genuine, target-visible actions.

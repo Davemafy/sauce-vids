@@ -24,6 +24,7 @@ from backend.story_discovery import route_robots_allowed,focused_route_allowed,f
 from backend.source_action_preflight import image_change,visible_authentication_barrier,same_local_tab_route
 from backend.native60_capture import FULL_CHROME,verify_live_terminal_frames
 from scripts.capture_safety import validate_public_url,guard_route
+from scripts import customer_editorial
 
 ROOT=Path(__file__).resolve().parents[1]
 W,H,D=1920,1080,2
@@ -659,12 +660,34 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
         save(trial/"direction.json",plan)
         proofs,images,failure=probe_story(plan,trial)
         if failure is None:
-            verdict=parse(conv.ask(creative+" Challenge this connected workflow against all real before/after evidence. Reject repetitive, decorative or navigation-only outcomes. JSON {accept:true/false,reason:'...'}. "+json.dumps(proofs),
-                                  media=tuple(images),json_mode=True,phase="story-editorial",stop_on_rate_limit=True,
-                                  **claude_schema(conv,accept={"type":"BOOLEAN"},reason={"type":"STRING"})))
+            ids=[a["id"] for a in plan["actions"]]
+            is_claude=getattr(conv,"provider_name",None)=="Claude"
+            task=creative+" Challenge this connected workflow against all real before/after evidence. Reject repetitive, decorative or navigation-only outcomes. "+json.dumps(proofs)
+            kwargs={}
+            if is_claude:
+                task+=(" You are directing the edit, not operating a QA recorder. What single memorable outcome does the sequence prove? "
+                       "If the actions merely cycle equivalent values, reject unless the contrast itself clearly demonstrates the core product value. "
+                       "For an accepted workflow, assign each selected action in exact order a distinct editorial purpose (max 240 chars), "
+                       "framing wide (locked context), accent (small whole-window push), or detail (only the selected hero, source-fit close-up), "
+                       "and pace quick, readable, or linger (relative source hold allocation, not timestamps). "
+                       "Choose the shortest supported duration_seconds (22, 26 or 30, as permitted by the schema) that earns its runtime. "
+                       "Use wide deliberately to avoid a push on every click; reserve attention for the actual payoff. "
+                       "Choose backdrop cobalt (bright cloud), muted (subdued blue-gray cloud), or graphite (dark desaturated cloud). "
+                       "Choose for the product's actual palette, not a generic aesthetic. Sauce validates the true action, result, cursor, and source timing; "
+                       "detail may safely back off if the entire verified result cannot fit. Return accept, reason, backdrop, duration_seconds, beats. "
+                       "If rejecting, return empty beats. Exact action order: "+json.dumps(ids)+" Hero: "+plan["hero_action_id"])
+                kwargs["response_schema"]=customer_editorial.schema(ids)
+            else:
+                task+=" JSON {accept:true/false,reason:'...'}. "
+            verdict=parse(conv.ask(task,media=tuple(images),json_mode=True,phase="story-editorial",stop_on_rate_limit=True,**kwargs))
             save(trial/"editorial.json",verdict)
             require(verdict.get("accept") is True,"Editorial story not admitted")
-            if getattr(conv,"provider_name",None)=="Claude":
+            if is_claude:
+                try:
+                    plan["editorial"]=customer_editorial.validate(
+                        {"backdrop":verdict.get("backdrop"),"duration_seconds":verdict.get("duration_seconds"),"beats":verdict.get("beats")},ids,plan["hero_action_id"])
+                except (ValueError,TypeError) as exc:
+                    raise StoryRejected("Invalid model-authored editorial direction") from exc
                 plan["director_provider"]="claude"
                 plan["director_model"]=conv.data.get("model")
             save(out/"direction.json",plan);save(out/"probe.json",proofs);save(out/"editorial.json",verdict)
@@ -765,6 +788,10 @@ def action_start(index,count):
 def capture(url,plan,proofs,out):
     out.mkdir(mode=0o700,parents=True,exist_ok=False)
     native=lambda r:{k:round(r[k]*D,4) for k in ("x","y","width","height")}
+    starts=(customer_editorial.schedule(plan["editorial"],[a["id"] for a in plan["actions"]],plan["hero_action_id"])
+            if "editorial" in plan else [action_start(i,len(proofs)) for i in range(len(proofs))])
+    duration=plan["editorial"]["duration_seconds"] if "editorial" in plan else SECONDS
+    save(out/"capture-schedule.json",{"requestedActionStarts":starts,"durationSeconds":duration,"editorialDirected":"editorial" in plan})
     with native_display(out) as display, browser(url,display=display) as p, ExitStack() as stack:
         # This is before FFmpeg starts. Never use Playwright screenshots during recording.
         p.mouse.move(W*.25,H*.2);browser_pixels=shot(p);p.wait_for_timeout(1800)
@@ -786,7 +813,7 @@ def capture(url,plan,proofs,out):
 
         with (out/"capture.log").open("ab") as log:
             enc=subprocess.Popen(["ffmpeg","-v","error","-nostdin","-f","x11grab","-draw_mouse","0",
-                "-video_size",f"{W*D}x{H*D}","-framerate","60","-i",display,"-t",str(SECONDS),
+                "-video_size",f"{W*D}x{H*D}","-framerate","60","-i",display,"-t",str(duration),
                 "-c:v","libx264","-preset","ultrafast","-crf","20","-pix_fmt","yuv420p","-threads","4",
                 "-an","-movflags","+faststart",str(source)],stderr=log)
         clock=time.monotonic()
@@ -798,7 +825,7 @@ def capture(url,plan,proofs,out):
                 x,y=px/D,py/D
             else:span("browser_move",lambda:p.mouse.move(x,y))
             pos[:]=[x,y];t=now()
-            if t<SECONDS and (not pts or t>pts[-1]["t"]):pts.append({"t":t,"x":x*D,"y":y*D})
+            if t<duration and (not pts or t>pts[-1]["t"]):pts.append({"t":t,"x":x*D,"y":y*D})
         def click(loc,label):
             if not native_input:
                 span("scroll",lambda:loc.scroll_into_view_if_needed(timeout=3000))
@@ -831,7 +858,7 @@ def capture(url,plan,proofs,out):
             move(*pos)
             opening_pointer_approach(move,wait,opening_anchor)
             for i,(action,expected) in enumerate(zip(plan["actions"],proofs)):
-                wait(action_start(i,len(proofs)));started=now();before=span("before_screen",lambda:screen(display));old=span("before_panel",lambda:action_panel(p,action))
+                wait(starts[i]);started=now();before=span("before_screen",lambda:screen(display));old=span("before_panel",lambda:action_panel(p,action))
                 current=span("apply_total",lambda:apply(p,url,action,current,click))
                 applied=now()
                 try:
@@ -845,25 +872,25 @@ def capture(url,plan,proofs,out):
                 confirmed=round(t-clock,6)
                 timings.append({"index":i,"start":started,"applied":applied,"confirmed":confirmed,"proof_complete":now()})
                 save(out/"action-timing.json",timings)
-                if confirmed>=SECONDS-2:
-                    save(out/"timing-rejection.json",{"index":i,"confirmed":confirmed,"action_id":action["id"],"source_duration":SECONDS})
+                if confirmed>=duration-2:
+                    save(out/"timing-rejection.json",{"index":i,"confirmed":confirmed,"action_id":action["id"],"source_duration":duration})
                     raise StoryRejected("Insufficient final source hold")
                 events.append({"kind":"verified_result","label":action["label"],"t":confirmed,
                     "resultRect":native(box),"evidence":"Verified live same-product panel change; fraction "+str(round(delta,4))})
                 pending_proof.append((i,before,after))
-            wait(29);enc.wait(timeout=20);require(enc.returncode==0,"Native recording failed")
+            wait(duration-1);enc.wait(timeout=20);require(enc.returncode==0,"Native recording failed")
         finally:
             if enc.poll() is None:enc.terminate();enc.wait(timeout=10)
             save(out/"native-operation-timing.json",operations)
         for i,before,after in pending_proof:
             persist_screen(out/f"{i}-before.png",before);persist_screen(out/f"{i}-after.png",after)
-        verify_live_terminal_frames(source,1800)
+        verify_live_terminal_frames(source,duration*60)
         cap=cv2.VideoCapture(str(source));cap.set(cv2.CAP_PROP_POS_FRAMES,20)
         good,f=cap.read();cap.release()
         require(good and float(np.mean(np.abs(cv2.resize(f,(480,270)).astype(float)-
                    cv2.resize(opening,(480,270)).astype(float))))<5,"Original source viewport mismatch")
         receipt={"source":url,"capture":"Chromium X11 native DPR2 60fps","source_sha256":sha(source),
-            "cursorless":True,"capture_rect":{"width":W*D,"height":H*D},"frameCount":1800,
+            "cursorless":True,"capture_rect":{"width":W*D,"height":H*D},"frameCount":duration*60,
             "events":events,"pointer_samples":pts}
         save(out/"receipt.json",receipt)
         from scripts.verified_capture_receipt_adapter import convert
@@ -885,13 +912,22 @@ def render(folder,source,manifest,plan,calls,progress,audio):
     hero=plan.get("hero_action_id")
     ids=[a["id"] for a in plan["actions"]]
     require(hero in ids and len(set(ids))==len(ids),"Missing valid selected hero action")
-    recorded=json.loads(Path(manifest).read_text())["events"]
+    manifest_data=json.loads(Path(manifest).read_text())
+    recorded=manifest_data["events"]
+    duration=plan["editorial"]["duration_seconds"] if "editorial" in plan else SECONDS
+    require(abs(float(manifest_data["duration"])-duration)<1/60,"Recorded duration differs from editorial intent")
     require(len(recorded)==len(ids),"Verified event sequence differs from selected story")
     hero_index=ids.index(hero)
     # Capture and receipt adapter preserve action order; use only actual verified
     # event times and geometry, never model-supplied coordinates or timestamps.
+    editorial_args=()
+    if "editorial" in plan:
+        editorial_file=private/"editorial-intent.json"
+        customer_editorial.validate(plan["editorial"],ids,hero)
+        save(editorial_file,{"ids":ids,"hero":hero,"editorial":plan["editorial"]})
+        editorial_args=("--editorial-intent",editorial_file)
     run("source_event_director.py","--source",source,"--manifest",manifest,"--out",filmplan,
-        "--hero-event-index",hero_index)
+        "--hero-event-index",hero_index,*editorial_args)
     common=("--video",source,"--manifest",manifest,"--film-plan",filmplan,"--customer-craft-contract")
     run("render_event_video.py",*common,"--validate-only")
     run("render_event_video.py",*common,"--output",master)
@@ -911,10 +947,10 @@ def render(folder,source,manifest,plan,calls,progress,audio):
         from backend.licensed_music_bed import licensed_music_from_env,add_music_to_master
         track=licensed_music_from_env() if audio=="auto" else None
         chosen=track.id if track else None
-        if track:add_music_to_master(master,track,SECONDS,preserve_foley=True)
+        if track:add_music_to_master(master,track,duration,preserve_foley=True)
     from scripts.quality_preview_supervisor import analyze
     q=analyze(master,{"source_path":str(source),"source_sha256":sha(source),
-          "event_manifest_path":str(manifest),"event_manifest_sha256":sha(manifest)},seconds=SECONDS)
+          "event_manifest_path":str(manifest),"event_manifest_sha256":sha(manifest)},seconds=duration)
     from scripts.customer_craft_contract import split_findings
     q["responsibility"]=split_findings(q)
     save(export/"encoded-quality.json",q)
@@ -933,9 +969,11 @@ def render(folder,source,manifest,plan,calls,progress,audio):
         "film_mode":"interactive","observed_actions":len(plan["actions"]),"recorded_source_fps":"60/1","master_fps":60,
         "render_mode":"native-source-event-story","encoded_quality_verdict":q["verdict"],
         "encoded_quality_findings":[x["code"] for x in q["findings"]],"creative_approved":False,
-        "source_duration_seconds":SECONDS,"film_sha256":sha(master),"plan_sha256":sha(filmplan),
+        "source_duration_seconds":duration,"film_sha256":sha(master),"plan_sha256":sha(filmplan),
         "hero_action_id":hero,"hero_event_index":hero_index,
         "director_provider":plan.get("director_provider","gemini"),"director_model":plan.get("director_model"),
+        "editorial_intent":plan.get("editorial"),
+        "editorial_intent_sha256":sha(editorial_file) if editorial_args else None,
         "craft_contract":json.loads((export/"camera-metrics.json").read_text())["customerCraft"],
         "soundtrack":chosen,"encoded_quality_responsibility":q["responsibility"],
         "encoded_editorial":editorial}
