@@ -17,7 +17,7 @@ class CustomerStoryTests(unittest.TestCase):
         def validate(ids):
             return validated_selection(json.dumps({"ids":ids,"story":"A connected workflow"}),self.catalog)
         self.assertEqual([x["id"] for x in validate(["a0","a3","a2","a1"])["actions"]],["a0","a3","a2","a1"])
-        for ids in (["a0","a1","a2"],["a1","a2","a3","a4"],["a0","a1","a1","a2"],["a0","a1","a2","invented"],[x["id"] for x in self.catalog]):
+        for ids in (["a0","a1"],["a1","a2","a3","a4"],["a0","a1","a1","a2"],["a0","a1","a2","invented"],[x["id"] for x in self.catalog]):
             self.assertIsNone(validate(ids))
         self.assertIsNone(validated_selection("not JSON",self.catalog))
 
@@ -75,6 +75,26 @@ def test_balanced_catalog_exposes_distinct_capabilities():
     rows=balanced_menu_catalog(groups,5)
     assert [r['group'] for r in rows]==['Style','Color','Radius','Style','Color']
     assert [r['id'] for r in rows]==['m0','m1','m2','m3','m4']
+
+def test_action_schedule_reserves_final_result_budget():
+    from backend.customer_story import action_start,SECONDS
+    for count in (3,4):
+        times=[action_start(i,count) for i in range(count)]
+        assert times==sorted(set(times))
+        assert times[0]<1 and SECONDS-times[-1]>=10
+
+def test_native_screen_proof_is_raw_until_persisted(tmp_path,monkeypatch):
+    import numpy as np
+    from PIL import Image
+    import backend.customer_story as s
+    monkeypatch.setattr(s,"W",16);monkeypatch.setattr(s,"H",8)
+    monkeypatch.setattr(s.ImageGrab,"grab",lambda **kw:Image.new("RGB",(32,16),(20,80,150)))
+    a=s.screen(":42")
+    assert a.shape==(8,16,3) and a[0,0].tolist()==[150,80,20]
+    assert s.pixels(a) is a
+    s.persist_screen(tmp_path/"proof.png",a)
+    np.testing.assert_array_equal(s.pixels((tmp_path/"proof.png").read_bytes()),a)
+
 
 def test_homepage_entry_candidates_are_observed_safe_and_robots_allowed():
     from backend.customer_story import observed_product_entry_links
