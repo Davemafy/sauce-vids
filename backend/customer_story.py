@@ -15,7 +15,8 @@ import numpy as np
 from PIL import ImageGrab
 from playwright.sync_api import sync_playwright
 from backend.curious_sequence import (discover,exact,open_picker,dismiss_picker,
-    safe_label,panels,shot,arr,assert_local,OPTIONS)
+    safe_label,panels,shot,arr,assert_local,OPTIONS,analytic_name,analytic_option,
+    analytic_triggers,option_items,native_analytic_picker,native_analytic_handle,assert_applied_option)
 from backend.curious_showcase import Conversation,MAX_CALLS
 from backend.curious_interactive import parse
 from backend.product_explorer import CHROME
@@ -293,7 +294,15 @@ def tabs(page):
     rows=[]
     for loc in page.locator('button[role="tab"][aria-selected="false"][aria-controls]:not(:disabled)').all()[:50]:
         if not loc.is_visible():continue
-        if not loc.evaluate("""e=>!e.form&&!e.closest('form,[data-private],[data-secret],[data-sensitive],a')&&!!e.closest('[role=tablist]')&&e.getAttribute('aria-disabled')!=='true'"""):continue
+        # is_visible() includes elements below the fold. A non-scrolling
+        # story must never admit a tab that changes the captured viewport.
+        if not loc.evaluate("""e=>{
+            const r=e.getBoundingClientRect();
+            if(r.width<8||r.height<8||r.x<0||r.y<0||r.right>innerWidth||r.bottom>innerHeight)return false;
+            const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+            return hit&&e.contains(hit)&&!e.form&&!e.closest('form,[data-private],[data-secret],[data-sensitive],a')
+                &&!!e.closest('[role=tablist]')&&e.getAttribute('aria-disabled')!=='true';
+        }"""):continue
         label=" ".join(loc.inner_text().split())
         if safe_label(label):
             handle=loc.element_handle(timeout=1500)
@@ -409,6 +418,14 @@ def apply(page,url,action,picker,click):
         require(len(rows)==1 and label in [x.strip() for x in rows[0].inner_text().splitlines()[1:]],
                 "Applied radio value not observed")
         return picker
+    if action["kind"]=="option" and analytic_name(picker):
+        require(analytic_option(picker,label),"Unrecognized analytical preset")
+        scope=native_analytic_picker(page,url,picker,lambda loc:click(loc,None))
+        click(native_analytic_handle(scope,label,option=True),label)
+        dismiss_picker(page,scope)
+        assert_local(page,url)
+        assert_applied_option(page,label,picker)
+        return picker # the date picker name remains stable across selections
     if action["kind"]=="option":
         scope=open_picker(page,url,picker,lambda loc:click(loc,None))
         loc=exact_observed_option(scope,label)
@@ -435,15 +452,19 @@ def explore(url,out,progress,*,request=None,brief=""):
         url=p.url
         title=p.title()[:140];opening=shot(p)
         (out/"opening.png").write_bytes(opening)
-        radio_catalog=scan_radio_menus(p,url)
-        if len(radio_catalog)<MIN_ACTIONS and os.getenv("SAUCE_PRESENTATION_RADIOS")=="1":
+        # The existing narrowly allowlisted local analytical picker is
+        # more relevant than generic menus (which may include account UI).
+        # Do not open unrelated menus when this supported surface is present.
+        analytical=analytic_triggers(p)
+        radio_catalog=[] if analytical else scan_radio_menus(p,url)
+        if not analytical and len(radio_catalog)<MIN_ACTIONS and os.getenv("SAUCE_PRESENTATION_RADIOS")=="1":
             from backend.presentation_radios import catalog
             radio_catalog=catalog(p)
         if len(radio_catalog)>=MIN_ACTIONS:
             picker=None;catalog=radio_catalog;picker_image=opening
             save(out/"discovery.json",{"picker":picker,"catalog":catalog,"title":title,"kind":"radio-menus"})
         else:
-            pickers=discover(p)
+            pickers=analytical or discover(p)
             if not pickers:
                 save(out/"discovery.json",{"picker_count":0,"tab_count":len(tabs(p))})
                 raise StoryRejected("No supported local product picker")
@@ -456,7 +477,7 @@ def explore(url,out,progress,*,request=None,brief=""):
                 require(row is not None,"No supported model-selected picker")
             else:row=menu[0]
             picker=row["label"]
-            scope=open_picker(p,url,picker);options=discover(p,scope);picker_image=shot(p);dismiss_picker(p,scope)
+            scope=open_picker(p,url,picker);options=option_items(p,scope,picker);picker_image=shot(p);dismiss_picker(p,scope)
             catalog=[{"id":f"a{i}","kind":"option","label":q["label"]} for i,q in enumerate(options)]
             catalog.extend({"id":f"t{i}","kind":"tab","label":l} for i,(l,_) in enumerate(tabs(p)))
             save(out/"discovery.json",{"picker":picker,"catalog":catalog,"title":title})
