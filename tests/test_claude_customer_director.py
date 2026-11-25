@@ -53,3 +53,35 @@ def test_claude_malformed_reply_usage_is_retained(monkeypatch,tmp_path):
     assert raw=='not JSON'
     assert c.data['attempts'][0]['usage']['totalTokenCount']==104
     assert validated_selection(raw,[]) is None
+
+
+def test_motion_direction_is_in_actual_outbound_requests_and_pinned(monkeypatch,tmp_path):
+    import hashlib
+    monkeypatch.setenv("ANTHROPIC_API_KEY","fixture")
+    payloads=[]
+    def request(req,timeout):
+        payloads.append(json.loads(req.data))
+        return io.BytesIO(json.dumps({
+            "content":[{"type":"text","text":"{}"}],"stop_reason":"end_turn",
+            "usage":{"input_tokens":900,"output_tokens":4}}).encode())
+    monkeypatch.setattr(claude,"urlopen",request)
+    c=claude.ClaudeConversation(tmp_path)
+    for phase in ("story-picker","story-from-outcomes","story-editorial"):
+        c.ask("Observed fixture",phase=phase,json_mode=True)
+    assert c.calls==len(payloads)==3
+    for attempt,payload in zip(c.data["attempts"],payloads):
+        assert "Motion-design judgment:" in payload["system"]
+        assert "NOT approved production exemplars" in payload["system"]
+        assert claude.PHASE_GUIDANCE[attempt["phase"]] in payload["system"]
+        assert attempt["creative_prompt_version"]==claude.PROMPT_VERSION
+        assert attempt["creative_prompt_sha256"]==hashlib.sha256(payload["system"].encode()).hexdigest()
+    assert len({x["creative_prompt_sha256"] for x in c.data["attempts"]})==3
+    assert "Current assignment:" not in payloads[-1]["messages"][0]["content"][0]["text"]
+
+
+def test_claude_client_brief_does_not_force_thirty_seconds():
+    from backend.customer_story import director_brief
+    brief=director_brief("Emphasize the result",provider="claude")
+    assert "earns its runtime" in brief and "Emphasize the result" in brief
+    assert "30-second" not in brief
+    assert "30-second" in director_brief()
