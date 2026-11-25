@@ -67,7 +67,7 @@ def worker(job_id):
     except NeedsKey:
         with LOCK:
             JOBS[job_id].update(status="needs_key",stage="needs_key",
-                                error="Configure GEMINI_API_KEY server-side")
+                                error="Configure ANTHROPIC_API_KEY server-side" if os.getenv("SAUCE_CUSTOMER_DIRECTOR_PROVIDER")=="claude" else "Configure GEMINI_API_KEY server-side")
             save(job_id)
     except NeedsAccess as err:
         with LOCK:
@@ -82,11 +82,11 @@ def worker(job_id):
         with LOCK:
             last_stage=JOBS[job_id].get("stage")
             description=str(err)
-            if "Gemini returned HTTP 503" in description:
+            if any(f"{provider} returned HTTP 503" in description for provider in ("Gemini","Claude")):
                 safe_message="The AI direction service is temporarily unavailable. Try again."
-            elif "Gemini returned HTTP 429" in description:
+            elif any(f"{provider} returned HTTP 429" in description for provider in ("Gemini","Claude")):
                 safe_message="The AI service is at its usage limit. Try again later."
-            elif "Gemini returned HTTP 404" in description:
+            elif any(f"{provider} returned HTTP 404" in description for provider in ("Gemini","Claude")):
                 safe_message="The configured AI model is unavailable."
             elif last_stage=="inspecting":
                 safe_message="Sauce could not inspect this public website."
@@ -134,7 +134,7 @@ class Handler(BaseHTTPRequestHandler):
         path=urlsplit(self.path).path
         if path=="/health":
             return self.send_json(200,{"service":"Sauce URL-to-video",
-                "status":"ready","director_key_configured":bool(os.getenv("GEMINI_API_KEY")),
+                "status":"ready","director_key_configured":bool(os.getenv("ANTHROPIC_API_KEY" if os.getenv("SAUCE_CUSTOMER_DIRECTOR_PROVIDER")=="claude" else "GEMINI_API_KEY")),
                 "one_ai_call":True,"export_requires_review":True})
         if not self.require_auth(): return
         match=re.fullmatch(r"/v1/jobs/([a-f0-9]{24})(/preview(?:-clean)?\.mp4)?",path)

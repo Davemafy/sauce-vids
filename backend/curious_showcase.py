@@ -69,6 +69,9 @@ def _media(path, mime, max_bytes):
 
 
 class Conversation:
+    provider_name = "Gemini"
+    model_name = MODEL_NAME
+
     def __init__(self, directory, *, request=None):
         self.directory = Path(directory)
         self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -115,10 +118,13 @@ class Conversation:
         return text[:16000], {**answer.get("usageMetadata", {}),
                               "finishReason": candidate.get("finishReason")}
 
-    def ask(self, prompt, *, media=(), json_mode=False, phase, stop_on_rate_limit=False, response_schema=None):
+    def _models(self):
         preferred = self.data.get("model") or os.getenv("SAUCE_DIRECTOR_MODEL", "gemini-3.1-flash-lite")
         fallback = os.getenv("SAUCE_CURIOUS_FALLBACK_MODEL", "gemini-3-flash-preview")
-        models = [preferred] if self.succeeded else list(dict.fromkeys((preferred, fallback)))
+        return [preferred] if self.succeeded else list(dict.fromkeys((preferred, fallback)))
+
+    def ask(self, prompt, *, media=(), json_mode=False, phase, stop_on_rate_limit=False, response_schema=None):
+        models = self._models()
         contents = [{"role": t["role"], "parts": [{"text": t["text"]}]}
                     for t in self.data["turns"]]
         contents.append({"role": "user", "parts": [{"text": prompt}, *media]})
@@ -128,7 +134,7 @@ class Conversation:
         retry_count=0
         while models:
             model=models.pop(0)
-            if self.calls >= MAX_CALLS or not MODEL_NAME.fullmatch(model):
+            if self.calls >= MAX_CALLS or not self.model_name.fullmatch(model):
                 break
             attempt = {"model": model, "phase": phase, "status": "started"}
             self.data["attempts"].append(attempt)

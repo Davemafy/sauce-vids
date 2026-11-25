@@ -74,6 +74,7 @@ def require_provider_reply(raw,conversation):
     attempts=conversation.data.get("attempts",[])
     last=attempts[-1] if attempts else {}
     status=last.get("http_status")
-    if status in (429,503,404):
-        raise RuntimeError(f"Gemini returned HTTP {status}")
-    raise RuntimeError("Gemini did not return evidence-led direction")
+    provider="Claude" if getattr(conversation,"provider_name",None)=="Claude" else "Gemini"
+    if status in (429,503,404) or (provider=="Claude" and status):
+        raise RuntimeError(f"{provider} returned HTTP {status}")
+    raise RuntimeError(f"{provider} did not return evidence-led direction")

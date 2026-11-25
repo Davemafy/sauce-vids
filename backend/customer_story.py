@@ -71,6 +71,16 @@ def media(blob):
     require(ok,"Evidence encoding failed")
     return {"inline_data":{"mime_type":"image/jpeg","data":base64.b64encode(buf).decode()}}
 
+def claude_schema(conversation, **properties):
+    if getattr(conversation,"provider_name",None)=="Claude":
+        return {"response_schema":{"type":"OBJECT","properties":properties,"required":list(properties)}}
+    return {}
+
+
+def observed_id_schema(choices):
+    return {"type":"STRING","enum":[item["id"] for item in choices],"nullable":True}
+
+
 def story_response_schema(catalog):
     ids=[a["id"] for a in catalog]
     return {"type":"OBJECT","required":["ids","story","hero_action_id"],
@@ -290,7 +300,8 @@ def resolve_public_product_entry(url,out,conv,creative):
             return url
         opening=shot(page)
         raw=conv.ask(creative+" The customer submitted a public homepage. Choose the single observed read-only entry link most likely to open the real functional product, not documentation, pricing or blog. You may choose null if none proves an app entry. We will validate and reopen the actual public route independently. Do not invent an ID or URL. Reply JSON {id:'r0' or null, reason:'...'}. "+json.dumps([{'id':c['id'],'label':c['label'],'path':urlsplit(c['url']).path} for c in candidates]),
-                     media=(media(opening),),json_mode=True,phase='observed-product-entry',stop_on_rate_limit=True)
+                     media=(media(opening),),json_mode=True,phase='observed-product-entry',stop_on_rate_limit=True,
+                     **claude_schema(conv,id=observed_id_schema(candidates),reason={"type":"STRING"}))
         verdict=parse(raw)
         choice=next((c for c in candidates if c['id']==verdict.get('id')),None)
         if choice:
@@ -491,7 +502,17 @@ def apply(page,url,action,picker,click):
 def explore(url,out,progress,*,request=None,brief=""):
     creative=director_brief(brief)
     out.mkdir(mode=0o700,parents=True,exist_ok=False)
-    conv=Conversation(out/"model",request=request)
+    provider=os.getenv("SAUCE_CUSTOMER_DIRECTOR_PROVIDER","gemini")
+    if provider=="claude":
+        from backend.claude_customer_director import ClaudeConversation
+        if request is None and not os.getenv("ANTHROPIC_API_KEY"):
+            from backend.url2video import NeedsKey
+            raise NeedsKey("Configure ANTHROPIC_API_KEY server-side")
+        conv=ClaudeConversation(out/"model",request=request)
+    elif provider=="gemini":
+        conv=Conversation(out/"model",request=request)
+    else:
+        raise ValueError("Unknown customer director provider")
     submitted_url=url
     url=resolve_public_product_entry(url,out,conv,creative)
     # A landing page cannot be silently replaced by a guessed deep route.
@@ -518,8 +539,16 @@ def explore(url,out,progress,*,request=None,brief=""):
                 raise StoryRejected("No supported local product picker")
             menu=[{"id":f"k{i}","label":v["label"]} for i,v in enumerate(pickers)]
             if len(menu)>1:
-                raw=conv.ask(creative+" Choose the observed local picker most relevant to the product's core capability, or null. No guessed action. Return JSON {id}. "+json.dumps(menu),
-                             media=(media(opening),),json_mode=True,phase="story-picker",stop_on_rate_limit=True)
+                picker_task=" Choose the observed local picker most relevant to the product's core capability, or null. No guessed action. Return JSON {id}. "
+                if getattr(conv,"provider_name",None)=="Claude":
+                    picker_task=(" Pick one observed control for Sauce to inspect. This is a discovery hypothesis. "
+                                 "Use the screenshot layout and adjacent labels to distinguish core product controls "
+                                 "from example controls inside a preview. A button label may name the current value "
+                                 "instead of the control's purpose. Sauce will open the picker and verify outcomes "
+                                 "before you make a film decision. Return {id: one listed ID, or null if none is plausible}. ")
+                raw=conv.ask(creative+picker_task+json.dumps(menu),
+                             media=(media(opening),),json_mode=True,phase="story-picker",stop_on_rate_limit=True,
+                             **claude_schema(conv,id=observed_id_schema(menu)))
                 selected=parse(raw).get("id")
                 row=next((x for x in menu if x["id"]==selected),None)
                 require(row is not None,"No supported model-selected picker")
@@ -631,9 +660,13 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
         proofs,images,failure=probe_story(plan,trial)
         if failure is None:
             verdict=parse(conv.ask(creative+" Challenge this connected workflow against all real before/after evidence. Reject repetitive, decorative or navigation-only outcomes. JSON {accept:true/false,reason:'...'}. "+json.dumps(proofs),
-                                  media=tuple(images),json_mode=True,phase="story-editorial",stop_on_rate_limit=True))
+                                  media=tuple(images),json_mode=True,phase="story-editorial",stop_on_rate_limit=True,
+                                  **claude_schema(conv,accept={"type":"BOOLEAN"},reason={"type":"STRING"})))
             save(trial/"editorial.json",verdict)
             require(verdict.get("accept") is True,"Editorial story not admitted")
+            if getattr(conv,"provider_name",None)=="Claude":
+                plan["director_provider"]="claude"
+                plan["director_model"]=conv.data.get("model")
             save(out/"direction.json",plan);save(out/"probe.json",proofs);save(out/"editorial.json",verdict)
             return plan,conv.calls,proofs
         if attempt or conv.calls>MAX_CALLS-2:
@@ -902,6 +935,7 @@ def render(folder,source,manifest,plan,calls,progress,audio):
         "encoded_quality_findings":[x["code"] for x in q["findings"]],"creative_approved":False,
         "source_duration_seconds":SECONDS,"film_sha256":sha(master),"plan_sha256":sha(filmplan),
         "hero_action_id":hero,"hero_event_index":hero_index,
+        "director_provider":plan.get("director_provider","gemini"),"director_model":plan.get("director_model"),
         "craft_contract":json.loads((export/"camera-metrics.json").read_text())["customerCraft"],
         "soundtrack":chosen,"encoded_quality_responsibility":q["responsibility"],
         "encoded_editorial":editorial}
@@ -909,7 +943,7 @@ def render(folder,source,manifest,plan,calls,progress,audio):
     from backend.url_engine import customer_quality_summary
     progress("needs_review")
     return {"status":"needs_review","title":plan["title"],"ai_calls":calls,
-        "direction_source":"gemini-observed-story+deterministic-film-json","capture_mode":"interactive",
+        "direction_source":f"{plan.get('director_provider','gemini')}-observed-story+deterministic-film-json","capture_mode":"interactive",
         "render_mode":release["render_mode"],"preview":"preview.mp4","narrated":False,
         **customer_quality_summary(release)}
 

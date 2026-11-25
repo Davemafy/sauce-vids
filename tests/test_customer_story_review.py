@@ -42,3 +42,27 @@ def test_exact_option_handle_fails_closed():
     handle.inner_text.return_value='Changed'
     with pytest.raises(StoryRejected):exact_observed_option(scope,'Observed')
     with pytest.raises(StoryRejected):exact_observed_option(scope,'Payment')
+
+
+def test_claude_review_uses_timestamped_master_frames(tmp_path,monkeypatch):
+    import cv2
+    import numpy as np
+    f=tmp_path/'master.mp4';s=tmp_path/'source.mp4';m=tmp_path/'manifest.json'
+    writer=cv2.VideoWriter(str(f),cv2.VideoWriter_fourcc(*'mp4v'),10.,(160,90))
+    assert writer.isOpened()
+    for i in range(40):writer.write(np.full((90,160,3),i,dtype=np.uint8))
+    writer.release()
+    s.write_bytes(b'source')
+    m.write_text(json.dumps({'events':[{'start':.5,'t':1.5}]}))
+    c=Mock();c.provider_name='Claude';c.calls=0
+    c.ask.return_value=json.dumps({'decision':'keep','observations':'Visible result at 1.5s'})
+    q={'film_sha256':sha(f),'duration':4,'findings':[],'verdict':'HUMAN_REVIEW_REQUIRED'}
+    a=r.review(f,q,s,m,{'director_provider':'claude'},tmp_path/'review',conversation=c)
+    assert a['review_mode']=='timestamped-master-frames'
+    assert 0.5 in a['review_frame_times'] and 1.5 in a['review_frame_times']
+    assert a['model_reviewed'] and not a['creative_approved']
+    args,kwargs=c.ask.call_args
+    assert 'cannot hear audio' in args[0]
+    assert kwargs['response_schema']['properties']['decision']['enum']==['keep','reject']
+    assert all(x['inline_data']['mime_type']=='image/jpeg' for x in kwargs['media'] if 'inline_data' in x)
+    assert not (tmp_path/'review'/'review.mp4').exists()
