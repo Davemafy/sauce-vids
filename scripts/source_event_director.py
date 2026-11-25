@@ -25,8 +25,10 @@ def direction(video:Path,manifest:Path,hero_event_index=None,editorial_intent=No
     evidence=json.loads(Path(manifest).read_text())
     duration=packet["actualCapture"]["durationSeconds"]
     events=evidence.get("events",[])
-    compact_story=editorial_intent is not None and duration in (16,18,20) and len(events)==2
-    long_story=compact_story or ((25<duration<=30 or (editorial_intent is not None and 22<=duration<=30)) and 3<=len(events)<=6)
+    from customer_editorial import durations
+    compact_story=editorial_intent is not None and len(events)==2 and duration in durations(2)
+    directed_story=editorial_intent is not None and len(events) in (3,4) and duration in durations(len(events))
+    long_story=compact_story or directed_story or (25<duration<=30 and 3<=len(events)<=6)
     short_story=1<=len(events)<=4 and (6<=duration<=25 if len(events)==1 else 8<=duration<=25)
     if (not (long_story or short_story) or
         evidence.get("cursorless") is not True or

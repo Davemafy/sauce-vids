@@ -94,7 +94,11 @@ def hero_motion_budget(zoom,translation,base,output_size):
 
 def verify_plan(plan,manifest,stage,pointer,fps,frames,trim=0):
     events=manifest.get("events",[])
-    compact=len(events)==2 and plan.get("durationSeconds") in (16,18,20)
+    if __package__:
+        from .customer_editorial import durations
+    else:
+        from customer_editorial import durations
+    compact=len(events)==2 and plan.get("durationSeconds") in durations(2)
     if (fps!=60 or not (compact or 3<=len(events)<=6) or trim!=0 or
             frames!=round(plan["durationSeconds"]*60) or
             frames!=round(manifest["duration"]*60) or

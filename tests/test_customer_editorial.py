@@ -177,7 +177,44 @@ def test_compact_verified_camera_and_foley(tmp_path,monkeypatch,duration):
     assert metrics["checkedActions"]==2 and metrics["checkedFrames"]==duration*60
     assert metrics["minimumResultVisible"]==1. and metrics["detailEventIndices"]==[1]
     assert plan["audio"]["eventIndices"]==[0,1]
-    assert editorial.schema(ids)["properties"]["duration_seconds"]["enum"]==[16,18,20]
+    assert editorial.schema(ids)["properties"]["duration_seconds"]["enum"]==[13,16,18,20]
     assert editorial.schedule(a,ids,"a1")[-1]<=duration-9.2+1e-6
     for bad in (15,22,30):
         with pytest.raises(ValueError):editorial.validate({**a,"duration_seconds":bad},ids,"a1")
+
+@pytest.mark.parametrize("count,duration",[(2,13),(3,18)])
+def test_shortest_native_story_preserves_real_action_time_and_reading_hold(tmp_path,monkeypatch,count,duration):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/"scripts"))
+    from source_event_director import direction
+    from spatial_studio_stage import load_studio_stage
+    from customer_craft_contract import verify_plan
+    ids=IDS[:count]
+    a=intent()
+    a["duration_seconds"]=duration
+    a["beats"]=a["beats"][:count]
+    a["beats"][-1]["framing"]="detail"
+    starts=editorial.schedule(a,ids,ids[-1])
+    assert starts==[.8+5*i for i in range(count)]
+    assert duration-starts[-1]==pytest.approx(7.2)
+    # Fixture timings modeled on the observed shadcn v2 capture (3.3-3.53s
+    # from scheduled start to confirmation), not fabricated customer footage.
+    ev=[{"start":t+2.1,"end":t+2.3,"t":t+3.5,"evidence":"fixture",
+         "kind":"click","targetRect":{"x":1260,"y":725,"width":80,"height":50},
+         "resultRect":{"x":544,"y":140,"width":3248,"height":1972}} for t in starts]
+    m={"cursorless":True,"events":ev,"duration":float(duration),
+       "pointer_samples":[{"t":i*.1,"x":1300,"y":750} for i in range(duration*10)]}
+    source=tmp_path/"source.mp4";source.write_bytes(b"fixture")
+    manifest=tmp_path/"manifest.json";manifest.write_text(json.dumps(m))
+    packet={"actualCapture":{"durationSeconds":float(duration),"resolution":[3840,2160],
+            "nativeFps":60,"pointerProvenance":{"recordedPointerTrackAvailable":True}}}
+    with patch("film_director_capabilities.build_contract",return_value=packet):
+        plan=direction(source,manifest,count-1,{"ids":ids,"hero":ids[-1],"editorial":a})
+    stage=load_studio_stage(plan["studioStage"],m,source,(3840,2160),(1920,1080),float(duration),60)
+    ptr=np.asarray([[p["t"],p["x"],p["y"]] for p in m["pointer_samples"]])
+    metrics=verify_plan(plan,m,stage,ptr,60,duration*60)
+    assert metrics["checkedActions"]==count and metrics["minimumResultVisible"]==1.
+    assert duration-ev[-1]["t"]==pytest.approx(3.7)
+    assert plan["audio"]["eventIndices"]==list(range(count))
+    assert editorial.schema(ids)["properties"]["duration_seconds"]["enum"][0]==duration
+    with pytest.raises(ValueError):
+        editorial.validate({**a,"duration_seconds":duration-1},ids,ids[-1])
