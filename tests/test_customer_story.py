@@ -42,3 +42,36 @@ class CustomerStoryTests(unittest.TestCase):
             intersection(a,{"x":1800,"y":20,"width":100,"height":50})
 
 if __name__=="__main__":unittest.main()
+
+def test_creative_brief_preserves_bounded_customer_preferences():
+    from backend.customer_story import director_brief,StoryRejected
+    import pytest
+    assert "world-class motion design studio" in director_brief()
+    assert "focus on visual payoff" in director_brief("focus on visual payoff")
+    with pytest.raises(StoryRejected):director_brief("a"*2001)
+
+def test_observed_redirect_chain_is_scoped(monkeypatch):
+    import backend.customer_story as s
+    monkeypatch.setattr(s,'validate_public_url',lambda u:u)
+    root='https://example.com/themes'
+    end='https://example.com/editor'
+    assert s.admitted_initial_route(root,[root,end],end)
+    for bad in ('https://other.com/editor',end+'?token=x','https://example.com/account','https://example.com/%2e%2e/admin'):
+        assert not s.admitted_initial_route(root,[root,bad],bad)
+    assert not s.admitted_initial_route(root,[end],end)
+
+def test_preview_frame_route_is_narrow_and_robots_checked():
+    from backend.customer_story import preview_frame_allowed
+    from urllib.robotparser import RobotFileParser
+    r=RobotFileParser();r.parse(['User-agent: *','Disallow: /preview/private'])
+    origin='https://example.com/editor'
+    assert preview_frame_allowed('https://example.com/preview/demo',origin,r)
+    for u in ('https://other.com/preview/demo','https://example.com/preview/demo?token=x','https://example.com/preview/private','https://example.com/account'):
+        assert not preview_frame_allowed(u,origin,r)
+
+def test_balanced_catalog_exposes_distinct_capabilities():
+    from backend.customer_story import balanced_menu_catalog
+    groups=[('Style',['A','B','C']),('Color',['D','E','F']),('Radius',['G'])]
+    rows=balanced_menu_catalog(groups,5)
+    assert [r['group'] for r in rows]==['Style','Color','Radius','Style','Color']
+    assert [r['id'] for r in rows]==['m0','m1','m2','m3','m4']
