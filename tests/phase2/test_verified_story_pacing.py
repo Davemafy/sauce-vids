@@ -28,3 +28,15 @@ def test_ready_frame_cannot_remove_recorded_approach():
     points=[{'t':0.,'x':0.,'y':0.},{'t':1.7,'x':20.,'y':0.},{'t':10.,'x':40.,'y':0.},{'t':19.,'x':60.,'y':0.}]
     assert plan_ranges(a,es,points,ready_frame=78)[0][0]==78
     with pytest.raises(ValueError):plan_ranges(a,es,points,ready_frame=105)
+
+
+def test_stationary_approach_gap_requires_real_stationary_pointer_and_pixels():
+    from verified_story_pacing import stationary_approach_gaps
+    a=np.zeros((600,4,4,3),np.uint8)
+    events=[{'start':3.}]
+    p=[{'t':.5,'x':10.,'y':10.},{'t':1.5,'x':10.,'y':10.}]
+    assert stationary_approach_gaps(a,events,p,a)==[(38,82)]
+    source=a.copy();source[60:]=100
+    assert stationary_approach_gaps(a,events,p,source)==[]
+    p[-1]['x']=40.
+    assert stationary_approach_gaps(a,events,p,a)==[]
