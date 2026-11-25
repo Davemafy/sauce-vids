@@ -333,6 +333,39 @@ def dismiss_picker(page,scope):
     scope.wait_for(state='hidden',timeout=3500)
 
 
+def native_analytic_handle(root,label,*,option=False):
+    """Resolve a previously observed exact date preset in one DOM query.
+
+    Discovery still enumerates the live catalog. Replay need not enumerate
+    every sibling twice while the film clock runs. Return a real handle.
+    """
+    selector=OPTIONS if option else ANALYTIC_TRIGGER
+    handle=root.evaluate_handle(r"""(root,args)=>{
+      const matches=[...root.querySelectorAll(args.selector)].filter(e=>{
+        const r=e.getBoundingClientRect(),s=getComputedStyle(e);
+        return r.width>0&&r.height>0&&s.visibility==='visible'&&
+          s.display!=='none'&&+s.opacity>0&&!e.disabled&&
+          !e.closest('form,a[href],[data-private],[data-secret],[data-sensitive]')&&
+          (args.option?(e.matches('button[type=button][role=option]')&&
+           e.innerText.trim().replace(/\s+/g,' ')===args.label):
+           (e.getAttribute('aria-label')===args.label&&e.getAttribute('aria-expanded')!=='true'));
+      });
+      return matches.length===1?matches[0]:null;
+    }""",{"selector":selector,"label":label,"option":option}).as_element()
+    if handle is None:raise ValueError("Observed native analytical target missing or ambiguous")
+    return handle
+
+def native_analytic_picker(page,url,label,click):
+    scope=page.locator('[role=dialog]:visible')
+    if scope.count():raise ValueError("Existing popup obstructs picker")
+    root=page.locator('html').element_handle(timeout=1500)
+    click(native_analytic_handle(root,label))
+    scope.first.wait_for(state="visible",timeout=3500)
+    assert_local(page,url)
+    if scope.count()!=1 or scope.locator('form,input,textarea,a[href],[data-private],[data-secret],[data-sensitive]').count():
+        raise ValueError("Ambiguous or sensitive analytical picker")
+    return scope
+
 def capture_sequence(page,url,sequence,video_begin,pointer,*,baseline=None,compact=False,snapshot=None):
     import time
     native_snapshot=snapshot is not None
@@ -363,16 +396,31 @@ def capture_sequence(page,url,sequence,video_begin,pointer,*,baseline=None,compa
             t=time.monotonic()-video_begin
             loc.click(timeout=3500)
         return t
-    scope=open_picker(page,url,sequence['picker'],click)
+    timing={}
+    began=time.monotonic()
+    fast=native_snapshot and analytic_name(sequence['picker'])
+    if fast:
+        if not analytic_option(sequence['picker'],sequence['option']):
+            raise ValueError("Unrecognized analytical preset")
+        scope=native_analytic_picker(page,url,sequence['picker'],click)
+    else:
+        scope=open_picker(page,url,sequence['picker'],click)
+    timing['open_seconds']=round(time.monotonic()-began,3)
     page.wait_for_timeout(260 if compact else 400)
-    loc=exact(option_items(page,scope,sequence['picker']),sequence['option'])
+    began=time.monotonic()
+    loc=(native_analytic_handle(scope.element_handle(timeout=1500),sequence['option'],option=True)
+         if fast else exact(option_items(page,scope,sequence['picker']),sequence['option']))
+    timing['option_resolution_seconds']=round(time.monotonic()-began,3)
+    began=time.monotonic()
     t=click(loc)
+    timing['option_click_seconds']=round(time.monotonic()-began,3)
     dismiss_picker(page,scope);page.wait_for_timeout(350)
     after,proof,result_t=observed_result(page,url,before,steady,old,video_begin,snapshot=snapshot)
     if analytic_name(sequence['picker']) or 'expected_payoff' in sequence:
         assert_applied_option(page,sequence['option'],sequence['picker'])
     if 'expected_payoff' in sequence:
         require_replay_payoff(proof,sequence['expected_payoff'])
+    proof['native_sequence_timing']=timing
     events=[{'kind':'click','t':t,'label':sequence['option'],'semanticGoal':'Apply observed local preset'},
             {'kind':'state_change','t':result_t,'resultRect':proof['result_rect'],'evidence':'Recorded persistent change in same public product panel'}]
     return events,proof

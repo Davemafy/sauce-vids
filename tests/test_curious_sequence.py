@@ -164,3 +164,43 @@ def test_native_sequence_click_checks_real_target_before_dispatch(monkeypatch,ob
         assert page.mouse.up.call_count==2
         assert events[0]['t']>=0
     loc.click.assert_not_called()
+
+
+def test_fast_analytic_lookup_uses_single_real_handle():
+    from backend.curious_sequence import native_analytic_handle
+    root=Mock()
+    handle=Mock()
+    root.evaluate_handle.return_value.as_element.return_value=handle
+    assert native_analytic_handle(root,'Last 24 hours',option=True) is handle
+    root.evaluate_handle.assert_called_once()
+    args=root.evaluate_handle.call_args.args[1]
+    assert args['label']=='Last 24 hours' and args['option'] is True
+    root.evaluate_handle.return_value.as_element.return_value=None
+    with pytest.raises(ValueError,match='missing or ambiguous'):
+        native_analytic_handle(root,'Last 24 hours',option=True)
+
+
+def test_fast_analytic_replay_uses_exact_observed_option(monkeypatch):
+    import time
+    import backend.curious_sequence as s
+    monkeypatch.setenv('SAUCE_CURIOUS_ANALYTICS','1')
+    page=Mock();scope=Mock();loc=Mock()
+    loc.bounding_box.return_value={'x':10,'y':20,'width':40,'height':30}
+    loc.evaluate.return_value={'x':30,'y':35}
+    monkeypatch.setattr(s,'native_analytic_picker',lambda *args:scope)
+    resolve=Mock(return_value=loc)
+    monkeypatch.setattr(s,'native_analytic_handle',resolve)
+    enumerate_all=Mock(side_effect=AssertionError('Repeated full inventory'))
+    monkeypatch.setattr(s,'option_items',enumerate_all)
+    monkeypatch.setattr(s,'dismiss_picker',Mock())
+    monkeypatch.setattr(s,'assert_applied_option',Mock())
+    monkeypatch.setattr(s,'observed_result',lambda *a,**kw:(b'after',{'result_rect':{'x':0,'y':0,'width':200,'height':100}},2.0))
+    args=(page,'https://example.com/demo',{'picker':'Date range','option':'Last 24 hours'},time.monotonic(),Mock())
+    kwargs={'baseline':(b'before',b'steady',[]),'compact':True,'snapshot':Mock()}
+    events,proof=s.capture_sequence(*args,**kwargs)
+    resolve.assert_called_once_with(scope.element_handle.return_value,'Last 24 hours',option=True)
+    enumerate_all.assert_not_called()
+    assert proof['native_sequence_timing']['option_resolution_seconds']>=0
+    assert events[0]['label']=='Last 24 hours'
+    with pytest.raises(ValueError,match='Unrecognized analytical preset'):
+        s.capture_sequence(page,args[1],{'picker':'Date range','option':'Custom range'},args[3],args[4],**kwargs)
