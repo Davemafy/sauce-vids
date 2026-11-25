@@ -158,3 +158,59 @@ def test_gemini_only_selects_a_real_observed_entry_id(monkeypatch,tmp_path):
     other=tmp_path/'unknown';other.mkdir()
     assert s.resolve_public_product_entry('https://example.com/',other,FakeConv('made_up'),'brief')=='https://example.com/'
     assert json.loads((other/'entry-route.json').read_text())['model_selected'] is False
+
+
+def test_default_product_demo_uses_evidence_first_story_before_legacy_scout(tmp_path,monkeypatch):
+    from backend.url_engine import execute
+    import backend.customer_story as st
+    for key in ("SAUCE_CUSTOMER_STORY_SECONDS","SAUCE_EVIDENCE_FIRST","SAUCE_CUSTOMER_EDITORIAL_DIRECTION"):
+        monkeypatch.delenv(key,raising=False)
+    assert st.evidence_first_enabled() is True
+    assert st.editorial_direction_enabled() is True
+    with patch("backend.url_engine.validate_public_url"),patch("backend.customer_story.execute_story",return_value={"status":"needs_review","creative_approved":False}) as new,patch("backend.url_engine.inspect") as old:
+        result=execute("https://example.com/editor",tmp_path/"job",intent="product_demo")
+    assert result["status"]=="needs_review"
+    assert result["creative_approved"] is False
+    new.assert_called_once()
+    old.assert_not_called()
+    monkeypatch.setenv("SAUCE_EVIDENCE_FIRST","0")
+    monkeypatch.setenv("SAUCE_CUSTOMER_EDITORIAL_DIRECTION","0")
+    assert st.evidence_first_enabled() is False
+    assert st.editorial_direction_enabled() is False
+
+
+def test_multigroup_story_rejects_one_menu_cosmetic_repeat_but_accepts_diverse_evidence():
+    catalog=[{"id":f"x{i}","kind":"option","group":"Palette" if i<4 else "Layout","label":f"Observed {i}"} for i in range(7)]
+    def choose(ids):
+        return validated_selection(json.dumps({"ids":ids,"hero_action_id":ids[0],"story":"Verified workflow"}),catalog)
+    assert choose(["x0","x1","x2"]) is None
+    assert choose(["x0","x2","x4"]) is not None
+    # A genuinely single-capability product remains eligible without fabrication.
+    assert validated_selection(json.dumps({"ids":["x0","x1","x2"],"hero_action_id":"x0","story":"Real palette transformation"}),catalog[:4]) is not None
+
+
+def test_default_evidence_led_editorial_plan_reaches_source_compiler(tmp_path,monkeypatch):
+    from backend.customer_story import investigate_story,customer_editorial
+    for key in ("SAUCE_EVIDENCE_FIRST","SAUCE_CUSTOMER_EDITORIAL_DIRECTION"):
+        monkeypatch.delenv(key,raising=False)
+    catalog=[{"id":"p0","kind":"option","group":"Palette","label":"Deep"},
+             {"id":"l1","kind":"option","group":"Layout","label":"Grid"},
+             {"id":"s2","kind":"option","group":"Spacing","label":"Airy"}]
+    beats=[{"action_id":a["id"],"framing":"detail" if i==1 else "wide" if i==0 else "accent",
+            "pace":"linger" if i==1 else "readable","purpose":"Show verified product change"}
+           for i,a in enumerate(catalog)]
+    raw={"ids":[a["id"] for a in catalog],"hero_action_id":"l1","story":"Compare observed transformations"}
+    class Conversation:
+        provider_name="Gemini"
+        calls=2
+        data={"model":"gemini-3-flash-preview"}
+        def ask(self,prompt,*,response_schema=None,**kwargs):
+            assert response_schema==customer_editorial.schema(["p0","l1","s2"])
+            assert "real before/after evidence" in prompt
+            return json.dumps({"accept":True,"reason":"Verified and distinctive","backdrop":"muted","duration_seconds":30,"beats":beats})
+    with patch("backend.customer_story.probe_story",return_value=([{"id":a["id"],"delta":.12,"result":{}} for a in catalog],[],None)):
+        plan,calls,proofs=investigate_story(json.dumps(raw),catalog,{"url":"https://example.com/editor","title":"Editor","picker":"Palette"},b"",tmp_path,Conversation(),"Client: show the product")
+    assert plan["editorial"]["beats"][1]["framing"]=="detail"
+    assert plan["director_provider"]=="gemini"
+    assert plan["editorial"]["duration_seconds"]==30
+    assert (tmp_path/"direction.json").is_file()
