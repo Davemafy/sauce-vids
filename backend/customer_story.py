@@ -509,6 +509,51 @@ def persist_screen(path,image):
     require(ok,"Native evidence failed")
     Path(path).write_bytes(data.tobytes())
 
+def first_action_anchor(page,plan):
+    """Resolve a real, visible first-action control before filming.
+
+    Never synthesize mouse destination coordinates: the recorded source
+    pointer may approach only a control discovered from the current guarded
+    browser DOM. Failure is a safe wide opening, not a guessed gesture.
+    """
+    first=plan["actions"][0]
+    loc=None
+    if first["kind"]=="option" and first.get("group"):
+        hits=[h for name,h in menu_triggers(page) if name==first["group"]]
+        if len(hits)==1:loc=hits[0]
+    elif first["kind"]=="option":
+        hits=[h for h in discover(page) if h["label"]==plan["picker"]]
+        if len(hits)==1:loc=hits[0]["locator"] if isinstance(hits[0],dict) else None
+    elif first["kind"]=="tab":
+        hits=[h for name,h in tabs(page) if name==first["label"]]
+        if len(hits)==1:loc=hits[0]
+    if loc is None:return None
+    try:
+        if not loc.is_visible():return None
+        rect=loc.bounding_box()
+    except Exception:return None
+    if (not isinstance(rect,dict) or
+            any(not isinstance(rect.get(k),(int,float)) for k in ("x","y","width","height")) or
+            not 0<=rect["x"]<rect["x"]+rect["width"]<=W or
+            not 0<=rect["y"]<rect["y"]+rect["height"]<=H):
+        return None
+    return (rect["x"]+rect["width"]/2,rect["y"]+rect["height"]/2)
+
+
+def opening_pointer_approach(move,wait,anchor,start=(W*.25,H*.2)):
+    """Early real-pointer anticipation, no unobserved clicks or invented UI."""
+    if anchor is None:return 0
+    sx,sy=start;tx,ty=anchor
+    # The actual press still happens later in click(); stop short first.
+    tx=max(16,min(W-16,tx-26))
+    ty=max(16,min(H-16,ty-12))
+    for i in range(1,13):
+        u=i/12;u=u*u*(3-2*u)
+        wait(.12+.58*i/12)
+        move(sx+(tx-sx)*u,sy+(ty-sy)*u)
+    return 12
+
+
 def action_start(index,count):
     """Leave time for an actual final result, including proof acquisition."""
     require(MIN_ACTIONS<=count<=MAX_ACTIONS and 0<=index<count,"Invalid action schedule")
@@ -522,6 +567,9 @@ def capture(url,plan,proofs,out):
         p.mouse.move(W*.25,H*.2);browser_pixels=shot(p);p.wait_for_timeout(1800)
         opening=screen(display)
         require(image_change(arr(browser_pixels),opening)<.035,"Native viewport misaligned")
+        # Observe only: the cursor moves toward this real DOM control once
+        # the native source clock starts. No screenshots during recording.
+        opening_anchor=first_action_anchor(p,plan)
         source=out/"source.mp4";pts=[];events=[];pos=[W*.25,H*.2];pending_proof=[];timings=[]
         with (out/"capture.log").open("ab") as log:
             enc=subprocess.Popen(["ffmpeg","-v","error","-nostdin","-f","x11grab","-draw_mouse","0",
@@ -553,6 +601,7 @@ def capture(url,plan,proofs,out):
         current=plan["picker"]
         try:
             move(*pos)
+            opening_pointer_approach(move,wait,opening_anchor)
             for i,(action,expected) in enumerate(zip(plan["actions"],proofs)):
                 wait(action_start(i,len(proofs)));started=now();before=screen(display);old=panel(p)
                 current=apply(p,url,action,current,click)

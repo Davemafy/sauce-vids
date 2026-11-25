@@ -113,8 +113,11 @@ def direction(video:Path,manifest:Path):
             release=native(min(next_press-.25,peak+1.25))
             if release<=peak+.2:
                 continue
-            camera.extend([whole(peak,1.035,begin),
-                           whole(release,1.,native(max(peak,release-.65)))])
+            # Give actual result pixels a deliberate, readable push after
+            # evidence exists. Keep the entire centered browser visible:
+            # the clearface customer craft contract caps this dolly at 1.075.
+            camera.extend([whole(peak,1.065,begin),
+                           whole(release,1.,native(max(peak,release-.85)))])
         camera.append(whole(duration,1.))
         plan["studioStage"]["camera"]=camera
         plan["studioStage"]["motion"]={"profile":"cinematic","immersive":True,"shutter":0}

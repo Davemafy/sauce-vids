@@ -107,7 +107,14 @@ class Phase2NativeDirectorTests(unittest.TestCase):
                 self.assertEqual(plan["durationSeconds"],30.)
                 self.assertEqual(plan["audio"]["eventIndices"],list(range(6)))
                 self.assertEqual(plan["studioStage"]["payoff"]["mode"],"overview")
-                self.assertTrue(all(k["center"]==[.5,.5] and k["viewScale"]<=1.035 for k in plan["studioStage"]["camera"]))
+                # Physical clearface dolly is capped at 1.075x, with the
+                # entire verified source window still under the craft gate.
+                # A stronger post-proof push may be as high as 1.065x.
+                self.assertTrue(all(k["center"]==[.5,.5] and k["viewScale"]<=1.075
+                                    for k in plan["studioStage"]["camera"]))
+                self.assertTrue(any(k["viewScale"]==1.065 for k in plan["studioStage"]["camera"]))
+                self.assertEqual(plan["studioStage"]["camera"][0]["viewScale"],1.)
+                self.assertEqual(plan["studioStage"]["camera"][-1]["viewScale"],1.)
                 for n in (1,2):
                     manifest.write_text(json.dumps(dict(record,events=record["events"][:n])))
                     with self.assertRaises(ValueError):
