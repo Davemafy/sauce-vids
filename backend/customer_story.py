@@ -789,7 +789,7 @@ def render(folder,source,manifest,plan,calls,progress,audio):
         "render_mode":release["render_mode"],"preview":"preview.mp4","narrated":False,
         **customer_quality_summary(release)}
 
-def execute_story(url,folder,progress,*,audio="auto",brief=""):
+def execute_story_once(url,folder,progress,*,audio="auto",brief=""):
     from backend.url_engine import NoVerifiedProductAction
     if audio=="narrated":raise NoVerifiedProductAction("30s story currently supports clean/auto audio")
     private=folder/"private"/"customer-story"
@@ -802,3 +802,14 @@ def execute_story(url,folder,progress,*,audio="auto",brief=""):
     except StoryRejected as e:
         if private.is_dir():save(private/"rejection.json",{"reason":str(e),"creative_approved":False})
         raise NoVerifiedProductAction(str(e)) from e
+
+def execute_story(url,folder,progress,*,audio="auto",brief=""):
+    baseline=execute_story_once(url,folder,progress,audio=audio,brief=brief)
+    if os.getenv("SAUCE_CUSTOMER_AUTONOMOUS_REVISION")!="1":
+        return baseline
+    from backend.customer_story_revision import revise
+    outcome=revise(url,folder,baseline,progress,audio,brief,execute_story_once)
+    baseline["editorial_revision"]=outcome
+    baseline["ai_calls"]+=outcome.get("ai_calls",0)
+    progress("needs_review")
+    return baseline
