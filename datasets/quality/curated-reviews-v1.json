@@ -1,0 +1,122 @@
+[
+  {
+    "film_sha256": "d260d6b6cf79e853cd02e1b7d910753cae1fb20d56eb12e87b48cc0fb8cf4d6f",
+    "label": "creative_reject",
+    "defects": [
+      "STATIC_OPENING_2S",
+      "REPEATED_OR_STATIC_FRAMES",
+      "REPETITIVE_ACTION_SELECTION",
+      "SMALL_FOCAL_CONTENT"
+    ],
+    "evidence_document": "docs/SAUCE_HANDOFF.md",
+    "workflow": {
+      "submitted_url": "https://tweakcn.com/editor/theme",
+      "entry_url": "https://tweakcn.com/editor/theme",
+      "actions": [
+        "Cyberpunk",
+        "Doom 64",
+        "Kodama Grove",
+        "Northern Lights"
+      ],
+      "verified_result_seconds": [
+        5.298606,
+        11.686912,
+        17.895719,
+        24.247966
+      ],
+      "gemini_successful_calls": 3,
+      "camera_plan_source": "deterministic_film_json"
+    }
+  },
+  {
+    "film_sha256": "f82dfcdc9d8ce95685ade37a966e6198133191de52a7d9cd5cf521d787ec4f5f",
+    "label": "creative_reject",
+    "defects": [
+      "STATIC_OPENING_2S",
+      "REPEATED_OR_STATIC_FRAMES",
+      "REPETITIVE_WIDE_FRAMING",
+      "SMALL_FOCAL_CONTENT"
+    ],
+    "evidence_document": "docs/SAUCE_HANDOFF.md",
+    "workflow": {
+      "submitted_url": "https://tweakcn.com/",
+      "entry_url": "https://tweakcn.com/editor/theme",
+      "actions": [
+        "Modern Minimal",
+        "Cyberpunk",
+        "Doom 64",
+        "Northern Lights",
+        "Application"
+      ],
+      "verified_result_seconds": [
+        5.485785,
+        11.463466,
+        17.013364,
+        23.728444,
+        26.019839
+      ],
+      "gemini_successful_calls": 4,
+      "camera_plan_source": "deterministic_film_json"
+    }
+  },
+  {
+    "film_sha256": "1fb48da0b800eb9e9a8bc70de9c93f15c72fd3fbbb978044ed10d9876337c118",
+    "label": "creative_reject",
+    "defects": [
+      "TRANSIENT_FRAME_REVERSION"
+    ],
+    "evidence_document": "docs/SAUCE_HANDOFF.md"
+  },
+  {
+    "film_sha256": "ef89e0f439f0194d27fc15778b6059ab359cd0feed8353013bd5137aea1bd424",
+    "label": "creative_reject",
+    "defects": [
+      "WASHED_OUT_FRAMES",
+      "NO_AUDIO_STREAM",
+      "SMALL_FOCAL_CONTENT"
+    ],
+    "evidence_document": "docs/SAUCE_HANDOFF.md",
+    "workflow": {
+      "submitted_url": "https://tweakcn.com/editor/theme",
+      "actions": [
+        "Generate",
+        "Dashboard",
+        "Application"
+      ],
+      "gemini_successful_calls": 1,
+      "camera_plan_source": "unknown"
+    }
+  },
+  {
+    "film_sha256": "31946d609992013a6714ac586838616e790f36c948e3050a5513ccd8b2a3ede0",
+    "label": "creative_reject",
+    "defects": [
+      "NO_VERIFIED_PRODUCT_ACTION",
+      "DOCUMENTATION_TOUR"
+    ],
+    "evidence_document": "docs/SAUCE_HANDOFF.md",
+    "workflow": {
+      "submitted_url": "https://reactflow.dev/examples/interaction/drag-and-drop",
+      "actions": [],
+      "gemini_successful_calls": 1,
+      "camera_plan_source": "unknown"
+    }
+  },
+  {
+    "film_sha256": "1d83d9ceaa71763a260744ea2d4b3e90e335934d295d8e4ba5f2204bc59dc0e4",
+    "label": "unapproved_research",
+    "defects": [
+      "ABRUPT_SOURCE_MODAL_REVEAL",
+      "WEAK_ACTION_STORY"
+    ],
+    "evidence_document": "docs/SAUCE_HANDOFF.md",
+    "workflow": {
+      "submitted_url": "https://mantine.dev/core/modal/",
+      "actions": [
+        "Open modal"
+      ],
+      "gemini_successful_calls": 0,
+      "camera_plan_source": "unknown"
+    }
+  }
+]

@@ -1,0 +1,223 @@
+{
+  "cases": [
+    {
+      "failed_action_index": 1,
+      "human_review": "unreviewed",
+      "id": "rejection-1da28cba426d93e9ed3e",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "WEAK_VISUAL_OUTCOME",
+      "rejection_receipt_sha256": "1da28cba426d93e9ed3e09f132a7d67fffeeb18b65e78b47277c445cce04a5f6"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-1e016dbc2be3285f693b",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "STORY_REPLAN_EXHAUSTED",
+      "rejection_receipt_sha256": "1e016dbc2be3285f693b8a6df240ff1c7ad138cc70e3b77b39e122257ecbe58b"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-3fd6c0b17984c157f50f",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "REPLAY_STATE_MISMATCH",
+      "rejection_receipt_sha256": "3fd6c0b17984c157f50fd0132c4ad156525754d09052e542566fe2c9fdd23d66"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-4c3f55f36486f1ed3e22",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "WEAK_VISUAL_OUTCOME",
+      "rejection_receipt_sha256": "4c3f55f36486f1ed3e22e74da0927f285f1ea1f4799d32914cfab972fb2577a6"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-4c3f55f36486f1ed3e22",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "WEAK_VISUAL_OUTCOME",
+      "rejection_receipt_sha256": "4c3f55f36486f1ed3e22e74da0927f285f1ea1f4799d32914cfab972fb2577a6"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-4c3f55f36486f1ed3e22",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "WEAK_VISUAL_OUTCOME",
+      "rejection_receipt_sha256": "4c3f55f36486f1ed3e22e74da0927f285f1ea1f4799d32914cfab972fb2577a6"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-4c3f55f36486f1ed3e22",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "WEAK_VISUAL_OUTCOME",
+      "rejection_receipt_sha256": "4c3f55f36486f1ed3e22e74da0927f285f1ea1f4799d32914cfab972fb2577a6"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-5cae842e4139f6d08286",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "INVALID_MODEL_STORY",
+      "rejection_receipt_sha256": "5cae842e4139f6d08286b0ad6fe5264ab37d9549486a6823e0cd9a1bcadc4c5b"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-5cae842e4139f6d08286",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "INVALID_MODEL_STORY",
+      "rejection_receipt_sha256": "5cae842e4139f6d08286b0ad6fe5264ab37d9549486a6823e0cd9a1bcadc4c5b"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-5cae842e4139f6d08286",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "INVALID_MODEL_STORY",
+      "rejection_receipt_sha256": "5cae842e4139f6d08286b0ad6fe5264ab37d9549486a6823e0cd9a1bcadc4c5b"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-768688ddac4ef01027f3",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "UNCLASSIFIED_REJECTION",
+      "rejection_receipt_sha256": "768688ddac4ef01027f315053caff96956dc875fd87ffe202a175ea71694a03a"
+    },
+    {
+      "failed_action_index": 1,
+      "human_review": "unreviewed",
+      "id": "rejection-8787c781df67b30e6b9c",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "WEAK_VISUAL_OUTCOME",
+      "rejection_receipt_sha256": "8787c781df67b30e6b9cce0c7306ba858ecf84d52d14da5e6a40061a26946b28"
+    },
+    {
+      "failed_action_index": 1,
+      "human_review": "unreviewed",
+      "id": "rejection-b6346ab18deb78c10696",
+      "observed_pixel_delta": 0.02555,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "WEAK_VISUAL_OUTCOME",
+      "rejection_receipt_sha256": "b6346ab18deb78c10696f3e15ecb013f62fe3333f7a3e48f00263adf31645ecd"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-b73ac04802e027f97d38",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "INSUFFICIENT_FINAL_HOLD",
+      "rejection_receipt_sha256": "b73ac04802e027f97d389fac0b4937edd7e2d44160f6883173d8e1ef319ff53e"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-b73ac04802e027f97d38",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "INSUFFICIENT_FINAL_HOLD",
+      "rejection_receipt_sha256": "b73ac04802e027f97d389fac0b4937edd7e2d44160f6883173d8e1ef319ff53e"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-c98b14dc791de8084b2a",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "STORY_REPLAN_EXHAUSTED",
+      "rejection_receipt_sha256": "c98b14dc791de8084b2a583aa9de599675cee5ffd6aea55a64a51d350eb6c951"
+    },
+    {
+      "failed_action_index": 1,
+      "human_review": "unreviewed",
+      "id": "rejection-d270d6175a12a1a7e687",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "WEAK_VISUAL_OUTCOME",
+      "rejection_receipt_sha256": "d270d6175a12a1a7e68791027a8ea148737721f083f6d8012c45f56f8fcd4535"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-e2251ab5b40eed9a0a3a",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "UNCLASSIFIED_REJECTION",
+      "rejection_receipt_sha256": "e2251ab5b40eed9a0a3a32729ee07701d89dc182697d09c148491f2340e8f739"
+    },
+    {
+      "failed_action_index": 1,
+      "human_review": "unreviewed",
+      "id": "rejection-f53074fa2b97e33b1abd",
+      "observed_pixel_delta": 0.003141,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "WEAK_VISUAL_OUTCOME",
+      "rejection_receipt_sha256": "f53074fa2b97e33b1abdb0a2be0a155faaa7f6a0274dd63901f042f997dd5911"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-f6b699e6aec7522aebfb",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "NAVIGATION_MISMATCH",
+      "rejection_receipt_sha256": "f6b699e6aec7522aebfb372362ad10dc78e77ad0247a7b5ce5f2c761f42ee29e"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-f6b699e6aec7522aebfb",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "NAVIGATION_MISMATCH",
+      "rejection_receipt_sha256": "f6b699e6aec7522aebfb372362ad10dc78e77ad0247a7b5ce5f2c761f42ee29e"
+    }
+  ],
+  "policy": {
+    "purpose": "diagnostic_not_training",
+    "raw_reasons_browser_data_prompt_content_exported": false
+  },
+  "schema": "sauce-pre-film-rejections-v1",
+  "summary": {
+    "receipts": 21,
+    "unclassified_reasons": 2
+  }
+}
