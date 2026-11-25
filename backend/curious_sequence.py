@@ -146,7 +146,16 @@ def menu(items):
 MAX_OPTION_PROBES=3
 
 def option_hypotheses(raw,items):
-    ids=parse(raw).get('ids')
+    try:
+        decoded=json.loads(raw)
+    except (ValueError,TypeError):
+        return []
+    if isinstance(decoded,dict):
+        ids=decoded.get('ids')
+    elif isinstance(decoded,list) and len(decoded)<=8 and all(isinstance(row,dict) for row in decoded):
+        # Observed Gemini JSON array-of-hypotheses form, not free-form prose.
+        ids=[row.get('id') for row in decoded]
+    else:return []
     if not isinstance(ids,list):return []
     known={f'c{i}':x['label'] for i,x in enumerate(items)}
     return list(dict.fromkeys(known[x] for x in ids if isinstance(x,str) and x in known))[:MAX_OPTION_PROBES]
@@ -228,7 +237,7 @@ def investigate_sequence(url,report,directory):
             option_menu=menu(opts)
             council=advise(option_menu,path,phase="picker")
             if os.getenv('SAUCE_CURIOUS_OPTION_SEARCH')=='1':
-                raw=conv.ask("Which three observed options might best demonstrate the product's core user job through distinct, readable transformations? We can actually test them separately, so choose contrasting hypotheses instead of guessing a winner. Do not rank only by expected pixel change; prefer causal clarity and recognizable product value. Return JSON with ids (up to three observed c IDs), reason. No invented options. "+json.dumps(option_menu)+council,media=(_media(path/'picker.png','image/png',4*1024*1024),),json_mode=True,phase='option-hypotheses',stop_on_rate_limit=True)
+                raw=conv.ask("Which three observed options might best demonstrate the product's core user job through distinct, readable transformations? We can actually test them separately, so choose contrasting hypotheses instead of guessing a winner. Do not rank only by expected pixel change; prefer causal clarity and recognizable product value. Return one JSON object exactly {\"ids\":[\"c0\",\"c1\"],\"reason\":\"competing hypotheses\"} with zero to three observed IDs. Example IDs are illustrative only. No invented options. "+json.dumps(option_menu)+council,media=(_media(path/'picker.png','image/png',4*1024*1024),),json_mode=True,phase='option-hypotheses',stop_on_rate_limit=True)
                 hypotheses=option_hypotheses(raw,opts)
                 receipt['hypotheses']=hypotheses
                 selected=compare_options(url,label,hypotheses,path,conv,receipt,page.context.browser)

@@ -97,3 +97,12 @@ def test_both_sequence_paths_receive_one_council_challenge(tmp_path,monkeypatch,
     assert 'TEXT-ONLY challenge fixture' in conv.ask.call_args.args[0]
     assert conv.ask.call_count==2
     assert compare.call_count==int(comparative)
+
+def test_option_search_accepts_observed_gemini_array():
+    from backend.curious_sequence import option_hypotheses
+    items=[{'label':str(i)} for i in range(24)]
+    raw='[{"id":"c19","reason":"baseline"},{"id":"c22","reason":"structure"},{"id":"c8","reason":"texture"}]'
+    assert option_hypotheses(raw,items)==['19','22','8']
+    assert option_hypotheses('[{"id":"fake"},{"id":"c2"},{"id":"c2"},{"id":"c3"},{"id":"c4"},{"id":"c5"}]',items)==['2','3','4']
+    assert option_hypotheses('[{"id":"c1"},"c2"]',items)==[]
+    assert option_hypotheses('prose c1',items)==[]
