@@ -141,3 +141,43 @@ def test_opt_in_gemini_can_direct_real_editorial_beats(tmp_path,monkeypatch):
     plan,_,_=story.investigate_story(raw,catalog,{},b"",tmp_path,c,"brief")
     assert plan["editorial"]==a and plan["director_provider"]=="gemini"
     assert c.ask.call_args.kwargs["response_schema"]["properties"]["beats"]["items"]["properties"]["action_id"]["enum"]==IDS
+
+def test_compact_story_two_distinct_capabilities_only(monkeypatch):
+    catalog=[{"id":"a","kind":"option","group":"Style"},{"id":"b","kind":"option","group":"Theme"},{"id":"c","kind":"option","group":"Style"}]
+    def pick(ids):
+        return story.validated_selection(json.dumps({"ids":ids,"story":"Complete transformation","hero_action_id":ids[-1]}),catalog)
+    assert pick(["a","b"]) is not None
+    assert pick(["a","c"]) is None
+    monkeypatch.setenv("SAUCE_EVIDENCE_FIRST","0")
+    assert pick(["a","b"]) is None
+
+@pytest.mark.parametrize("duration",[16,18,20])
+def test_compact_verified_camera_and_foley(tmp_path,monkeypatch,duration):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/"scripts"))
+    from source_event_director import direction
+    from spatial_studio_stage import load_studio_stage
+    from customer_craft_contract import verify_plan
+    ids=["a0","a1"]
+    a=intent();a["duration_seconds"]=duration;a["beats"]=a["beats"][:2]
+    a["beats"][1]["framing"]="detail"
+    ev=[{"start":t,"end":t+.1,"t":t+1.2,"evidence":"verified","kind":"click",
+         "targetRect":{"x":1260,"y":725,"width":80,"height":50},
+         "resultRect":{"x":1000,"y":500,"width":1400,"height":800}} for t in (2.,8.)]
+    m={"cursorless":True,"events":ev,"duration":float(duration),
+       "pointer_samples":[{"t":i*.1,"x":1300,"y":750} for i in range(duration*10)]}
+    source=tmp_path/"source.mp4";source.write_bytes(b"fixture")
+    manifest=tmp_path/"manifest.json";manifest.write_text(json.dumps(m))
+    packet={"actualCapture":{"durationSeconds":float(duration),"resolution":[3840,2160],
+        "nativeFps":60,"pointerProvenance":{"recordedPointerTrackAvailable":True}}}
+    with patch("film_director_capabilities.build_contract",return_value=packet):
+        plan=direction(source,manifest,1,{"ids":ids,"hero":"a1","editorial":a})
+    stage=load_studio_stage(plan["studioStage"],m,source,(3840,2160),(1920,1080),float(duration),60)
+    ptr=np.asarray([[p["t"],p["x"],p["y"]] for p in m["pointer_samples"]])
+    metrics=verify_plan(plan,m,stage,ptr,60,duration*60)
+    assert metrics["checkedActions"]==2 and metrics["checkedFrames"]==duration*60
+    assert metrics["minimumResultVisible"]==1. and metrics["detailEventIndices"]==[1]
+    assert plan["audio"]["eventIndices"]==[0,1]
+    assert editorial.schema(ids)["properties"]["duration_seconds"]["enum"]==[16,18,20]
+    assert editorial.schedule(a,ids,"a1")[-1]<=duration-9.2+1e-6
+    for bad in (15,22,30):
+        with pytest.raises(ValueError):editorial.validate({**a,"duration_seconds":bad},ids,"a1")

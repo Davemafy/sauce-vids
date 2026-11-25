@@ -4,12 +4,16 @@ PACES=("quick","readable","linger")
 TONES=("cobalt","muted","graphite")
 WEIGHTS={"quick":1,"readable":2,"linger":3}
 DURATIONS=(22,26,30)
+COMPACT_DURATIONS=(16,18,20)
+
+def durations(count):
+    return COMPACT_DURATIONS if count==2 else DURATIONS
 
 def schema(ids):
     return {"type":"OBJECT","required":["accept","reason","backdrop","duration_seconds","beats"],
             "properties":{"accept":{"type":"BOOLEAN"},"reason":{"type":"STRING"},
             "backdrop":{"type":"STRING","enum":list(TONES)},
-            "duration_seconds":{"type":"INTEGER","enum":[d for d in DURATIONS if d>=.8+5*(len(ids)-1)+9.2]},
+            "duration_seconds":{"type":"INTEGER","enum":[d for d in durations(len(ids)) if d>=.8+5*(len(ids)-1)+9.2]},
             "beats":{"type":"ARRAY","items":{"type":"OBJECT",
              "required":["action_id","framing","pace","purpose"],
              "properties":{"action_id":{"type":"STRING","enum":list(ids)},
@@ -22,10 +26,10 @@ def validate(data,ids,hero):
     tone=data["backdrop"];beats=data["beats"]
     if not isinstance(tone,str) or tone not in TONES or not isinstance(beats,list) or len(beats)!=len(ids):
         raise ValueError("Invalid editorial backdrop or beat count")
-    if len(ids) not in (3,4) or any(not isinstance(i,str) for i in ids) or len(set(ids))!=len(ids) or hero not in ids:
+    if len(ids) not in (2,3,4) or any(not isinstance(i,str) for i in ids) or len(set(ids))!=len(ids) or hero not in ids:
         raise ValueError("Invalid verified action sequence")
     duration=data["duration_seconds"]
-    if type(duration) is not int or duration not in DURATIONS or duration<.8+5*(len(ids)-1)+9.2:
+    if type(duration) is not int or duration not in durations(len(ids)) or duration<.8+5*(len(ids)-1)+9.2:
         raise ValueError("Editorial duration cannot accommodate verified actions")
     for beat,action in zip(beats,ids):
         if (not isinstance(beat,dict) or set(beat)!={"action_id","framing","pace","purpose"}
