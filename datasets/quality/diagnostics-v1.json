@@ -3,9 +3,150 @@
   "cases": [
     {
       "evidence": {
+        "plan_sha256_claim": "e4f3649908e4f3be9c6d9634867331638948bcea1e6d36bbb36e9fa013dfe5cd",
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "c192a45253b1397c51058f359d53a1e9d2bfb0daf381b8d6a235cd83d88da561",
+        "release_film_binding": "sha_match",
+        "source_sha256_claim": "3ecd45f4ab93a1ab9bf87e94ca9a8bd968e8587c22ed0d0d0efa643a96e409ff",
+        "source_sha_check": "sha_match"
+      },
+      "film_sha256": "00b57007b8c7acb1b4f98102aacaa130b231337c14054713b424703c399c7b93",
+      "id": "film-00b57007b8c7acb1b4f9",
+      "media": {
+        "duration_seconds_from_qa": 30.0,
+        "observed_action_count_from_release": 4
+      },
+      "quality": {
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.075
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.652
+            }
+          }
+        ],
+        "human_premium_label": "unreviewed",
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
+        "premium_reference_eligible": false
+      },
+      "safe_camera_plan": {
+        "camera_keyframes": [
+          {
+            "at": 0,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "viewScale": 1.0
+          },
+          {
+            "at": 5.016666667,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 4.566666667,
+            "viewScale": 1.035
+          },
+          {
+            "at": 6.116666667,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 5.266666667,
+            "viewScale": 1.0
+          },
+          {
+            "at": 11.383333333,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 10.933333333,
+            "viewScale": 1.035
+          },
+          {
+            "at": 12.483333333,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 11.633333333,
+            "viewScale": 1.0
+          },
+          {
+            "at": 17.833333333,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 17.383333333,
+            "viewScale": 1.035
+          },
+          {
+            "at": 18.933333333,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 18.083333333,
+            "viewScale": 1.0
+          },
+          {
+            "at": 25.983333333,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 23.816666667,
+            "viewScale": 1.259
+          },
+          {
+            "at": 29.75,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 27.6,
+            "viewScale": 1.0
+          },
+          {
+            "at": 30.0,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "viewScale": 1.0
+          }
+        ],
+        "hash_check": "sha_match",
+        "stage_type": "whole_window_source_bound"
+      }
+    },
+    {
+      "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "unbound",
+        "qa_report_sha256": "31def4e2fbc880dd77bb444f3ee8b866b4f1ecef86131f4b771eb303e183628f",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -29,8 +170,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "36823ab0f119be8f95ec751dc0f91d01a40b9f17744d4d7e7c2bd7709b0ca27d",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "048c8db526538d9d5b715ea0efd09dc3d15093a00fedf3d62e835f65eb936068",
       "id": "film-048c8db526538d9d5b71",
@@ -73,8 +214,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "87c5f8d680024ae4a15b5deaff6c39919593ef8d71d6ec796fc64e43b25d1493",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "4df260bc76d292a5490eadef28592e813c4c62952426882cbd6564e15b9aa710",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "0d4a60586c44ad1d7ed0f9576199c28a3a51d9a76ad0b7bdf433308119dea2cc",
       "id": "film-0d4a60586c44ad1d7ed0",
@@ -110,8 +251,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "2aefe64b8afa224178cec0635096f000dc2577b9f7b3d70274db63a50b3cc3b7",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "9053d27da817a9a2ecacbc6f02f30e3ddfc7c6929fcd9af12d311f106f784461",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "0d4c8f3d7d141a0a486e817e23992fec79333402fbe0fcd00d307d6524cddd18",
       "id": "film-0d4c8f3d7d141a0a486e",
@@ -150,8 +291,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "0841b63349b1fee255223fd08eac4a49499846d6e3a357ee15546e18061905c8",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "40dacd0fe5f2739b48e1974b8c76be7c83bfdc4b26859e6f388e30885a62ffd9",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "0d773fba463c2b3abd3a308448902c25df369aef958cb614b6c4ad135355e3a1",
       "id": "film-0d773fba463c2b3abd3a",
@@ -169,8 +310,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "cb20c128b3e47dbc0d50382a3b35b0b6d781555e5c9af8a5bd7f7d224e0b8d54",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -178,21 +319,29 @@
       "film_sha256": "0ef5718c6b709e3b1cc71aeac605f8e6c91ecfaeafe91fe9dbcf644113a4ae2a",
       "id": "film-0ef5718c6b709e3b1cc7",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 10.216667,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.906
+            }
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "sha_mismatch",
-        "qa_report_sha256": "04723afd15e2b8fa267454d047aa277a81df2e237526c8ccf241c90510c86a96",
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "a2ae9e5a3c92a86d44580689760c94c9a15151ee5c8f90fdcd12d220441b299c",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -206,7 +355,7 @@
       "quality": {
         "findings": [],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
         "premium_reference_eligible": false
       }
     },
@@ -216,8 +365,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "3bc4a6038e77ef985497e24ae774ac7e2362a07f79a398b6ca260ce4eaf03440",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "406558293c23ebeda073983227b2c4d5ef39755b621e91ac22e3a7e009a7a342",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "11528684eb61eae1a6ce8cec79786db46d7d84cc0993ba12d968c1c01eca4733",
       "id": "film-11528684eb61eae1a6ce",
@@ -255,8 +404,45 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "3c2843ef3a1b21f1f63673b43c257c3556332586ea46ebc280fba59cbaa45671",
+        "release_film_binding": "not_claimed",
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
+      },
+      "film_sha256": "13e0f49ef8538d40e8b621eeca029ceec83e9e104a9392913735c8225c23c4b1",
+      "id": "film-13e0f49ef8538d40e8b6",
+      "media": {
+        "duration_seconds_from_qa": 30.0,
+        "observed_action_count_from_release": null
+      },
+      "quality": {
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.048
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.87
+            }
+          }
+        ],
+        "human_premium_label": "unreviewed",
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
+        "premium_reference_eligible": false
+      }
+    },
+    {
+      "evidence": {
+        "plan_sha256_claim": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "2d48183c448d5a8e4042a98bce7a02ba695c0e3d180fc73ecb5a7e4dfd75a39c",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -264,13 +450,28 @@
       "film_sha256": "1d32bbadc9d73592e1cbd0481b434a8e31285b248544c42d1115a25c45aac4f8",
       "id": "film-1d32bbadc9d73592e1cb",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 10.216667,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.075
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.891
+            }
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
@@ -289,8 +490,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "95c09bd1ce7202db0c6227471ba9a1f9e24e6881ef5b0d960937f398990d089f",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "163b58704d2dd9d9ae45911b4c8cc96e63ab456f67fe20788dd0d0d7471b13a0",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "1d83d9ceaa71763a260744ea2d4b3e90e335934d295d8e4ba5f2204bc59dc0e4",
       "id": "film-1d83d9ceaa71763a2607",
@@ -316,8 +517,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "1b8f3444ac4731ac9eb5a0dcdcac152b9abe1a65794675ac4a2ac711481a305e",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "ea290f3434b9654d1e9cb984e25b1bd1fa687cafc5da0c7401c89d8d83fb0639",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "1fb48da0b800eb9e9a8bc70de9c93f15c72fd3fbbb978044ed10d9876337c118",
       "id": "film-1fb48da0b800eb9e9a8b",
@@ -342,8 +543,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "2bc5c5d36f809acdfcf10e3c507a2a6f2749c856c031cbb6470ad0be9f384907",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "225c38f1b7c6ea019cd648999580fecae3f59c0053093f43857ed7d53734868a",
       "id": "film-225c38f1b7c6ea019cd6",
@@ -386,8 +587,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "0c54f1f27534aab540d1cd596544edfbd1ff65b072a1cdd21d5ac3a3d8e156f0",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "236d2152655654db5b6199fbe75013d0786e3069c2baffe594f8da81ad7dfaa5",
       "id": "film-236d2152655654db5b61",
@@ -404,9 +605,150 @@
     },
     {
       "evidence": {
+        "plan_sha256_claim": "ed01333b57a256eabc094f772a14c51d904f4077aa8b9e877bd2c2578484b853",
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "5f253bf0c013385e7ba4c74104b7d4f92942c73b868a6b21bd6278f073c6aa17",
+        "release_film_binding": "sha_match",
+        "source_sha256_claim": "71120b019bae72b379a4dd33adf87c1183d3c9e2bfee9508c7eda2adb263056a",
+        "source_sha_check": "sha_match"
+      },
+      "film_sha256": "2748deda856fc7beaad6ac918c9f64fb2e605ac9adc8b33be34f8d38b09d0489",
+      "id": "film-2748deda856fc7beaad6",
+      "media": {
+        "duration_seconds_from_qa": 30.0,
+        "observed_action_count_from_release": 4
+      },
+      "quality": {
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.074
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.666
+            }
+          }
+        ],
+        "human_premium_label": "unreviewed",
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
+        "premium_reference_eligible": false
+      },
+      "safe_camera_plan": {
+        "camera_keyframes": [
+          {
+            "at": 0,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "viewScale": 1.0
+          },
+          {
+            "at": 5.05,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 4.6,
+            "viewScale": 1.035
+          },
+          {
+            "at": 6.15,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 5.3,
+            "viewScale": 1.0
+          },
+          {
+            "at": 11.366666667,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 10.916666667,
+            "viewScale": 1.035
+          },
+          {
+            "at": 12.466666667,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 11.616666667,
+            "viewScale": 1.0
+          },
+          {
+            "at": 17.816666667,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 17.366666667,
+            "viewScale": 1.035
+          },
+          {
+            "at": 18.916666667,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 18.066666667,
+            "viewScale": 1.0
+          },
+          {
+            "at": 25.833333333,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 23.683333333,
+            "viewScale": 1.259
+          },
+          {
+            "at": 29.75,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 27.6,
+            "viewScale": 1.0
+          },
+          {
+            "at": 30.0,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "viewScale": 1.0
+          }
+        ],
+        "hash_check": "sha_match",
+        "stage_type": "whole_window_source_bound"
+      }
+    },
+    {
+      "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "568e6a990a7f2f3e02ad867a7893c24523ae4a71e300e2322a423bb79b02db03",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -414,21 +756,36 @@
       "film_sha256": "29421d73ad23ce4f71870e9920da0e2ebc48b29dee3043fa85a38f483442079b",
       "id": "film-29421d73ad23ce4f7187",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 10.216667,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.075
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.941
+            }
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "f9bcf3a4efac34a92f58b4f9952be8f3b183ae7698079c5c3fa8f734e757f990",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -436,13 +793,65 @@
       "film_sha256": "2a28d3da1ec6be9ca51e942ce7e86a2919060c8d383926175e615edbc5796533",
       "id": "film-2a28d3da1ec6be9ca51e",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 10.216667,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.075
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.772
+            }
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
+        "premium_reference_eligible": false
+      }
+    },
+    {
+      "evidence": {
+        "plan_sha256_claim": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "cb2b52f8e4a32260b3bd06b70fc9b007dd29c6a0d66a765dc47cb41e7b3aaa30",
+        "release_film_binding": "not_claimed",
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
+      },
+      "film_sha256": "2ae26df737ef3af0095f2aed1514cd9070396754a53112a30d5e3fc248203509",
+      "id": "film-2ae26df737ef3af0095f",
+      "media": {
+        "duration_seconds_from_qa": 30.0,
+        "observed_action_count_from_release": null
+      },
+      "quality": {
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.048
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.779
+            }
+          }
+        ],
+        "human_premium_label": "unreviewed",
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
         "premium_reference_eligible": false
       }
     },
@@ -474,8 +883,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "0b8af795102d1105160f060c2ce2c51faf25fd8bab2be13c926f6abef11c3d3a",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "2cfd769550c240b8839343508f063da4383034e5942828428474ceb39f9c71a8",
       "id": "film-2cfd769550c240b88393",
@@ -503,8 +912,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "ce30b6acee758d0b28dde28c95a0c1c1249dbbe392f25dd4156df0d5f36f53c1",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "31946d609992013a6714ac586838616e790f36c948e3050a5513ccd8b2a3ede0",
       "id": "film-31946d609992013a6714",
@@ -527,8 +936,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "bb7c6ba61af9aacaeebe66ae490cd131a874d3dc12e692aebd67708d08bc5ceb",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -536,14 +945,128 @@
       "film_sha256": "31af8d09b90bb18da428a5d733f5857cb2e65c9e7369a5a36db41cc6dc33f377",
       "id": "film-31af8d09b90bb18da428",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 8.2,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.01
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.778
+            }
+          },
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
+      }
+    },
+    {
+      "evidence": {
+        "plan_sha256_claim": "b92cbf942da1d841352ca20a81faff38c5c28c6b408cbf8217f9dcff114fbc09",
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "e456e235fe5474229e14c18df7b7e057aae193fd2e6f7672e1d8d95bad9246c1",
+        "release_film_binding": "sha_match",
+        "source_sha256_claim": "d171210930c84b42f8ffa1ab5fb957ef27105cc9cc58dc0c9915cc3d71dd041f",
+        "source_sha_check": "sha_match"
+      },
+      "film_sha256": "396a4003b70d889e59bc75886688760f2aa413c7adb9f3365a4d39ab73af3e66",
+      "id": "film-396a4003b70d889e59bc",
+      "media": {
+        "duration_seconds_from_qa": 11.0,
+        "observed_action_count_from_release": 1
+      },
+      "quality": {
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.042
+            }
+          }
+        ],
+        "human_premium_label": "unreviewed",
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
+        "premium_reference_eligible": false
+      },
+      "safe_camera_plan": {
+        "camera_keyframes": [
+          {
+            "at": 0,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "viewScale": 1.0
+          },
+          {
+            "at": 3.65,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 2.933333333,
+            "viewScale": 1.035
+          },
+          {
+            "at": 6.65,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 3.65,
+            "viewScale": 1.0
+          },
+          {
+            "at": 8.15,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 6.65,
+            "viewScale": 1.214
+          },
+          {
+            "at": 10.75,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 9.25,
+            "viewScale": 1.0
+          },
+          {
+            "at": 11.0,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "viewScale": 1.0
+          }
+        ],
+        "hash_check": "sha_match",
+        "stage_type": "whole_window_source_bound"
       }
     },
     {
@@ -552,7 +1075,7 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "863ff4363112677e9f92e32d2c0e92b3f9f81fb8c0743459c83ca82a063a3b71",
+        "source_sha256_claim": null,
         "source_sha_check": "not_checked"
       },
       "film_sha256": "3ab5450381b9c08396ad000429a2bc73e9a468594de08020aac2d2b51aab7fad",
@@ -574,8 +1097,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "1d45eeed71ce5d1634e913070da1cc180d6a3ed41da00ede4145cc7dbf09a01e",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "4ebebdbd48a3491174cbdfc545537861dc1f5de5b2d4dfc7742ee51adb97d8b4",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "3ca716b0b0098e6fd093820f0ef1ce4e531e4bd64ed909a073f995d95a3ff16e",
       "id": "film-3ca716b0b0098e6fd093",
@@ -628,8 +1151,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "ebbb9cd74c0e9605679dd015a782bd77f8d3f31c9bb6ebd9fcbc7902739c909e",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -637,13 +1160,33 @@
       "film_sha256": "4113336a242028546ed264fd339d7d4468c19fb9bd4a4688d5af7c1993ba3650",
       "id": "film-4113336a242028546ed2",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 9.6,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.0
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.632
+            }
+          },
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
@@ -653,8 +1196,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "94bda5cac13b9b0e5562756d5eca4f30bc3a10391103b2a6e554003bb607ae58",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "ac6ba65d2b974f74d86627288154b64831a222a9eba88c6c5f4d9fdd201bedc2",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "42de097bac8f8bc6242320b3f262e5470b9b66846ed0ce5eb4e6e9d25b21a64f",
       "id": "film-42de097bac8f8bc62423",
@@ -672,8 +1215,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "d26b02e247da6846febc18b94cb34f31d2aa39e5f7fced2d6c1e55c9d48482f0",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -681,21 +1224,21 @@
       "film_sha256": "43addda4b7de183af8c742a8bc74e92eaefc5ba35df464b02905d076e8e9b7ed",
       "id": "film-43addda4b7de183af8c7",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 9.0,
         "observed_action_count_from_release": null
       },
       "quality": {
         "findings": [],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
         "premium_reference_eligible": false
       }
     },
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "0fd13512e4ab3c48ff42fb2a2d42fc813d5d2ac227c20956c1847960540b52f9",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -703,13 +1246,33 @@
       "film_sha256": "44b9013a84c2687c0117e88f6a65d73af17c28873e3ad4d72df199ec56a4f9a0",
       "id": "film-44b9013a84c2687c0117",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 9.266667,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.002
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.696
+            }
+          },
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
@@ -719,8 +1282,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "eaa833b78800b0a4ba2e2ddb50170131ec4bb7eca841291bc319287d77c59cab",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "8621009cde90b9b4f8ce9c2eb86d1e939c467fbc453bd43c91901b4f612cdeb8",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "45eca7be4d3124139428d323e8651ff57efb0fa25fe608fc341e4542cf890c73",
       "id": "film-45eca7be4d3124139428",
@@ -738,8 +1301,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "e47af1d62334e8024f3aa2d3d18494a66b1a91e0bbe2d5370cd8fb9476640278",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -747,13 +1310,13 @@
       "film_sha256": "465038f613bdf793c258bcf954d02b2c699ab67ba37040a616000d41159eef1f",
       "id": "film-465038f613bdf793c258",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 9.0,
         "observed_action_count_from_release": null
       },
       "quality": {
         "findings": [],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
         "premium_reference_eligible": false
       }
     },
@@ -763,8 +1326,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "e8c2acae782bfa75a69ed839d381ed8bf92bdcdc91b29516c3352c61c9fb0ae7",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "3ec708469c8dccced7fbdc7de2e2665845c6c3f54123752d10c59214d8d18331",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "4c25f45bf9b5ed179c38552fd4d61cca2a376697358f8d54f61ff1bedba7c5b6",
       "id": "film-4c25f45bf9b5ed179c38",
@@ -827,8 +1390,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "79d515c9c589fcd054e61e2a0a9775283a224946320682ac36c36fd0b070a81f",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "4d84aa630c9680c58b6641699e5a618ae4abdc7013ca9c3b2911d3b6f4042177",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "51fdee9d247331b179b1a699bb696f6bdb106013407d1d57420c049d3ae038e1",
       "id": "film-51fdee9d247331b179b1",
@@ -869,7 +1432,7 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "f6d63fefdfb7ffd94693fc43f66918701fe362071390fb5296604b19640f321a",
+        "source_sha256_claim": null,
         "source_sha_check": "not_checked"
       },
       "film_sha256": "52b3c3e7ad5e8ff24602566c480d32f791971153ad50cadea031c39c8b29534f",
@@ -888,8 +1451,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "fe574dd781b47655789827780cc671b1ab2b6da4bc068953ac9b49b2c0c277e2",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -897,21 +1460,41 @@
       "film_sha256": "565cd55d535222e2d8dea744c316714772eb828c1dc17720d32386373fe3f2b5",
       "id": "film-565cd55d535222e2d8de",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 9.6,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.0
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.642
+            }
+          },
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "9f7e7f7f8b580b09191bc9ceb2f880b5fd4dc3cdde9e0d9b7e057ffd450750dd",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -919,21 +1502,27 @@
       "film_sha256": "58c7373b8283897736061ce680e53f9dafeb81931a0f8053f57f125c9e78c766",
       "id": "film-58c7373b828389773606",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 12.75,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "unbound",
+        "qa_report_sha256": "d0aab0cf96af42c5b6b582dc63a5e32cf90d10b0fd74fc2ca18ba172ab05ae34",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -957,7 +1546,7 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "5875d8431e4bc1284f0ecd3a3dd83d038deb9b095dab939d42aea19a23e5211c",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "eac5ac32b5ba41106b1c0b749353ee3eb380caa00b0053929ccd001e15790d75",
+        "source_sha256_claim": null,
         "source_sha_check": "not_checked"
       },
       "film_sha256": "5be31c73c2e04ed567b6fdb33d1d81c5f2e1fee528b7616eeb0512e165892742",
@@ -999,8 +1588,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "b173035df060e997431330e7c7df452ee01f96e2d758fc96e7e45b218b59dad0",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "5d7b303b2d62f9a858e826809a0d5c887a1eac161174314c776235c8ee4e554f",
       "id": "film-5d7b303b2d62f9a858e8",
@@ -1018,8 +1607,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "sha_mismatch",
-        "qa_report_sha256": "761b3ba0fbc07bfbea9112ef44913a2e300b022f624dabf3bf9d46cfdd208102",
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "2509ba8385f3bfcf57f8b2f2a54e526d46951ae1a901c013c3c304e03b10e786",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -1027,13 +1616,13 @@
       "film_sha256": "602c150cefa8152eb62da872d7ef4c975d766eba7a7097b333439f2438f35f9b",
       "id": "film-602c150cefa8152eb62d",
       "media": {
-        "duration_seconds_from_qa": 16.0,
+        "duration_seconds_from_qa": 9.0,
         "observed_action_count_from_release": null
       },
       "quality": {
         "findings": [],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
         "premium_reference_eligible": false
       }
     },
@@ -1065,8 +1654,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "3a26821bda660c2fb8955d67d40c29dd841d853fe6b66334ddfae39fdab82e71",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "6788336118cebe27e53b9c16e5ab990a829933867e4f4d2ad89bde10ab84e7b6",
       "id": "film-6788336118cebe27e53b",
@@ -1106,8 +1695,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "c6181863a118ec6a3d641ed72b385c662c2bb01991c2376c2af28a1baae60e1b",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -1115,13 +1704,19 @@
       "film_sha256": "6e874c83fff0dc1e09f88809995fd942509d7c6bf744a0e59b8f2acfe69b4c26",
       "id": "film-6e874c83fff0dc1e09f8",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 12.75,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
@@ -1131,8 +1726,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "0cbd0fea2e93fdb64817cda68ffbc1c147c1bb78db1b4927437b9640f8db26da",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "6f51470bdb18a425ce484b4a74e9b35b5dc9b461ba4fe811dc59e9db19ee0f82",
       "id": "film-6f51470bdb18a425ce48",
@@ -1153,7 +1748,7 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "fc7b03e6220f283761f80f9f9d93362a948f7b555ccf71ec57adf9339a796237",
+        "source_sha256_claim": null,
         "source_sha_check": "not_checked"
       },
       "film_sha256": "6fa6c42faf337ec0e1e1cd79b71bfd54a660aca5d044a6b1f911775c71a65f17",
@@ -1172,8 +1767,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "04723afd15e2b8fa267454d047aa277a81df2e237526c8ccf241c90510c86a96",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -1181,13 +1776,21 @@
       "film_sha256": "703858f161457747a7b3003fc85b2400e9536c3aa5456811bf0f39f90310f58d",
       "id": "film-703858f161457747a7b3",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 10.216667,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 1.294
+            }
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
@@ -1197,8 +1800,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "5e7a7a6d35c03d80928ac7be0e738341c6b1de28ddff5374f6c7492fe7ac0eb2",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "7110a4fef07335043a48594d43972826516b02c4e77ac087f4e8731d14cca20c",
       "id": "film-7110a4fef07335043a48",
@@ -1385,8 +1988,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "e1b6ddb50361f923c0750a295ae869d2cdf79e8d2aa3c3eae444b005b19c930c",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "733d81cdcc15901c804f7d18ea794c32b5f4cefb19d85883bff62c8f94d988e2",
       "id": "film-733d81cdcc15901c804f",
@@ -1407,8 +2010,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "d9866665a9c086e0476f9833c30354dfb0a817d56fcdc3401ec5f6f602cbf86b",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "2d9bb640f5ad700edbaa2ec142ba036664358f0470bdc9fe0848a7c14157a31c",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "7347aed589f4bb7e3bec82434e79fca3e73ba6363c36ee14b8d220605975a0bc",
       "id": "film-7347aed589f4bb7e3bec",
@@ -1446,8 +2049,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "761b3ba0fbc07bfbea9112ef44913a2e300b022f624dabf3bf9d46cfdd208102",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -1455,13 +2058,70 @@
       "film_sha256": "748a1b991cc637faa4ce04b2f96a8e1fb7484e3b3cb02c874f9cba0edf293ee5",
       "id": "film-748a1b991cc637faa4ce",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 16.0,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.212
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.772
+            }
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
+        "premium_reference_eligible": false
+      }
+    },
+    {
+      "evidence": {
+        "plan_sha256_claim": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "f274b24a763e66cdecef4b5a80fb603a537e0594df6ff0d3a8cf7b5c1ff2395c",
+        "release_film_binding": "not_claimed",
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
+      },
+      "film_sha256": "749d68503a7482ad270335f9bc96a8998a8c55541674b6c6a60ce97e3653e055",
+      "id": "film-749d68503a7482ad2703",
+      "media": {
+        "duration_seconds_from_qa": 6.983333,
+        "observed_action_count_from_release": null
+      },
+      "quality": {
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.017
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.754
+            }
+          },
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
+        "human_premium_label": "unreviewed",
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
@@ -1473,28 +2133,6 @@
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
-      },
-      "film_sha256": "749d68503a7482ad270335f9bc96a8998a8c55541674b6c6a60ce97e3653e055",
-      "id": "film-749d68503a7482ad2703",
-      "media": {
-        "duration_seconds_from_qa": null,
-        "observed_action_count_from_release": null
-      },
-      "quality": {
-        "findings": [],
-        "human_premium_label": "unreviewed",
-        "machine_verdict": null,
-        "premium_reference_eligible": false
-      }
-    },
-    {
-      "evidence": {
-        "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
-        "release_film_binding": "not_claimed",
-        "source_sha256_claim": "ceefd3616aa56b0a768af6c5182958699616be8310c090567e2cb20c93765f77",
-        "source_sha_check": "sha_match"
       },
       "film_sha256": "772e33dbf71f2ab6a2880aac7fd538124884bf2aad21dd5f14b10acb859cda0e",
       "id": "film-772e33dbf71f2ab6a288",
@@ -1512,8 +2150,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "unbound",
+        "qa_report_sha256": "0a510d9ca965e7965033fc4a2e308905daae889140ee97be4934a26d05c1180a",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -1534,8 +2172,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "937739d55f0b75eebe458458a1db06272b4f6d2bae446f3bcedbee448906040e",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -1543,13 +2181,28 @@
       "film_sha256": "7b4602a59ea71701cd0935bc98add3d48697fcf921f621265bc85f275c29b9df",
       "id": "film-7b4602a59ea71701cd09",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 7.05,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.003
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.757
+            }
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
@@ -1559,8 +2212,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "88389386ad2f0d5181df1c22da5b0a907b38584f02249ab134bae94a94a8bb94",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "7ec120c0d75acde0bfc48b88676a61d410897849c6e66380379506a3e7bd0230",
       "id": "film-7ec120c0d75acde0bfc4",
@@ -1603,8 +2256,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "cce13fcc584b5473052cddc4b600a163f34fec85b6d907aad9f11351443bbcda",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "a57459256ca7aef3cffd1787652f61a52c97e7eb7ac39413ac33bcc87dd031ee",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "807a660a464d5ccd6e96d7317f813d60fa9b344ffc2a3fc02908b13131e27805",
       "id": "film-807a660a464d5ccd6e96",
@@ -1635,8 +2288,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "10003ca6db17e3943340dadd1c51d9b747c3a6e7c6759a21b58b37c39d2aacf3",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -1644,21 +2297,21 @@
       "film_sha256": "8150df00a32278e4405c082f402abcb7f59a78ecf4ddfd1d2315335aa73ee2f8",
       "id": "film-8150df00a32278e4405c",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 9.0,
         "observed_action_count_from_release": null
       },
       "quality": {
         "findings": [],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
         "premium_reference_eligible": false
       }
     },
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "5c32d7e414714e7d1d935d0158d2bd9135bd673ef346896cdcf8dba2da0ed059",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -1666,13 +2319,13 @@
       "film_sha256": "8ba91c61306d20e56013c7b401dc2778731675ef53b255bd401993c10a76b60f",
       "id": "film-8ba91c61306d20e56013",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 9.0,
         "observed_action_count_from_release": null
       },
       "quality": {
         "findings": [],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
         "premium_reference_eligible": false
       }
     },
@@ -1682,8 +2335,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "a84b97e1736c2d7a5638aeb8e3994d653aadbb23daa533b5af084398aeb5595e",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "7b913b1833b1d40a79f2a8ab4a68085702e8f8cfaf1d7823e385ac9c3423b222",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "8d20b60b556ae207c00cfa9378a0b3b10ca6b7c5fe9c0cc4554bea9779580a1c",
       "id": "film-8d20b60b556ae207c00c",
@@ -1704,8 +2357,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "3ba8a527ed06dbb2a35ad5f553e354a143da48f359722479987a93d634bb6ab0",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "47960309ffceacac88ed81129eb9075c7220b85ecdfe3a1fcde2b2956a2c5a08",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "8dc338ed5f4b2907a284231b5cf8c182ab90d7d6bb032e12c829e9b562393cce",
       "id": "film-8dc338ed5f4b2907a284",
@@ -1738,8 +2391,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "ffaf972099bd5ef189756506ca78153f6e018491b2cb1f633efd53901aaf1b13",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -1747,13 +2400,38 @@
       "film_sha256": "8ddc5f842576f2a5f551ccaa362661eba11f1c1a5bdff111a6200b7edb3b8f2e",
       "id": "film-8ddc5f842576f2a5f551",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 10.05,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.002
+            }
+          },
+          {
+            "code": "ABRUPT_CUT_CANDIDATE",
+            "family": "unclassified",
+            "numeric_evidence": {}
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.74
+            }
+          },
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
@@ -1763,8 +2441,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "edff63deee5d31b9f6152121cefb4b0c7a9df65ffc8967b0cb57695d47331526",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "8e228d62f91ba1ba156c1da462b3ee81b5ee48d5fde3ecbc3914029706fb40b6",
       "id": "film-8e228d62f91ba1ba156c",
@@ -1785,7 +2463,7 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "c852c5c60985ab7540c8908cc8462c96ad3af5ec45b45dd882a60432118f1b94",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "2acf8f7263200f1d011f4583026c8ca6ace364ae665800e4917baaf325a68172",
+        "source_sha256_claim": null,
         "source_sha_check": "not_checked"
       },
       "film_sha256": "8e981df35d9d12f4b6e92f0e9642b5d912882686a7bb6be4d18e508d5ca086ad",
@@ -1846,8 +2524,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "93612925daf6688fc9f8e77edf6ba14716adf8c9038107242dbce7ec69482742",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -1855,51 +2533,7 @@
       "film_sha256": "90fdc68952965d7f80efefec7777f082af8b08ef5f51bc1a3154b85b325ca288",
       "id": "film-90fdc68952965d7f80ef",
       "media": {
-        "duration_seconds_from_qa": null,
-        "observed_action_count_from_release": null
-      },
-      "quality": {
-        "findings": [],
-        "human_premium_label": "unreviewed",
-        "machine_verdict": null,
-        "premium_reference_eligible": false
-      }
-    },
-    {
-      "evidence": {
-        "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
-        "release_film_binding": "not_claimed",
-        "source_sha256_claim": "8162fe5f9cbf0054ac263243081e602723f8ded2166f301f2471e115c2a54ae4",
-        "source_sha_check": "sha_match"
-      },
-      "film_sha256": "9285a981fdc4b82121b617055cc704a4404b9755779b7834ea056b40956aafa2",
-      "id": "film-9285a981fdc4b82121b6",
-      "media": {
-        "duration_seconds_from_qa": null,
-        "observed_action_count_from_release": null
-      },
-      "quality": {
-        "findings": [],
-        "human_premium_label": "unreviewed",
-        "machine_verdict": null,
-        "premium_reference_eligible": false
-      }
-    },
-    {
-      "evidence": {
-        "plan_sha256_claim": null,
-        "qa_binding": "sha_match",
-        "qa_report_sha256": "3b37e9bfcdd8436beaae697007e9de7a1e9989fc8914fbb06ae84fecaee6aeb8",
-        "release_film_binding": "not_claimed",
-        "source_sha256_claim": "6e79f64fc58bd274fffbdea7656c8805101803bf7de72c3afc469127aa10bac7",
-        "source_sha_check": "sha_match"
-      },
-      "film_sha256": "929923fe3799b5c62e44588006c72b1b4b4f0a85e5e17ec5d384de1cc044bd74",
-      "id": "film-929923fe3799b5c62e44",
-      "media": {
-        "duration_seconds_from_qa": 4.7,
+        "duration_seconds_from_qa": 12.75,
         "observed_action_count_from_release": null
       },
       "quality": {
@@ -1924,8 +2558,8 @@
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
       },
-      "film_sha256": "9459379d95a02fe685f0cb8e8826374c4541e539d3d7ac8a0de7af1fcf582aac",
-      "id": "film-9459379d95a02fe685f0",
+      "film_sha256": "9285a981fdc4b82121b617055cc704a4404b9755779b7834ea056b40956aafa2",
+      "id": "film-9285a981fdc4b82121b6",
       "media": {
         "duration_seconds_from_qa": null,
         "observed_action_count_from_release": null
@@ -1940,11 +2574,76 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "3b37e9bfcdd8436beaae697007e9de7a1e9989fc8914fbb06ae84fecaee6aeb8",
+        "release_film_binding": "not_claimed",
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
+      },
+      "film_sha256": "929923fe3799b5c62e44588006c72b1b4b4f0a85e5e17ec5d384de1cc044bd74",
+      "id": "film-929923fe3799b5c62e44",
+      "media": {
+        "duration_seconds_from_qa": 4.7,
+        "observed_action_count_from_release": null
+      },
+      "quality": {
+        "findings": [
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
+        "human_premium_label": "unreviewed",
+        "machine_verdict": "REJECT",
+        "premium_reference_eligible": false
+      }
+    },
+    {
+      "evidence": {
+        "plan_sha256_claim": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "429de87b35a91c66afeac2bc69711cc74ca8cadccf533531d38ab393ff4782f9",
+        "release_film_binding": "not_claimed",
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
+      },
+      "film_sha256": "9459379d95a02fe685f0cb8e8826374c4541e539d3d7ac8a0de7af1fcf582aac",
+      "id": "film-9459379d95a02fe685f0",
+      "media": {
+        "duration_seconds_from_qa": 10.216667,
+        "observed_action_count_from_release": null
+      },
+      "quality": {
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.906
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.554
+            }
+          }
+        ],
+        "human_premium_label": "unreviewed",
+        "machine_verdict": "REJECT",
+        "premium_reference_eligible": false
+      }
+    },
+    {
+      "evidence": {
+        "plan_sha256_claim": null,
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "30c295797247f50aa2a4e70672c4868afe6dccbde45931ce158c2974c974532a",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "96ee5ea032d9862bf532db89e260dfd42f010de5cab7b6ad2d271630005509e3",
       "id": "film-96ee5ea032d9862bf532",
@@ -1965,8 +2664,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "06d31eb510a21a2f1f734d8a756afafcf216146fbd7423cc9837d856bf1d9d50",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "971587a0794f4e5d7c4834f00c3d791fba8737f3fd5cccec957904b80c6ec4fc",
       "id": "film-971587a0794f4e5d7c48",
@@ -2006,8 +2705,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "603e9e788338d1bd3c8c99aabfcdb153f5385e1fcc1ad9131bff531820cbdcd0",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -2015,21 +2714,27 @@
       "film_sha256": "9cdb542ea4bfb06322e47517af36e53cd45435471b8f224f5f2a58f7251a611e",
       "id": "film-9cdb542ea4bfb06322e4",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 12.75,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "51c5db9b219941610b72ac6f5c1b56e63d80b1fd221cc0f6ac16bc3ef7b1d5fb",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -2037,13 +2742,19 @@
       "film_sha256": "a15d12f9978806d8f3105e91fddcb2aa5cee26e54fe7bad88a299ec1c7629d80",
       "id": "film-a15d12f9978806d8f310",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 12.75,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
@@ -2279,8 +2990,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "unbound",
+        "qa_report_sha256": "438f845d1c9f1e4c17b7b44e48fa0d60544405567f94163a63dc6e644ff5e9c2",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -2323,8 +3034,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "e14841e52eb1f8751f547a0aa1ebd855357ed20b46c095b0fc0e4315cafb01c0",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -2332,14 +3043,155 @@
       "film_sha256": "c05b1a7aa6771b69d08bedd0852119d0c9aeb6f35ff834d413bdea3619348332",
       "id": "film-c05b1a7aa6771b69d08b",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 9.6,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.0
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.653
+            }
+          },
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
+      }
+    },
+    {
+      "evidence": {
+        "plan_sha256_claim": "483bb843e94b15c5926fb938f47828531308e82404d19b66a477d4e7d1cdb316",
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "3bf7b12870f11e1026546987bd2cfdc0a6dec6c8e350a0dbeecac5cfd5c43b7a",
+        "release_film_binding": "sha_match",
+        "source_sha256_claim": "1be3734dfc8921a7e20ca1174d79409606a2629152ac1ab7732ab344c92d9832",
+        "source_sha_check": "not_checked"
+      },
+      "film_sha256": "c211da210c91534602a558dde59c8766cee28d3abd3523158ca10a2e5d8f637a",
+      "id": "film-c211da210c91534602a5",
+      "media": {
+        "duration_seconds_from_qa": 30.0,
+        "observed_action_count_from_release": 3
+      },
+      "quality": {
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.048
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.87
+            }
+          }
+        ],
+        "human_premium_label": "unreviewed",
+        "machine_verdict": "REJECT",
+        "premium_reference_eligible": false
+      },
+      "safe_camera_plan": {
+        "camera_keyframes": [
+          {
+            "at": 0,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "viewScale": 1.0
+          },
+          {
+            "at": 5.45,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 5.0,
+            "viewScale": 1.065
+          },
+          {
+            "at": 6.7,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 5.85,
+            "viewScale": 1.0
+          },
+          {
+            "at": 15.783333333,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 15.333333333,
+            "viewScale": 1.065
+          },
+          {
+            "at": 17.033333333,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 16.183333333,
+            "viewScale": 1.0
+          },
+          {
+            "at": 24.966666667,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 24.516666667,
+            "viewScale": 1.065
+          },
+          {
+            "at": 26.216666667,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 25.366666667,
+            "viewScale": 1.0
+          },
+          {
+            "at": 30.0,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "viewScale": 1.0
+          }
+        ],
+        "hash_check": "sha_match",
+        "stage_type": "whole_window_source_bound"
       }
     },
     {
@@ -2348,8 +3200,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "40969f32c24d1300e4b29783372714b6f69696ec105040974ee0d10d4387387e",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "04be60afda481773832106384f98e67963c48ab490892c3ab2b34f5f64abe66b",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "c422807dc3421c951f83bb6be4d29b14949f8aef490658302e37746a84f70843",
       "id": "film-c422807dc3421c951f83",
@@ -2431,8 +3283,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "0207aa7a0f357d64c9261b97718222141c635c7d7b29046a56e8eea82b248505",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -2440,13 +3292,26 @@
       "film_sha256": "ca2396e1048d812e22c8d502e5ef9647f1f86b4795a43e57d35acf99bd6fee28",
       "id": "film-ca2396e1048d812e22c8",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 12.75,
         "observed_action_count_from_release": null
       },
       "quality": {
-        "findings": [],
+        "findings": [
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.559
+            }
+          },
+          {
+            "code": "NO_AUDIO_STREAM",
+            "family": "sound",
+            "numeric_evidence": {}
+          }
+        ],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "REJECT",
         "premium_reference_eligible": false
       }
     },
@@ -2456,8 +3321,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "dcc7762c5fee9655ce63a9f23b031f2fbcf6f8f23617b32d765a1101a19d1ac6",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "43beefe83301f10161cf42f8d4145a03acd2636afe35ab8ff1241a0c2672c7fb",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "cbbcf09a3c553bb2016e7e42819214b4a0b5dfc317d7aefe40f05700377378ef",
       "id": "film-cbbcf09a3c553bb2016e",
@@ -2495,8 +3360,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "8fc776dde73d0c548642c9289549f2e04e6532b43d343abc96b29e8224933032",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -2504,13 +3369,13 @@
       "film_sha256": "cfe1aaebb2a0e92e7606a9dc2f2f51b84d7c7fa68a183a2345b7cb46cee4cac3",
       "id": "film-cfe1aaebb2a0e92e7606",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 9.0,
         "observed_action_count_from_release": null
       },
       "quality": {
         "findings": [],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
         "premium_reference_eligible": false
       }
     },
@@ -2520,8 +3385,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "bfecff8116a0544ee9df4d0a941dc73fa7225f1b41202e51b58e0dc52f0da629",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "1a076586528042953fb2f08528f565e20888a141e0a80f8ab375c355fe5c50c8",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "d006cbfb66c9ea0377f0914add4f16cb92f0889cd87f920746d9d0494c0133e7",
       "id": "film-d006cbfb66c9ea0377f0",
@@ -2555,8 +3420,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "fdb01d5d1b11d1431e1e0d5c50f2d64de1bd3317dc73de67fe0e1074d28b735c",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "35b879064a8f8b07200f35ad073c2307ae64982e67278ee18d9c484eb4ebfc3e",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "d010d8fcadc54114a026180c31fc011543a6ae9878b0dd866b1f5e821a6acd4b",
       "id": "film-d010d8fcadc54114a026",
@@ -2594,8 +3459,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "unbound",
+        "qa_report_sha256": "caa133f97748fb3e6fd77f7d7bf9ebbd95349e220f58684e8716ef0a81581a13",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -2619,8 +3484,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "06ac3870e3116f623369a8962139fc17b036636af0935d09dc9f055552af90f8",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "d07e866d28bdc53bf541fde5fcec4808e2d7cdeffe925a34513157c3c4427609",
       "id": "film-d07e866d28bdc53bf541",
@@ -2803,9 +3668,90 @@
     },
     {
       "evidence": {
+        "plan_sha256_claim": "0d59da979ec9efc91cc99c3bf2fed1d1b50837db85e269a194df2bf208e71f7a",
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "ffcfb44fe5f9950c6ba4b424fbefbee378872bba9f172fb75d21bcb4abace061",
+        "release_film_binding": "sha_match",
+        "source_sha256_claim": "f2cffee4d358a51be38985893be2cea640f9acc6827777541782fb8dab94835e",
+        "source_sha_check": "sha_match"
+      },
+      "film_sha256": "d389b0195434a8a43609416b51b2ef643cdb291a5d935d292efc956db4aef826",
+      "id": "film-d389b0195434a8a43609",
+      "media": {
+        "duration_seconds_from_qa": 15.0,
+        "observed_action_count_from_release": 1
+      },
+      "quality": {
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.086
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.913
+            }
+          }
+        ],
+        "human_premium_label": "unreviewed",
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
+        "premium_reference_eligible": false
+      },
+      "safe_camera_plan": {
+        "camera_keyframes": [
+          {
+            "at": 0,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "viewScale": 1.0
+          },
+          {
+            "at": 3.083333333,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 2.633333333,
+            "viewScale": 1.065
+          },
+          {
+            "at": 6.283333333,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 5.433333333,
+            "viewScale": 1.0
+          },
+          {
+            "at": 15.0,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "viewScale": 1.0
+          }
+        ],
+        "hash_check": "sha_match",
+        "stage_type": "whole_window_source_bound"
+      }
+    },
+    {
+      "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "7f8f9cae2314d57f422677d6dbae4a35a8b9f26b24ce6aeb21c6d11f7ecccae7",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -2813,13 +3759,13 @@
       "film_sha256": "d4261c8f9de374965ce15b48329562a6b04c2d46e7076e087202b5ee1f32f480",
       "id": "film-d4261c8f9de374965ce1",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 12.75,
         "observed_action_count_from_release": null
       },
       "quality": {
         "findings": [],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
         "premium_reference_eligible": false
       }
     },
@@ -2829,8 +3775,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "0c375c59161bd523736d72a4e56f31539291134e1d7e518c9b1577a1db081b88",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "5c5cfb334b03553071d3436ae080a7409f3d8a272bfa3fd1a88107b8ec4280de",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "d6261c5697f2bc5b6d4cc10bd0275a366b21f81163c6f3c9fb19b6526362ac38",
       "id": "film-d6261c5697f2bc5b6d4c",
@@ -2873,8 +3819,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "3179b48f9d7974c691d80879a7024c7b061c346f8152f8b393a182b9f16ced96",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "dba9d9dec6a91fdf14eca1a66ef4f0cc27bfc404b2f1cb5afbc1344049358ec2",
       "id": "film-dba9d9dec6a91fdf14ec",
@@ -2939,8 +3885,8 @@
         "qa_binding": "sha_match",
         "qa_report_sha256": "5fb75a90c544b3a1905fcb8a69e52d2ac515c02f6375a39215be8efd80545184",
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "d734e4dc20458e6cd734366b7e09daba727ff4e7f17f8abd582f083a215b6c9b",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "e92dfe1d9c3159a72ad8999963a9de88ef272030fc9d54affd10eadf86964e82",
       "id": "film-e92dfe1d9c3159a72ad8",
@@ -2981,8 +3927,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "14ef3367efbf842243f219584dcfc50504c28a27729b4b1aab50424e3d86f676",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "eb26554fa0ef63d7f6ae9e58917e746291ba71872a5b5f22ee3fecc712f928bc",
       "id": "film-eb26554fa0ef63d7f6ae",
@@ -3014,8 +3960,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "ed5320f623e78d1cc99a3044f2436e1e5fe3cbdd83c89f762747d6338c1d4d19",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "ef89e0f439f0194d27fc15778b6059ab359cd0feed8353013bd5137aea1bd424",
       "id": "film-ef89e0f439f0194d27fc",
@@ -3042,8 +3988,8 @@
         "qa_binding": "missing",
         "qa_report_sha256": null,
         "release_film_binding": "not_claimed",
-        "source_sha256_claim": "f3db222e9ed62751e273da583e24374c3ccc2de23a8ee132fe76120346c87a13",
-        "source_sha_check": "sha_match"
+        "source_sha256_claim": null,
+        "source_sha_check": "not_checked"
       },
       "film_sha256": "efd5a4117fe46e39fdb5293ea7fde4d5ad982e9c87790e6a721766f6b99c53d3",
       "id": "film-efd5a4117fe46e39fdb5",
@@ -3061,8 +4007,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "unbound",
+        "qa_report_sha256": "a381afb44e7687afc5525096b2c4fae837624498c79623d116597829d6f233ff",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -3083,8 +4029,8 @@
     {
       "evidence": {
         "plan_sha256_claim": null,
-        "qa_binding": "missing",
-        "qa_report_sha256": null,
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "8bbd10ce7548cd719084e1825db020cdae2a67a543e0e5e104cf88762e742c29",
         "release_film_binding": "not_claimed",
         "source_sha256_claim": null,
         "source_sha_check": "not_checked"
@@ -3092,13 +4038,13 @@
       "film_sha256": "f7e6aee119defbf90a01b2d2d39ad710abfdcdc9ae00fef2d5e358d1be7d12f8",
       "id": "film-f7e6aee119defbf90a01",
       "media": {
-        "duration_seconds_from_qa": null,
+        "duration_seconds_from_qa": 9.0,
         "observed_action_count_from_release": null
       },
       "quality": {
         "findings": [],
         "human_premium_label": "unreviewed",
-        "machine_verdict": null,
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
         "premium_reference_eligible": false
       }
     },
@@ -3292,6 +4238,97 @@
     },
     {
       "evidence": {
+        "plan_sha256_claim": "8bff78adaeb8c76a467934b5895f8f839c474d712113c212460884612ae24e47",
+        "qa_binding": "sha_match",
+        "qa_report_sha256": "fdf895ec88ae65cd0ff13ac52a19126351d5b3c22f3c3f94ccf9a0c67ecd8a6d",
+        "release_film_binding": "sha_match",
+        "source_sha256_claim": "66a35141b369e471b4ba6b2e0d63771b8b7c66fe84d30942d092a58be85e09f0",
+        "source_sha_check": "sha_mismatch"
+      },
+      "film_sha256": "f9f21ed3bc664ceabe2fe71e08283ecbeee9768a28167f749878d1ec6fd6ce4a",
+      "id": "film-f9f21ed3bc664ceabe2f",
+      "media": {
+        "duration_seconds_from_qa": 9.916667,
+        "observed_action_count_from_release": 1
+      },
+      "quality": {
+        "findings": [
+          {
+            "code": "STATIC_OPENING_2S",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "p80_frame_delta": 0.083
+            }
+          },
+          {
+            "code": "REPEATED_OR_STATIC_FRAMES",
+            "family": "story_pacing",
+            "numeric_evidence": {
+              "fraction": 0.755
+            }
+          }
+        ],
+        "human_premium_label": "unreviewed",
+        "machine_verdict": "HUMAN_REVIEW_REQUIRED",
+        "premium_reference_eligible": false
+      },
+      "safe_camera_plan": {
+        "camera_keyframes": [
+          {
+            "at": 0,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "viewScale": 1.0
+          },
+          {
+            "at": 3.416666667,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 2.7,
+            "viewScale": 1.035
+          },
+          {
+            "at": 5.133333333,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 3.416666667,
+            "viewScale": 1.0
+          },
+          {
+            "at": 5.583333333,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "startAt": 5.133333333,
+            "viewScale": 1.065
+          },
+          {
+            "at": 9.916667,
+            "center": [
+              0.5,
+              0.5
+            ],
+            "scale": 0.88,
+            "viewScale": 1.065
+          }
+        ],
+        "hash_check": "sha_match",
+        "stage_type": "whole_window_source_bound"
+      }
+    },
+    {
+      "evidence": {
         "plan_sha256_claim": null,
         "qa_binding": "missing",
         "qa_report_sha256": null,
@@ -3324,11 +4361,11 @@
     "curated_creative_rejections": 5,
     "curated_reviews_missing_binary": 0,
     "duplicate_files": 4,
-    "inventoried_binary_files": 113,
-    "machine_qa_missing_or_untrusted": 81,
-    "machine_qa_reports": 28,
-    "machine_rejected": 21,
+    "inventoried_binary_files": 121,
+    "machine_qa_missing_or_untrusted": 51,
+    "machine_qa_reports": 66,
+    "machine_rejected": 43,
     "premium_approved": 0,
-    "unique_film_binaries": 109
+    "unique_film_binaries": 117
   }
 }
