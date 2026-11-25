@@ -29,7 +29,30 @@ def stable_runs(frames,a,b,threshold=.30):
     runs.append((start,b))
     return runs
 
-def plan_ranges(frames,events,points,ready_frame=None):
+def stationary_approach_gaps(frames,events,points,source_frames=None):
+    """Shorten only recorded stationary pauses before the first real press.
+
+    Both endpoints must have the exact same pointer coordinates. A recorded
+    move interval (including sparse interpolation) is never considered idle.
+    Keep at least .12s at either end and the first .35s of establishing context.
+    """
+    stop=math.floor((events[0]['start']-.12)*FPS)
+    gaps=[]
+    for p,q in zip(points,points[1:]):
+        if p['x']!=q['x'] or p['y']!=q['y']:continue
+        a=max(math.ceil((p['t']+.12)*FPS),math.ceil(.35*FPS))
+        b=min(math.floor((q['t']-.12)*FPS),stop)
+        if b-a<12:continue
+        for l,r in stable_runs(frames,a,b):
+            if r-l<12 or l<1 or r>=len(frames):continue
+            if np.abs(frames[l-1].astype(np.int16)-frames[r].astype(np.int16)).mean()>.30:continue
+            if source_frames is not None:
+                if len(stable_runs(source_frames,l-1,r+1))!=1:continue
+            gaps.append((l,r))
+    return gaps
+
+
+def plan_ranges(frames,events,points,ready_frame=None,source_frames=None):
     n=len(frames)
     if not 3<=len(events)<=4 or not points or n>1800:raise ValueError('Need bounded multi-action native film')
     for i,e in enumerate(events):
@@ -38,7 +61,12 @@ def plan_ranges(frames,events,points,ready_frame=None):
         if i and events[i-1]['t']>=e['start']:raise ValueError('Overlapping actions')
     # Preserve every sampled pointer movement. Sparse telemetry is not
     # filled with invented points; compare the rendered picture as well.
-    movements=[b['t'] for a,b in zip(points,points[1:]) if math.hypot(b['x']-a['x'],b['y']-a['y'])>1]
+    if source_frames is not None and len(source_frames)!=n:raise ValueError("Source and parent sample clocks differ")
+    if any(not 0<=p['t']<n/FPS or not all(math.isfinite(p[k]) for k in ('t','x','y')) for p in points):
+        raise ValueError("Invalid pointer samples")
+    if any(b['t']<=a['t'] for a,b in zip(points,points[1:])):raise ValueError("Pointer clock is not ordered")
+    moving=[(a['t'],b['t']) for a,b in zip(points,points[1:]) if a['x']!=b['x'] or a['y']!=b['y']]
+    movements=[b for a,b in moving]
     first=min((t for t in movements if t<events[0]['start']),default=0)
     lead=max(0,min(round((first-.35)*FPS),round(1.5*FPS)))
     if lead:
@@ -55,7 +83,7 @@ def plan_ranges(frames,events,points,ready_frame=None):
             or len(stable_runs(frames,ready_frame,ready_frame+10,threshold=.75))!=1):
             raise ValueError('Ready frame would skip approach or is unstable')
         lead=max(lead,ready_frame)
-    removals=[]
+    removals=[(a,b) for a,b in stationary_approach_gaps(frames,events,points,source_frames) if a>lead]
     for i,e in enumerate(events):
         a=math.ceil((e['t']+1.35)*FPS)
         if i+1<len(events):
@@ -69,11 +97,12 @@ def plan_ranges(frames,events,points,ready_frame=None):
         for l,r in stable_runs(frames,a,b):
             # Keep .15s on either side of any cut; retain at least .8s.
             x,y=l+9,r-9
-            if y-x>=48 and not any(x/FPS<=t<y/FPS for t in movements):
+            if y-x>=48 and not any(a<y/FPS and b>x/FPS for a,b in moving):
                 if np.abs(frames[x-1].astype(np.int16)-frames[y].astype(np.int16)).mean()<=.30:
-                    removals.append((x,y))
+                    if source_frames is None or len(stable_runs(source_frames,x-1,y+1))==1:
+                        removals.append((x,y))
     ranges=[];start=lead
-    for a,b in removals:
+    for a,b in sorted(removals):
         if a<=start:continue
         ranges.append((start,a));start=b
     ranges.append((start,n))
@@ -108,7 +137,8 @@ def run(parent,source,manifest,plan,foley,receipt,out,parent_sha256,ready_frame=
     if r.get('verifiedSourceEvents')!=expected:raise ValueError('Foley proof mismatch')
     frames=decode_small(parent)
     if len(frames)!=n:raise ValueError('Parent decode count mismatch')
-    ranges=plan_ranges(frames,events,d['pointer_samples'],ready_frame)
+    source_frames=decode_small(source)
+    ranges=plan_ranges(frames,events,d['pointer_samples'],ready_frame,source_frames)
     total=sum(b-a for a,b in ranges)
     if total>=n or total<8*FPS:raise ValueError('No useful safe pacing edit')
     # Confirm each internal splice at the original rendered resolution,
