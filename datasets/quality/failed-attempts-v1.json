@@ -23,6 +23,26 @@
     {
       "failed_action_index": null,
       "human_review": "unreviewed",
+      "id": "rejection-34012f6dc307760fe76a",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "UNCLASSIFIED_REJECTION",
+      "rejection_receipt_sha256": "34012f6dc307760fe76a7181e2cf41823d578b2317154f46857d14fafdd7f5f8"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-3f22292fe15d690cbe37",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "UNSTABLE_INITIAL_STATE",
+      "rejection_receipt_sha256": "3f22292fe15d690cbe37b1751e457e597e2e8c21c354dec51c68c22afefc8b73"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
       "id": "rejection-3fd6c0b17984c157f50f",
       "observed_pixel_delta": null,
       "phase": "before_finished_film",
@@ -73,6 +93,16 @@
     {
       "failed_action_index": null,
       "human_review": "unreviewed",
+      "id": "rejection-50a8abde975b49e397e9",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "TARGET_SHIFT_OR_OCCLUSION",
+      "rejection_receipt_sha256": "50a8abde975b49e397e9b4a8c948f900e1d270269092db6e49cf903c39bb136c"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
       "id": "rejection-5cae842e4139f6d08286",
       "observed_pixel_delta": null,
       "phase": "before_finished_film",
@@ -111,6 +141,36 @@
       "rejection_receipt_sha256": "768688ddac4ef01027f315053caff96956dc875fd87ffe202a175ea71694a03a"
     },
     {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-85dd3e0fc034cb5504e8",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "UNCLASSIFIED_REJECTION",
+      "rejection_receipt_sha256": "85dd3e0fc034cb5504e82cb0d3d0da7acba65934a6aa26dadd3a20e93a62c3c3"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-85dd3e0fc034cb5504e8",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "UNCLASSIFIED_REJECTION",
+      "rejection_receipt_sha256": "85dd3e0fc034cb5504e82cb0d3d0da7acba65934a6aa26dadd3a20e93a62c3c3"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-86af7e0bd7224fb2d499",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "UNCLASSIFIED_REJECTION",
+      "rejection_receipt_sha256": "86af7e0bd7224fb2d49931dcbeb35395842fbace9c5f21ce19531f77c390c050"
+    },
+    {
       "failed_action_index": 1,
       "human_review": "unreviewed",
       "id": "rejection-8787c781df67b30e6b9c",
@@ -121,6 +181,26 @@
       "rejection_receipt_sha256": "8787c781df67b30e6b9cce0c7306ba858ecf84d52d14da5e6a40061a26946b28"
     },
     {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-b023be54bbdc3bab2d91",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "UNCLASSIFIED_REJECTION",
+      "rejection_receipt_sha256": "b023be54bbdc3bab2d9181cc53222e40c31f73907e947197a601a4f089bab67d"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-b023be54bbdc3bab2d91",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "UNCLASSIFIED_REJECTION",
+      "rejection_receipt_sha256": "b023be54bbdc3bab2d9181cc53222e40c31f73907e947197a601a4f089bab67d"
+    },
+    {
       "failed_action_index": 1,
       "human_review": "unreviewed",
       "id": "rejection-b6346ab18deb78c10696",
@@ -129,6 +209,26 @@
       "premium_reference_eligible": false,
       "reason_code": "WEAK_VISUAL_OUTCOME",
       "rejection_receipt_sha256": "b6346ab18deb78c10696f3e15ecb013f62fe3333f7a3e48f00263adf31645ecd"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-b73ac04802e027f97d38",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "INSUFFICIENT_FINAL_HOLD",
+      "rejection_receipt_sha256": "b73ac04802e027f97d389fac0b4937edd7e2d44160f6883173d8e1ef319ff53e"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-b73ac04802e027f97d38",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "INSUFFICIENT_FINAL_HOLD",
+      "rejection_receipt_sha256": "b73ac04802e027f97d389fac0b4937edd7e2d44160f6883173d8e1ef319ff53e"
     },
     {
       "failed_action_index": null,
@@ -181,6 +281,46 @@
       "rejection_receipt_sha256": "e2251ab5b40eed9a0a3a32729ee07701d89dc182697d09c148491f2340e8f739"
     },
     {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-e2251ab5b40eed9a0a3a",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "UNCLASSIFIED_REJECTION",
+      "rejection_receipt_sha256": "e2251ab5b40eed9a0a3a32729ee07701d89dc182697d09c148491f2340e8f739"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-f1819f77b69c5d972222",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "INSUFFICIENT_WITNESSED_OUTCOMES",
+      "rejection_receipt_sha256": "f1819f77b69c5d972222ea87e61cb9e4e075c979d385cc1345aaf01b4d355e40"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-f1819f77b69c5d972222",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "INSUFFICIENT_WITNESSED_OUTCOMES",
+      "rejection_receipt_sha256": "f1819f77b69c5d972222ea87e61cb9e4e075c979d385cc1345aaf01b4d355e40"
+    },
+    {
+      "failed_action_index": null,
+      "human_review": "unreviewed",
+      "id": "rejection-f1819f77b69c5d972222",
+      "observed_pixel_delta": null,
+      "phase": "before_finished_film",
+      "premium_reference_eligible": false,
+      "reason_code": "INSUFFICIENT_WITNESSED_OUTCOMES",
+      "rejection_receipt_sha256": "f1819f77b69c5d972222ea87e61cb9e4e075c979d385cc1345aaf01b4d355e40"
+    },
+    {
       "failed_action_index": 1,
       "human_review": "unreviewed",
       "id": "rejection-f53074fa2b97e33b1abd",
@@ -217,7 +357,7 @@
   },
   "schema": "sauce-pre-film-rejections-v1",
   "summary": {
-    "receipts": 21,
-    "unclassified_reasons": 2
+    "receipts": 35,
+    "unclassified_reasons": 9
   }
 }
