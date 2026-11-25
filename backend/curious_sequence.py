@@ -225,8 +225,10 @@ def investigate_sequence(url,report,directory):
             opts=discover(page,scope)
             if not opts:return finish()
             (path/'picker.png').write_bytes(shot(page))
+            option_menu=menu(opts)
+            council=advise(option_menu,path,phase="picker")
             if os.getenv('SAUCE_CURIOUS_OPTION_SEARCH')=='1':
-                raw=conv.ask("Which three observed options might create the most distinct, substantial visual payoff? We can actually test them separately, so choose contrasting hypotheses instead of guessing a winner. Return JSON with ids (up to three observed c IDs), reason. No invented options. "+json.dumps(menu(opts)),media=(_media(path/'picker.png','image/png',4*1024*1024),),json_mode=True,phase='option-hypotheses',stop_on_rate_limit=True)
+                raw=conv.ask("Which three observed options might best demonstrate the product's core user job through distinct, readable transformations? We can actually test them separately, so choose contrasting hypotheses instead of guessing a winner. Do not rank only by expected pixel change; prefer causal clarity and recognizable product value. Return JSON with ids (up to three observed c IDs), reason. No invented options. "+json.dumps(option_menu)+council,media=(_media(path/'picker.png','image/png',4*1024*1024),),json_mode=True,phase='option-hypotheses',stop_on_rate_limit=True)
                 hypotheses=option_hypotheses(raw,opts)
                 receipt['hypotheses']=hypotheses
                 selected=compare_options(url,label,hypotheses,path,conv,receipt,page.context.browser)
@@ -234,7 +236,7 @@ def investigate_sequence(url,report,directory):
                 option,proof=selected
                 receipt.update(option=option,proof=proof,decision='source_proven_candidate')
                 return finish({'mode':'interactive','action_ids':[],'heading_ids':[],'title':report['title'],'reason':'Gemini compared independently verified option transformations','local_only_action':True,'sequence':{'picker':label,'option':option,'expected_payoff':{k:proof[k] for k in ('changed_result_fraction','change_above_baseline')}}})
-            option=choose(conv.ask("Update your hypothesis using the actual picker evidence. Choose an observed unselected option that would demonstrate the product's core job through a clear before/action/after story. Contrast it with less informative alternatives. A dramatic style change alone is not sufficient unless styling is the product's core value. Pick one or null; no guessed selector or invented result. JSON {\"id\":\"c0\",\"reason\":\"...\"}. "+json.dumps(menu(opts))+advise(menu(opts),path,phase="picker"),media=(_media(path/'picker.png','image/png',4*1024*1024),),json_mode=True,phase='discover-option',stop_on_rate_limit=True),opts)
+            option=choose(conv.ask("Update your hypothesis using the actual picker evidence. Choose an observed unselected option that would demonstrate the product's core job through a clear before/action/after story. Contrast it with less informative alternatives. A dramatic style change alone is not sufficient unless styling is the product's core value. Pick one or null; no guessed selector or invented result. JSON {\"id\":\"c0\",\"reason\":\"...\"}. "+json.dumps(option_menu)+council,media=(_media(path/'picker.png','image/png',4*1024*1024),),json_mode=True,phase='discover-option',stop_on_rate_limit=True),opts)
             if option is None:return finish()
             receipt['option']=option
             exact(discover(page,scope),option).click(timeout=4000)

@@ -67,3 +67,33 @@ def test_applied_label_requires_real_option(monkeypatch):
     s.assert_applied_option(None,'Claymorphism')
     with pytest.raises(ValueError,match='does not match'):
         s.assert_applied_option(None,'Bubblegum')
+
+@pytest.mark.parametrize("comparative",[False,True])
+def test_both_sequence_paths_receive_one_council_challenge(tmp_path,monkeypatch,comparative):
+    from contextlib import contextmanager
+    import backend.curious_sequence as s
+    page=Mock()
+    @contextmanager
+    def browser(url):yield page
+    picker=[{'label':'Appearance','locator':Mock()}]
+    options=[{'label':'A','locator':Mock()},{'label':'B','locator':Mock()}]
+    conv=Mock();conv.calls=0
+    conv.ask.side_effect=['{"id":"c0"}','{"ids":[]}' if comparative else '{"id":null}']
+    council=Mock(return_value='\nTEXT-ONLY challenge fixture')
+    monkeypatch.setattr(s,'Conversation',lambda path:conv)
+    monkeypatch.setattr(s,'browser',browser)
+    monkeypatch.setattr(s,'discover',lambda p,scope=None:picker if scope is None else options)
+    monkeypatch.setattr(s,'open_picker',lambda *a:Mock())
+    monkeypatch.setattr(s,'shot',lambda p:b'fixture')
+    monkeypatch.setattr(s,'panels',lambda p:[])
+    monkeypatch.setattr(s,'_media',lambda *a:{})
+    monkeypatch.setattr(s,'advise',council)
+    compare=Mock(return_value=None)
+    monkeypatch.setattr(s,'compare_options',compare)
+    monkeypatch.setenv('SAUCE_CURIOUS_OPTION_SEARCH','1' if comparative else '0')
+    result,_=s.investigate_sequence('https://example.com',{'title':'Demo'},tmp_path)
+    assert result is None
+    council.assert_called_once_with([{'id':'c0','label':'A'},{'id':'c1','label':'B'}],tmp_path,phase='picker')
+    assert 'TEXT-ONLY challenge fixture' in conv.ask.call_args.args[0]
+    assert conv.ask.call_count==2
+    assert compare.call_count==int(comparative)
