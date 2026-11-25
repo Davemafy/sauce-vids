@@ -1,0 +1,39 @@
+# Sauce production-director recovery — November 25, 2026
+
+**Status:** source changes on `main`; nonsecret production director configuration repaired and service restarted; **premium-quality sign-off NOT achieved**. No new self-serve film was falsely approved.
+
+## Root causes observed on the actual running Vultr service
+
+1. At the beginning of this intervention, the public URL worker used a previously deployed StoryArc path whose 3-camera vocabulary and suggested four-scene hook/action/proof/resolution order produced near-identical JSON. In the latest recorded job the four scenes targeted headings and had **zero selected real product actions**, even though the output was marked technically verified.
+2. A newer 30s source-verified customer director, real before/after candidate comparison, semantic editorial framing, and a working source-pinned compiler already existed on GitHub `main`. The production route had them behind settings instead of relying on them by default.
+3. The deployed release `6240aad65426453439d48f3fc7eb84bcfcc904cb` was active in systemd on the existing Vultr worker at the time of operations. Its `SAUCE_CUSTOMER_DIRECTOR_PROVIDER` was `claude` without an `ANTHROPIC_API_KEY` in the service process; a configured `GEMINI_API_KEY` was present. That would make the 30s customer director fail with a credential error. No key value was copied or exposed.
+
+## Code changes committed to `main`
+
+- `backend/url_engine.py`: an explicit `intent="product_demo"` now defaults to the **existing 30-second, 3–4 verified action** customer story pathway, without requiring the old `SAUCE_CUSTOMER_STORY_SECONDS=30` opt-in. The explicit 15s compatibility override and `website_preview` intent remain separate. The old `intent=None`/cinematic test behavior remains available.
+- `backend/customer_story.py`: **evidence-first is now the default** (`SAUCE_EVIDENCE_FIRST=0` is explicit opt-out). Compare witnessed before/after product changes before Gemini writes a workflow; retain original snapshots and source-proven action IDs. **Source-bounded editorial direction is now the default** (`SAUCE_CUSTOMER_EDITORIAL_DIRECTION=0` is explicit opt-out), allowing the model to choose legitimate `wide/accent/detail` shots, `quick/readable/linger` pacing, selected backdrop, one hero and appropriate 22/26/30s within the existing validated schema. The existing deterministic compiler owns all real timestamps, source region geometry, safe bounds and final render. The model cannot invent source frames or clicks.
+- Selection gate now denies 3–4 nominally unique IDs that all repeat **one cosmetic control group** when other independently observed groups are available. Single-capability public products remain eligible; don't invent other features to satisfy this gate.
+- Tests for default routing, explicit legacy override, real group diversity and model editorial JSON reaching the compiler added/updated.
+
+Commits: `1c9e0f4617d79f185b9c18d5297d849346dbff1b`, `655db5825c6cdf3437a5297ed45ecc097e377c6c`, `1c5f4bab7c795ca1cabd3a26ec579b14f51a138f`, `dc95c03d5c45eab62756a2b00d413b3e35baa058`. Worked on `main` only; no branches, private capture sources or credentials committed. Relevant unit/integration tests: **76 passed, 20 subtests passed** on the existing Vultr render environment.
+
+## Actual encoded diagnostic (NOT a freshly generated model response)
+
+Used the previously verified real Chromium capture of `https://tweakcn.com/editor/theme`: 30 seconds, four original observed product actions, 80 original pointer samples, immutable source SHA256 `d39355adedd55ee2ab4110386d9a5fd628fd26f4937a281f2315816301e76afb`. Constructed a **clearly labeled bounded editorial test payload** (not claimed to be a new Gemini/Claude response) from the existing permitted framing/pace vocabulary, with 4 source-linked action IDs and final hero. Existing `source_event_director.py` compiled it; existing `render_event_video.py --customer-craft-contract --validate-only` accepted it after bringing the isolated worker parser into parity with already-current main. No input source frames or timestamps were manufactured, repeated, resampled or reordered to improve the comparison.
+
+Result: new full `1920×1080` `60/1` H.264/AAC `30.000s` **1800-frame** MP4, full FFmpeg `-xerror` decode PASS, SHA256 **`f222b93e89bb7214b7db8a6b307d864f525d4e57b23ddcd3166bd0be8154e588`**. Baseline master SHA256 `b92cc1e452be4d01557f63edf8dba1d26c720cac4fbe3aa318537375574fbc49`. Decoded side-by-side frames inspected at **0.3, 5.8, 9.9, 12.0, 17.85, 23.6, 25.2 and 28.1s**. The framing changes are real, but the early scene remains nearly identical, the last hero push **crops surrounding editor context**, and the selected browser state reads as a marketing page rather than a compelling feature result. **CREATIVE REJECT**; don't promote this manually chosen payload or the existing rejected film as an approved few-shot model reference. This proves only execution wiring and highlights the remaining perceptual/focus-quality defect.
+
+Owner-only signed [actual baseline vs editorial MP4 player](https://devmcp.davemafy.xyz/sauce-expiring-review/tweakcn-20261120/evidence-first-editorial-reject-6b858f0de83b589b/index.html?md5=4C-9_LHVS9RMg6JxC1FWng&expires=1795985175) expires **2026-11-29 20:46:15 UTC**. Signed HTML/video HTTP200, H.264 byte-range HTTP206 and full remote MP4 SHA matching the local encoded output. This is private review evidence only, not public commercial release.
+
+## Production environment recovery (existing service, no new VM)
+
+After verifying that no production jobs were queued or running (only previously completed job statuses), backed up `/etc/systemd/system/sauce-url2video.service.d/90-integrated-main.conf` to `90-integrated-main.conf.before-gemini-director-20261125.bak`. Changed **nonsecret** settings only: `SAUCE_CUSTOMER_DIRECTOR_PROVIDER=gemini`, `SAUCE_CUSTOMER_EDITORIAL_DIRECTION=1`; existing `SAUCE_CUSTOMER_STORY_SECONDS=30`, `SAUCE_EVIDENCE_FIRST=1` retained. No API key was opened, copied or logged. Reloaded systemd and restarted only `sauce-url2video.service`. Service is **active**; exact loopback `GET http://127.0.0.1:8767/health` returned **HTTP200**, `status=ready`, `director_key_configured=true`; process environment confirmed Gemini provider, editorial flag, evidence-first and 30s mode enabled, with Gemini credential present.
+
+**Critical limitation:** the running service remains pinned to existing deploy `6240aad...` and does NOT yet include the four new GitHub commits. The already-deployed customer pipeline *does* have the relevant opt-in 30s/evidence-first/editorial capabilities and now enables them; however no fresh real URL submission was completed following the restart, and service health is not proof of high-quality output. A separate attempt to run a one-off model experiment using restricted credential handoff was blocked by the tooling; **do not work around it or claim a model call**.
+
+## Remaining P0
+
+1. Run a new honest user-initiated URL→Gemini→observed candidates→before/after evidence→3–4 actions→editorial JSON→native capture→full 30s MP4 on the freshly configured service. Verify JSON `director_provider`, action diversity, chosen hero and source-evidence receipts; distinguish real Gemini output from deterministic fixtures.
+2. Review decoded full-resolution and 390px frames for source readability, whole-window context, pointer and stable result; fix hero overcrop and source marketing detours in the native director/craft contract before wider rollout.
+3. Deploy the **new GitHub main** code only after an isolated release/canary matches current main and proves parity; do not edit in-place immutable release `6240aad...` or mistake service health for an approved film.
+4. Preserve the owner-selected landscape-first presentation, private review gate, and completed pipelines. **Release eligibility remains false until owner visual approval.**
