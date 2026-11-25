@@ -108,25 +108,40 @@ def direction(video:Path,manifest:Path,hero_event_index=None):
             k={"at":at,"scale":.88,"viewScale":view,"center":[.5,.5],"yaw":0,"pitch":0}
             if start is not None:k["startAt"]=start
             return k
-        camera=[whole(0,1.)]
+        from customer_craft_contract import hero_geometry,hero_motion_budget,HERO_MIN_ZOOM
+        camera=[whole(0,1.)];detail_index=None
         for i,e in enumerate(events):
             begin=after_visible(e["t"])
             peak=native(begin+.45)
             next_press=events[i+1]["start"] if i+1<len(events) else duration
             is_hero=i==hero_event_index
-            # Hold the hero at peak rather than spending its whole beat in motion.
-            # Setup beats get a smaller, shorter push. Never extend a source beat
-            # across the next genuine press or change the original source clock.
             zoom=1.065 if is_hero else (1.035 if hero_event_index is not None else 1.065)
             hold=2.35 if is_hero else (.25 if hero_event_index is not None else .4)
-            release=native(min(next_press-.25,peak+hold+.85))
+            travel=.85
+            if is_hero:
+                fit,transform,base,_,limit=hero_geometry(evidence,i,(source_w,source_h),(1920,1080))
+                # Back off only when the complete result/pointer or native
+                # source interval cannot support a safe close-up. Never force
+                # a minimum zoom by cropping the verified payoff.
+                candidate=math.floor(fit*1000)/1000
+                while candidate>=HERO_MIN_ZOOM:
+                    seconds=hero_motion_budget(candidate,transform(candidate),base,(1920,1080))
+                    # A close-up earns at least 1s of settled reading time.
+                    if 2*seconds+1.05<=limit-begin:
+                        zoom=candidate;travel=seconds
+                        peak=after_visible(begin+seconds);detail_index=i
+                        break
+                    candidate=round(candidate-.025,3)
+            release=native(min(next_press-.25,peak+hold+travel))
             if release<=peak+.2:
                 continue
             camera.extend([whole(peak,zoom,begin),
-                           whole(release,1.,native(max(peak,release-.85)))])
+                           whole(release,1.,native(max(peak,release-travel)))])
         camera.append(whole(duration,1.))
         plan["studioStage"]["camera"]=camera
         plan["studioStage"]["motion"]={"profile":"cinematic","immersive":True,"shutter":0}
+        if detail_index is not None:
+            plan["studioStage"]["motion"]["heroEventIndex"]=detail_index
         plan["studioStage"]["payoff"].update(mode="overview",minVisible=.99,minContextVisible=.99)
     if len(events)==1 and events[0]["kind"]=="draw_stroke":
         e=events[0]

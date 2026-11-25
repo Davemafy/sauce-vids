@@ -236,6 +236,10 @@ class StudioStage:
     stage_preset:str
     mouse_follow:RecordedFollow|None=None
     immersive:bool=False
+    hero_detail_index:int|None=None
+    hero_interval:tuple[float,float]|None=None
+    hero_peak_zoom:float=1.
+    hero_peak_translation:tuple[float,float]=(0.,0.)
 
     def _sample_keys(self,t):
         prev=self.camera[0]
@@ -290,6 +294,11 @@ class StudioStage:
         zoom=self.view_scale(t)
         ow,oh=self.output_size
         dx=ow*(1.-zoom)*.5;dy=oh*(1.-zoom)*.5
+        if self.hero_interval is not None and self.hero_interval[0]<=t<=self.hero_interval[1]:
+            p=max(0.,min(1.,(zoom-1.)/(self.hero_peak_zoom-1.)))
+            dx=p*self.hero_peak_translation[0]
+            dy=p*self.hero_peak_translation[1]
+            return np.float32([[zoom,0.,dx],[0.,zoom,dy]])
         # The payout region is real DOM geometry from an already confirmed
         # source event. In a true close-up, keep the *upper* result controls
         # legible, instead of enlarging the modal until its header vanishes.
@@ -313,6 +322,11 @@ class StudioStage:
                 dx=dx*(1-blend)+target_x*blend
                 dy=dy*(1-blend)+target_y*blend
         return np.float32([[zoom,0.,dx],[0.,zoom,dy]])
+
+    def hero_backdrop_strength(self,t):
+        if self.hero_interval is None or not self.hero_interval[0]<=t<=self.hero_interval[1]:
+            return 0.
+        return max(0.,min(1.,(self.view_scale(t)-1.)/(self.hero_peak_zoom-1.)))
 
     def shutter_times(self,t):
         """Same-source-frame camera exposure; never blend across a hard cut."""
@@ -465,7 +479,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
         from cloud_shadow_stage import backdrop
         # Fail closed rather than silently substituting a generic gradient.
         backdrop(*output_size)
-    motion=_fields(data.get("motion",{}),("profile","shutter","follow","immersive"),"studioStage.motion")
+    motion=_fields(data.get("motion",{}),("profile","shutter","follow","immersive","heroEventIndex"),"studioStage.motion")
     profile=motion.get("profile","classic")
     if profile not in ("classic","cinematic","reference-spring"):
         raise ValueError("Studio motion profile must be classic, cinematic or reference-spring")
@@ -588,25 +602,49 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
     visible=_number(payoff.get("minVisible",.82),"studioStage.payoff.minVisible",.6,1)
     # Only a source-bound observed pointer+verified event can authorize this
     # additional small camera displacement. Existing films remain unchanged.
-    # Non-follow immersion is restricted to a centered, complete clearface overview.
+    # Localized detail is a narrow source-bound exception, not an arbitrary
+    # camera-centering capability for model-authored plans.
+    hero=motion.get("heroEventIndex")
+    hero_interval=None;hero_peak=1.;hero_translation=(0.,0.)
+    if "heroEventIndex" in motion and (type(hero) is not int or not immersive
+            or profile!="cinematic" or stage_preset!="cloud_window_clearface_v1"):
+        raise ValueError("Hero detail requires opted-in source-bound clearface motion")
     if immersive and profile=="cinematic":
         if (stage_preset!="cloud_window_clearface_v1" or mode!="overview"
                 or abs(parsed[0].view_scale-1.)>1e-6
                 or any(k.cut or abs(k.scale-parsed[0].scale)>1e-6
                        or abs(k.center_x-.5)>1e-6 or abs(k.center_y-.5)>1e-6
                        or abs(k.yaw)>1e-6 or abs(k.pitch)>1e-6
-                       or k.focus!="wide" or k.view_scale>1.075 for k in parsed)):
-            raise ValueError("Centered clearface overview dolly requires constant source geometry and viewScale <=1.075")
+                       or k.focus!="wide" for k in parsed)):
+            raise ValueError("Centered clearface overview dolly requires constant source geometry")
         from cloud_window_sky_stage import window_geometry
         x0,y0,x1,y1,_=window_geometry(source_size,output_size)
-        max_view=max(k.view_scale for k in parsed)
+        detail_keys=[i for i,k in enumerate(parsed) if k.view_scale>1.075]
+        if hero is None:
+            if detail_keys:raise ValueError("Centered clearface overview dolly requires viewScale <=1.075")
+        else:
+            from customer_craft_contract import hero_geometry,HERO_MIN_ZOOM,HERO_MAX_ZOOM
+            _event(manifest,hero,duration)
+            if len(detail_keys)!=1 or not 0<detail_keys[0]<len(parsed)-1:
+                raise ValueError("Hero detail must have one verified peak and wide release")
+            i=detail_keys[0];k=parsed[i];prev=parsed[i-1];release=parsed[i+1]
+            fit,transform,_,begin,end=hero_geometry(manifest,hero,source_size,output_size)
+            if (not HERO_MIN_ZOOM<=k.view_scale<=min(fit,HERO_MAX_ZOOM)+1e-7
+                    or prev.view_scale!=1. or release.view_scale!=1.
+                    or k.start_at<begin-1e-7 or release.at>end+1/60
+                    or release.start_at-k.at<.95
+                    or k.start_at>=k.at or release.start_at>=release.at):
+                raise ValueError("Hero detail exceeds verified geometry or available source hold")
+            hero_interval=(k.start_at,release.at)
+            hero_peak=k.view_scale;hero_translation=transform(hero_peak)
+        max_view=max(k.view_scale for i,k in enumerate(parsed) if i not in detail_keys)
         if max_view*(x1-x0)>output_size[0]-24 or max_view*(y1-y0)>output_size[1]-24:
             raise ValueError("Overview dolly would clip the complete source aperture")
     follower=(build_follow(manifest,source_size,duration,fps,motion["follow"])
               if profile=="reference-spring" else None)
     obj=StudioStage(tuple(parsed),rgb,grain,depth,reflection,index,intensity,seconds,
                     onset,pi,pp[2],visible,mode,context,source_size,output_size,duration,box,
-                    profile,shutter,fps,stage_preset,follower,immersive)
+                    profile,shutter,fps,stage_preset,follower,immersive,hero,hero_interval,hero_peak,hero_translation)
     if follower is not None:
         # All source-declared follow actions, including actions beyond the
         # stage lighting event, must remain genuine, target-visible actions.
@@ -658,7 +696,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
         timeline=sorted({0.,duration,*[k.at for k in obj.camera],
                          *[k.start_at for k in obj.camera]})
         insufficient=[(at,obj.context_visibility(at)) for at in timeline
-                      if obj.context_visibility(at)<.935]
+                      if obj.context_visibility(at)<.935 and not (hero_interval is not None and hero_interval[0]<=at<=hero_interval[1])]
         if insufficient:
             at,fraction=min(insufficient,key=lambda row:row[1])
             raise ValueError(

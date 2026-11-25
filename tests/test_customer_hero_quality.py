@@ -44,9 +44,11 @@ def test_hero_hold_is_larger_than_setup_and_cannot_precede_proof(tmp_path,monkey
     keys=plan["studioStage"]["camera"]
     peaks=[(k,keys[i+1]) for i,k in enumerate(keys) if k["viewScale"]>1]
     assert len(peaks)==3
-    assert [k["viewScale"] for k,_ in peaks]==[1.035,1.065,1.035]
+    assert peaks[0][0]["viewScale"]==peaks[2][0]["viewScale"]==1.035
+    assert 1.20<=peaks[1][0]["viewScale"]<=1.62
+    assert plan["studioStage"]["motion"]["heroEventIndex"]==1
     holds=[n["startAt"]-k["at"] for k,n in peaks]
-    assert holds[1]>2 and holds[1]>max(holds[0],holds[2])
+    assert holds[1]>=1.0 and holds[1]>max(holds[0],holds[2])
     for i,(k,n) in enumerate(peaks):
         assert k["startAt"]>=ev[i]["t"]
         assert n["at"]<(ev[i+1]["start"] if i+1<len(ev) else 30)
@@ -75,3 +77,58 @@ def test_tab_result_uses_selected_sibling_not_largest_unrelated_panel(monkeypatc
         page.get_by_role("tab",name="Campaigns").evaluate("e=>e.setAttribute('aria-controls','unrelated')")
         with pytest.raises(story.StoryRejected):story.result_panel(page,old)
         browser.close()
+
+def _hero_manifest(result, pointer=(1300,750), duration=30.):
+    # Fixture only: verify all projected frames against independent geometry.
+    ev=[{"start":t,"end":t+.1,"t":t+1.5,"evidence":"fixture verified",
+         "kind":"click","targetRect":{"x":pointer[0]-40,"y":pointer[1]-25,"width":80,"height":50},
+         "resultRect":dict(result)} for t in (2.,10.,22.)]
+    return {"cursorless":True,"events":ev,"duration":duration,
+            "pointer_samples":[{"t":i*.1,"x":pointer[0],"y":pointer[1]} for i in range(300)]}
+
+@pytest.mark.parametrize("rect,pointer,expected",[
+    ({"x":1000,"y":500,"width":1400,"height":800},(1300,750),1.62),
+    ({"x":560,"y":392,"width":3202,"height":851},(1100,650),1.289),
+    ({"x":0,"y":0,"width":3840,"height":2160},(1100,650),1.065),
+    ({"x":40,"y":1100,"width":1050,"height":700},(500,1400),None),
+])
+def test_localized_geometry_and_all_frame_contract(rect,pointer,expected,tmp_path,monkeypatch):
+    import numpy as np
+    import sys
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/"scripts"))
+    from source_event_director import direction
+    from spatial_studio_stage import load_studio_stage
+    from customer_craft_contract import verify_plan
+    m=_hero_manifest(rect,pointer)
+    source=tmp_path/"fixture.mp4";source.write_bytes(b"fixture")
+    manifest=tmp_path/"manifest.json";manifest.write_text(json.dumps(m))
+    packet={"actualCapture":{"durationSeconds":30.,"resolution":[3840,2160],
+            "nativeFps":60,"pointerProvenance":{"recordedPointerTrackAvailable":True}}}
+    with patch("film_director_capabilities.build_contract",return_value=packet):
+        plan=direction(source,manifest,1)
+    stage=load_studio_stage(plan["studioStage"],m,source,(3840,2160),(1920,1080),30.,60)
+    peak=max(k.view_scale for k in stage.camera)
+    if expected is not None:assert peak==pytest.approx(expected,abs=.002)
+    else:assert 1.20<=peak<=1.62
+    ptr=np.asarray([[p["t"],p["x"],p["y"]] for p in m["pointer_samples"]])
+    metrics=verify_plan(plan,m,stage,ptr,60,1800)
+    assert metrics["minimumResultVisible"]==1.
+    assert metrics["maximumQuadSpeedPx"]<=8
+    assert metrics["maximumQuadAccelerationPx"]<=1.5
+    if peak>1.075:
+        assert metrics["heroDetailFrames"]>0 and metrics["heroMinimumResultVisible"]==1.
+        assert metrics["heroMinimumPaddingPx"]>=35
+        hero_key=next(k for k in stage.camera if k.view_scale>1.075)
+        assert stage.hero_backdrop_strength(hero_key.at)==pytest.approx(1.)
+        assert stage.hero_backdrop_strength(m["events"][1]["t"]-.1)==0.
+        assert stage.hero_backdrop_strength(stage.hero_interval[1]+.1)==0.
+        # Same result cannot be framed using an unrelated selected event or
+        # before the source clock admits it.
+        import copy
+        wrong=copy.deepcopy(plan["studioStage"]);wrong["motion"]["heroEventIndex"]=2
+        with pytest.raises(ValueError):load_studio_stage(wrong,m,source,(3840,2160),(1920,1080),30.,60)
+        wrong=copy.deepcopy(plan["studioStage"])
+        next(k for k in wrong["camera"] if k["viewScale"]>1.075)["startAt"]=10.5
+        with pytest.raises(ValueError):load_studio_stage(wrong,m,source,(3840,2160),(1920,1080),30.,60)
+    else:
+        assert metrics["heroDetailFrames"]==0 and stage.hero_detail_index is None

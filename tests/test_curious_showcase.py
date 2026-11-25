@@ -121,3 +121,31 @@ class CuriousShowcaseTests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+
+
+def test_structured_story_503_backoff_recovers_and_counts_every_request(tmp_path,monkeypatch):
+    from backend.curious_showcase import Conversation
+    delays=[];attempts=[]
+    monkeypatch.setattr("backend.curious_showcase.time.sleep",delays.append)
+    def request(model,contents,json_mode,schema):
+        attempts.append((model,schema))
+        if len(attempts)<3:raise HTTPError("https://example.com",503,"unavailable",{},None)
+        return '{"ids":["a0"]}',{"totalTokenCount":11}
+    conv=Conversation(tmp_path/"conv",request=request)
+    schema={"type":"OBJECT"}
+    result=conv.ask("Observed IDs",json_mode=True,phase="story-plan",response_schema=schema)
+    assert result=='{"ids":["a0"]}'
+    assert delays==[.75,1.5] and conv.calls==3
+    assert len({x[0] for x in attempts})==1
+    assert [a["status"] for a in conv.data["attempts"]]==["failed","failed","ok"]
+    assert [a.get("retry_delay_seconds") for a in conv.data["attempts"]]==[.75,1.5,None]
+
+
+def test_structured_story_rate_limit_is_not_retried(tmp_path,monkeypatch):
+    from backend.curious_showcase import Conversation
+    delays=[]
+    monkeypatch.setattr("backend.curious_showcase.time.sleep",delays.append)
+    def request(*args):raise HTTPError("https://example.com",429,"limited",{},None)
+    conv=Conversation(tmp_path/"conv",request=request)
+    assert conv.ask("Observed IDs",json_mode=True,phase="story-plan",response_schema={"type":"OBJECT"},stop_on_rate_limit=True) is None
+    assert conv.calls==1 and not delays

@@ -220,6 +220,12 @@ def render_cloud_stage(stage, source, t):
             delta=board.astype(np.float32)-sky
             movement=cv2.warpAffine(delta,view,(ow,oh),flags=cv2.INTER_LINEAR,
                                     borderMode=cv2.BORDER_CONSTANT,borderValue=0)
+            # Grade only the stationary environment, never the actual UI.
+            # Smoothly follow the source-bound hero camera envelope.
+            strength=stage.hero_backdrop_strength(t) if hasattr(stage,"hero_backdrop_strength") else 0.
+            if strength>0:
+                gray=cv2.cvtColor(sky,cv2.COLOR_BGR2GRAY)[:,:,None]
+                sky=(sky*(1-.24*strength)+gray*(.24*strength))*(1-.16*strength)
             board=np.uint8(np.clip(sky+movement,0,255))
         else:
             # Keep previous cloud presets' rendering behaviour identical.

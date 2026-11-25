@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -121,7 +122,12 @@ class Conversation:
         contents = [{"role": t["role"], "parts": [{"text": t["text"]}]}
                     for t in self.data["turns"]]
         contents.append({"role": "user", "parts": [{"text": prompt}, *media]})
-        for model in models:
+        # The structured customer phases can retry transient overloads.
+        # Every HTTP request is still a separate durable attempt and counts
+        # against MAX_CALLS; never retry a rate limit or permanent error.
+        retry_count=0
+        while models:
+            model=models.pop(0)
             if self.calls >= MAX_CALLS or not MODEL_NAME.fullmatch(model):
                 break
             attempt = {"model": model, "phase": phase, "status": "started"}
@@ -140,6 +146,14 @@ class Conversation:
                 self.save()
                 if stop_on_rate_limit and attempt.get("http_status") == 429:
                     break
+                if (response_schema is not None and attempt.get("http_status")==503
+                        and retry_count<2 and self.calls<MAX_CALLS):
+                    delay=min(4.,max(.75*2**retry_count,float(attempt.get("retry_after_seconds",0))))
+                    attempt["retry_delay_seconds"]=delay
+                    self.save()
+                    retry_count+=1
+                    time.sleep(delay)
+                    models.insert(0,model)
                 continue
             attempt.update(status="ok", finish_reason=usage.get("finishReason"),
                            usage={k: usage.get(k) for k in (
