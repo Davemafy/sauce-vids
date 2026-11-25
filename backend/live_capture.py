@@ -14,6 +14,25 @@ from .shot_scorer import crop_for_subject
 from .product_explorer import CHROME,known_dialog_opener,safe_public_modal_opener,allowed,JS,TAB_TARGET_JS
 
 
+def capture_public_evidence_mark(page,private,evidence,label,start,*,native60=False):
+ """Record source-safe customer evidence without perturbing native capture.
+
+ Playwright page.screenshot may temporarily override Chromium viewport/device
+ metrics. During 60Hz X11 capture that leaks 3–5 distorted actual source
+ frames into an otherwise stable film. The continuous source MP4 and
+ independently tested DOM result are the pixel evidence in native mode.
+ Only legacy Playwright recording retains separate screenshot thumbnails.
+ """
+ if not native60:
+  page.screenshot(path=str(private/('mark-'+str(len(evidence))+'.jpg')),
+                  type='jpeg',quality=60,animations='disabled')
+ evidence.append({'phase':label,'time_s':round(time.monotonic()-start,2),
+       'url':page.url.split('?')[0],
+       'scroll':page.evaluate('Math.round(window.scrollY)'),
+       'evidence_medium':('continuous-native60-source' if native60
+                          else 'separate-browser-screenshot')})
+
+
 def same_canonical_public_origin(original, current):
  """Accept only a strict apex/www redirect, never a foreign host or downgrade."""
  a,b=urlsplit(original),urlsplit(current)
@@ -495,11 +514,11 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
    evidence=[]
    editorial_events=[]
    def mark(label):
-    # Records nonsecret public evidence only; values, HAR, content excluded.
-    page.screenshot(path=str(private/('mark-'+str(len(evidence))+'.jpg')),
-                    type='jpeg',quality=60,animations='disabled')
-    evidence.append({'phase':label,'time_s':round(time.monotonic()-start,2),
-          'url':page.url.split('?')[0],'scroll':page.evaluate('Math.round(window.scrollY)')})
+    # The original page video is already the evidence in native60 mode.
+    # Calling Playwright screenshot during active Xvfb recording changes
+    # Chromium's screen metrics briefly, creating a visible jump/return.
+    capture_public_evidence_mark(
+        page,private,evidence,label,start,native60=bool(native_recorder))
    if not compact:mark('opening')
    sequence_proof=None
    if plan.get('sequence') and local_only:

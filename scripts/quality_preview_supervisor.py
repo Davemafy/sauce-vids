@@ -79,6 +79,68 @@ def terminal_blackout_finding(tail):
     return None
 
 
+def full_rate_temporal_frames(path,stream):
+    """Decode all available frames at ORIGINAL FPS for brief jump/revert QA.
+
+    Prior 10fps sampling silently missed a 4-frame device-metrics jump in
+    the 60fps customer's original Chromium recording. Decode pixels only
+    from the encoded candidate, no inferred UI or interpolated transitions.
+    """
+    try:
+        n=int(stream.get("nb_frames",0))
+    except (TypeError,ValueError):
+        n=0
+    if not 16<=n<=4500:
+        return None
+    cmd=["ffmpeg","-hide_banner","-v","error","-nostdin",
+         "-i",str(path),"-map","0:v:0",
+         "-vf","scale=160:90:flags=fast_bilinear,format=gray",
+         "-vsync","0","-f","rawvideo","-"]
+    buf=subprocess.check_output(cmd,timeout=120)
+    if len(buf)!=n*160*90:
+        raise RuntimeError("Full-rate QA failed to decode every candidate frame")
+    return np.frombuffer(buf,dtype=np.uint8).reshape(n,90,160)
+
+
+def transient_frame_reversion_finding(frames,*,fps=60):
+    """Detect an A→B→A source/display jump lasting fewer than ~150 ms.
+
+    A real persistent modal, scrolling or intentional zoom does not return
+    to the exact original frame moments later. This check rejects the
+    original Playwright screenshot-induced 4-frame Chrome scale change,
+    without inventing missing or 'repaired' original browser pixels.
+    """
+    if frames is None:return None
+    if not isinstance(frames,np.ndarray) or frames.ndim!=3 or frames.dtype!=np.uint8:
+        raise ValueError("Full-rate QA requires decoded raw grayscale frames")
+    if len(frames)<10:return None
+    if type(fps) not in (int,float) or not math.isfinite(fps) or fps<=0:
+        raise ValueError("Invalid frame rate for transient QA")
+    window=min(8,max(3,round(fps*.15)))
+    def delta(a,b):
+        return float(np.abs(a.astype(np.int16)-b.astype(np.int16)).mean())
+    for index in range(2,len(frames)-3):
+        before=frames[index-1]
+        altered=frames[index]
+        jump=delta(before,altered)
+        if jump<9.:continue
+        # A strongly altered visual state returning within 2..8 real
+        # frames is a perceptible flicker, independent of global QA mean.
+        for end in range(index+2,min(len(frames),index+window+1)):
+            after=frames[end]
+            returned=delta(before,after)
+            bounce=delta(altered,after)
+            if returned<min(3.2,jump*.3) and bounce>jump*.75:
+                return {"code":"TRANSIENT_FRAME_REVERSION",
+                        "detail":{"onset_frame":index,
+                                  "restored_frame":end,
+                                  "onset_seconds":round(index/fps,4),
+                                  "duration_ms":round(1000*(end-index)/fps,2),
+                                  "source_to_blink_delta":round(jump,3),
+                                  "return_to_source_delta":round(returned,3)}}
+    return None
+
+
 def _source_event_windows(manifest):
     """Native verified event or paired real browser click/outcome timestamps."""
     rows=manifest.get("events")
@@ -262,6 +324,17 @@ def analyze(path, evidence=None, seconds=15):
     terminal_defect=terminal_blackout_finding(terminal)
     if terminal_defect is not None:
         findings.append(terminal_defect)
+    # Full-rate transient screen-jump check. Source fidelity does not mean
+    # blindly accepting temporary Chromium viewport screenshot artifacts.
+    from fractions import Fraction
+    try:
+        actual_fps=float(Fraction(video["r_frame_rate"]))
+    except (ValueError,KeyError,ZeroDivisionError):
+        actual_fps=0.
+    transient=transient_frame_reversion_finding(
+        full_rate_temporal_frames(path,video),fps=actual_fps or 60)
+    if transient is not None:
+        findings.append(transient)
     if len(opener)>=10 and np.percentile(opener,80)<1.3: issue("STATIC_OPENING_2S",{"p80_frame_delta":round(float(np.percentile(opener,80)),3)})
     if np.mean((means>185)&(std<30))>.35: issue("WASHED_OUT_FRAMES",{"fraction":round(float(np.mean((means>185)&(std<30))),3)})
     # A theme switch or newly displayed panel can legitimately change
