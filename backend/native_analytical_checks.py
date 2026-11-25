@@ -39,20 +39,27 @@ def apply_preset(page,url,picker,label,click):
       return options.length===1?options[0]:null;
     }""",label).as_element()
     if option is None:raise ValueError("Ambiguous, sensitive or missing analytical preset")
+    # Pin the exact DOM popup before the click. Re-reading a changing
+    # locator count twice races the framework's close animation.
+    original=option.evaluate_handle("e=>e.closest('[role=dialog]')").as_element()
+    if original is None:raise ValueError("Analytical popup identity missing")
     click(option,label)
-    # The exact observed popup must actually close before result admission.
-    popup=page.locator('[role=dialog]:visible')
-    if popup.count():
-        # Preserve the existing dismissal policy, but never dismiss a new dialog.
-        if popup.count()!=1 or not option.evaluate("e=>!e.isConnected||!!e.closest('[role=dialog]')"):
-            raise ValueError("Unexpected dialog after analytical action")
-        # Do not press Escape on a new/unrelated dialog; wait for auto-close.
-        popup.first.wait_for(state="hidden",timeout=3500)
+    from playwright.sync_api import TimeoutError as BrowserTimeout, Error as BrowserError
+    closed="original=>{"+PRELUDE+"""
+      const current=dialogs();
+      if(current.some(e=>e!==original))throw new Error('Unexpected dialog after analytical action');
+      return current.length===0;
+    }"""
+    try:
+        page.wait_for_function(closed,arg=original,timeout=3500,polling=50)
+    except BrowserTimeout as exc:
+        raise ValueError("Original analytical dialog did not close") from exc
+    except BrowserError as exc:
+        raise ValueError("Unexpected dialog after analytical action") from exc
     assert_local(page,url)
     predicate="label=>{"+PRELUDE+"const a=triggers();return !dialogs().length&&a.length===1&&norm(a[0])===label;}"
     # Native physical dispatch is asynchronous with the application's state
     # update. Never mistake an old label for a failed or successful action.
-    from playwright.sync_api import TimeoutError as BrowserTimeout
     try:page.wait_for_function(predicate,arg=label,timeout=3500,polling=100)
     except BrowserTimeout as exc:raise ValueError("Applied analytical preset does not match observed option") from exc
     assert_local(page,url)

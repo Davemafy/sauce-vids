@@ -91,13 +91,15 @@ class Conversation:
         os.chmod(tmp, 0o600)
         os.replace(tmp, self.file)
 
-    def _request(self, model, contents, json_mode):
+    def _request(self, model, contents, json_mode, response_schema=None):
         key = os.environ.get("GEMINI_API_KEY")
         if not key:
             raise RuntimeError("Gemini credential unavailable")
         config = {"maxOutputTokens": 4096 if json_mode else 2400, "temperature": .35}
         if json_mode:
             config["responseMimeType"] = "application/json"
+        if response_schema is not None:
+            config["responseSchema"] = response_schema
         req = Request(
             "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent",
             data=json.dumps({"contents": contents, "generationConfig": config}).encode(),
@@ -112,7 +114,7 @@ class Conversation:
         return text[:16000], {**answer.get("usageMetadata", {}),
                               "finishReason": candidate.get("finishReason")}
 
-    def ask(self, prompt, *, media=(), json_mode=False, phase, stop_on_rate_limit=False):
+    def ask(self, prompt, *, media=(), json_mode=False, phase, stop_on_rate_limit=False, response_schema=None):
         preferred = self.data.get("model") or os.getenv("SAUCE_DIRECTOR_MODEL", "gemini-3.1-flash-lite")
         fallback = os.getenv("SAUCE_CURIOUS_FALLBACK_MODEL", "gemini-3-flash-preview")
         models = [preferred] if self.succeeded else list(dict.fromkeys((preferred, fallback)))
@@ -126,7 +128,8 @@ class Conversation:
             self.data["attempts"].append(attempt)
             self.save()
             try:
-                response, usage = self.request(model, contents, json_mode)
+                response, usage = (self.request(model, contents, json_mode, response_schema)
+                                   if response_schema is not None else self.request(model, contents, json_mode))
             except (HTTPError, URLError, TimeoutError, OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError) as exc:
                 attempt.update(status="failed", error_type=type(exc).__name__)
                 if isinstance(exc, HTTPError):

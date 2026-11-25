@@ -15,7 +15,7 @@ class CustomerStoryTests(unittest.TestCase):
 
     def test_requires_distinct_observed_actions_and_core_change(self):
         def validate(ids):
-            return validated_selection(json.dumps({"ids":ids,"story":"A connected workflow"}),self.catalog)
+            return validated_selection(json.dumps({"ids":ids,"story":"A connected workflow","hero_action_id":ids[0]}),self.catalog)
         self.assertEqual([x["id"] for x in validate(["a0","a3","a2","a1"])["actions"]],["a0","a3","a2","a1"])
         for ids in (["a0","a1"],["a1","a2","a3","a4"],["a0","a1","a1","a2"],["a0","a1","a2","invented"],[x["id"] for x in self.catalog]):
             self.assertIsNone(validate(ids))

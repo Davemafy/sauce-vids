@@ -46,7 +46,7 @@ def test_only_witnessed_ids_reach_story_director(tmp_path,monkeypatch):
         return b"changed",{"x":0,"y":0,"width":8,"height":8},.20,1
     monkeypatch.setattr(s,"verify",verify)
     conv=Mock();conv.calls=2
-    conv.ask.return_value='{"ids":["a0","a1","a3"],"story":"real"}'
+    conv.ask.return_value='{"ids":["a0","a1","a3"],"story":"real","hero_action_id":"a3"}'
     raw,allowed=s.compare_outcomes(rows,{"url":"https://example.com/","picker":"Default"},b"opening",tmp_path,conv,"brief")
     records=json.loads((tmp_path/"outcomes/comparison.json").read_text())
     assert len(opened)==4 and len(allowed)==3

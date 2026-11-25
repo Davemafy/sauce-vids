@@ -8,7 +8,7 @@ def catalog():
     return [{"id":f"a{i}","kind":"option","group":"Theme","label":str(i)} for i in range(6)]
 
 def response(ids):
-    return json.dumps({"ids":ids,"story":"Observed product transformation"})
+    return json.dumps({"ids":ids,"story":"Observed product transformation","hero_action_id":ids[0] if ids else None})
 
 def test_replan_keeps_safety_and_editorial_call_budget(tmp_path,monkeypatch):
     conv=Mock();conv.calls=2

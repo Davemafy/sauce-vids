@@ -18,7 +18,7 @@ def sha(file):
     return dig.hexdigest()
 
 
-def direction(video:Path,manifest:Path):
+def direction(video:Path,manifest:Path,hero_event_index=None):
     from film_director_capabilities import build_contract
     packet=build_contract(video,manifest,
         "Produce a readable 16:9 real-source two-or-more-step product film")
@@ -31,6 +31,9 @@ def direction(video:Path,manifest:Path):
         evidence.get("cursorless") is not True or
         not packet["actualCapture"]["pointerProvenance"].get("recordedPointerTrackAvailable")):
         raise ValueError("Need 1..4 short or 3..6 long source-verified visible UI actions and original recorded pointer")
+    if hero_event_index is not None and (not long_story or type(hero_event_index) is not int
+            or not 0<=hero_event_index<len(events)):
+        raise ValueError("Hero must reference a verified long-story event")
     for i,e in enumerate(events):
         if (not e.get("evidence") or e["start"]<.7 or
             e["t"]-e["start"]>3.5 or e["t"]>=duration-.9 or
@@ -110,13 +113,16 @@ def direction(video:Path,manifest:Path):
             begin=after_visible(e["t"])
             peak=native(begin+.45)
             next_press=events[i+1]["start"] if i+1<len(events) else duration
-            release=native(min(next_press-.25,peak+1.25))
+            is_hero=i==hero_event_index
+            # Hold the hero at peak rather than spending its whole beat in motion.
+            # Setup beats get a smaller, shorter push. Never extend a source beat
+            # across the next genuine press or change the original source clock.
+            zoom=1.065 if is_hero else (1.035 if hero_event_index is not None else 1.065)
+            hold=2.35 if is_hero else (.25 if hero_event_index is not None else .4)
+            release=native(min(next_press-.25,peak+hold+.85))
             if release<=peak+.2:
                 continue
-            # Give actual result pixels a deliberate, readable push after
-            # evidence exists. Keep the entire centered browser visible:
-            # the clearface customer craft contract caps this dolly at 1.075.
-            camera.extend([whole(peak,1.065,begin),
+            camera.extend([whole(peak,zoom,begin),
                            whole(release,1.,native(max(peak,release-.85)))])
         camera.append(whole(duration,1.))
         plan["studioStage"]["camera"]=camera
@@ -148,9 +154,10 @@ def main():
     p.add_argument("--source",type=Path,required=True)
     p.add_argument("--manifest",type=Path,required=True)
     p.add_argument("--out",type=Path,required=True)
+    p.add_argument("--hero-event-index",type=int)
     a=p.parse_args()
     if a.out.exists():raise ValueError("Refuse to replace existing creative work")
-    plan=direction(a.source.resolve(),a.manifest.resolve())
+    plan=direction(a.source.resolve(),a.manifest.resolve(),a.hero_event_index)
     a.out.parent.mkdir(parents=True,exist_ok=True)
     a.out.write_text(json.dumps(plan,indent=2)+"\n")
     print(json.dumps({"filmPlan":str(a.out),"verifiedEvents":len(plan["audio"]["eventIndices"]),

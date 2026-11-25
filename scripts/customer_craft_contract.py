@@ -19,6 +19,10 @@ def split_findings(report):
             "editorial": [c for c in codes if c in EDITORIAL_FINDINGS],
             "creativeApproved":False}
 
+def encoded_verdict(report):
+    """Editorial warnings retain the private film, never grant approval."""
+    return "REJECT" if split_findings(report)["technical"] else "HUMAN_REVIEW_REQUIRED"
+
 def verify_plan(plan,manifest,stage,pointer,fps,frames,trim=0):
     events=manifest.get("events",[])
     if (fps!=60 or not 3<=len(events)<=6 or trim!=0 or

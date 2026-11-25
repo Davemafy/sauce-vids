@@ -437,9 +437,14 @@ def analyze(path, evidence=None, seconds=15):
     if "verified_focal_sequence" in ev:
         findings.extend(verified_focal_sequence(
             ev["verified_focal_sequence"],(video["width"],video["height"])))
+    if __package__:
+        from .customer_craft_contract import encoded_verdict,split_findings
+    else:
+        from customer_craft_contract import encoded_verdict,split_findings
+    responsibility=split_findings({"findings":findings})
     return {"schema":"sauce-film-quality-v1","film":str(path),"film_sha256":digest(path),"duration":duration,"video_dimensions":[video["width"],video["height"]],"sampled_frames":len(a),  "sample_fps":10,"sourceRelativeRealUiTransitions":source_relative_transitions,
             "sourceRelativeDarkUiEvidence":source_referenced_dark_ui,
-            "findings":findings,"verdict":"REJECT" if findings else "HUMAN_REVIEW_REQUIRED"}
+            "findings":findings,"responsibility":responsibility,"verdict":encoded_verdict({"findings":findings})}
 
 def repair_edl(edit,manifest,report):
     """Only shorten a proven event-free static first shot, never remove real events."""
@@ -497,8 +502,8 @@ def supervise(video, manifest_path, edl_path, source_path, output_dir, evidence_
         after=analyze(outfile,evidence,seconds=4)
         prior={f["code"] for f in before["findings"]}
         now={f["code"] for f in after["findings"]}
-        receipts.append({"attempt":attempt,"report":after,"edl":str(new_edl),"excerpt":str(outfile),"status":"HUMAN_REVIEW_REQUIRED" if "STATIC_OPENING_2S" not in now and not(now-prior) else "REJECT"})
-        if receipts[-1]["status"]=="HUMAN_REVIEW_REQUIRED":break
+        receipts.append({"attempt":attempt,"report":after,"edl":str(new_edl),"excerpt":str(outfile),"status":after["verdict"],"repair_improved":"STATIC_OPENING_2S" not in now and not(now-prior)})
+        if receipts[-1]["status"]=="HUMAN_REVIEW_REQUIRED" and receipts[-1]["repair_improved"]:break
         if after["film_sha256"]==before["film_sha256"]:break
         before=after;edl=updated
     receipt={"schema":"sauce-bounded-quality-v1","original_sha256":original["film_sha256"],"max_attempts":attempts,"attempts":receipts,"human_approval":False}
