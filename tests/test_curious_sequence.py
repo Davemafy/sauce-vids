@@ -106,3 +106,32 @@ def test_option_search_accepts_observed_gemini_array():
     assert option_hypotheses('[{"id":"fake"},{"id":"c2"},{"id":"c2"},{"id":"c3"},{"id":"c4"},{"id":"c5"}]',items)==['2','3','4']
     assert option_hypotheses('[{"id":"c1"},"c2"]',items)==[]
     assert option_hypotheses('prose c1',items)==[]
+
+def test_analytic_date_range_is_opt_in_and_bounded(monkeypatch):
+    from backend.curious_sequence import analytic_name,analytic_option
+    monkeypatch.delenv('SAUCE_CURIOUS_ANALYTICS',raising=False)
+    assert not analytic_name('Date range')
+    monkeypatch.setenv('SAUCE_CURIOUS_ANALYTICS','1')
+    assert analytic_name('Date range')
+    assert not analytic_name('Account') and not analytic_name('Chart interval')
+    for label in ('Today','Yesterday','Last 7 days','Last 24 hours'):
+        assert analytic_option('Date range',label)
+    for label in ('Custom range','Submit','Last 0 days','Last 9999 days','Last 7 days and export'):
+        assert not analytic_option('Date range',label)
+
+def test_analytic_preset_requires_applied_visible_label(monkeypatch):
+    import backend.curious_sequence as s
+    monkeypatch.setenv('SAUCE_CURIOUS_ANALYTICS','1')
+    loc=Mock();loc.inner_text.return_value='Last 7 days'
+    monkeypatch.setattr(s,'analytic_triggers',lambda p:[{'label':'Date range','locator':loc}])
+    s.assert_applied_option(None,'Last 7 days','Date range')
+    with pytest.raises(ValueError,match='does not match'):
+        s.assert_applied_option(None,'Last 24 hours','Date range')
+
+def test_option_hypotheses_normalizes_only_unique_observed_names():
+    from backend.curious_sequence import option_hypotheses
+    rows=[{'label':'Today'},{'label':'Last 24 hours'},{'label':'Last 7 days'}]
+    raw='{"ids":["Last 30 days","Last 24 hours","Today"]}'
+    assert option_hypotheses(raw,rows)==['Last 24 hours','Today']
+    assert option_hypotheses('{"ids":["Today","c0","today","Last 7 days"]}',rows)==['Today','Last 7 days']
+    assert option_hypotheses('{"ids":["Today"]}',rows+[{'label':'Today'}])==[]

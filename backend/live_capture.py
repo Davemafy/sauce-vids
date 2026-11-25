@@ -523,7 +523,7 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
    sequence_proof=None
    if plan.get('sequence') and local_only:
     from backend.curious_sequence import capture_sequence
-    sequence_events,sequence_proof=capture_sequence(page,url,plan['sequence'],video_begin,pointer_to,baseline=baseline,compact=compact)
+    sequence_events,sequence_proof=capture_sequence(page,url,plan['sequence'],video_begin,pointer_to,baseline=baseline,compact=compact,snapshot=native_recorder.snapshot if native_recorder else None)
     editorial_events.extend(sequence_events)
     events.append({'id':'sequence','kind':'button','label':'Observed local option selection'})
     mark('sequence-result')

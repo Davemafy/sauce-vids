@@ -189,6 +189,20 @@ class Native60Recorder:
                         **self.geometry,"fps":FPS},indent=2)+"\n")
         return self.geometry
 
+    def snapshot(self,page=None):
+        """Read calibrated X11 pixels without mutating live Chromium metrics."""
+        if self.geometry is None or not self.display:
+            raise RuntimeError("Native display geometry unavailable")
+        g=self.geometry
+        grab=subprocess.run(["ffmpeg","-hide_banner","-v","error","-nostdin",
+             "-f","x11grab","-framerate","1","-video_size",f"{g['width']}x{g['height']}",
+             "-grab_x",str(g["x"]),"-grab_y",str(g["y"]),"-draw_mouse","0",
+             "-i",self.display,"-frames:v","1","-threads","1","-f","image2pipe","-vcodec","png","-"],
+            stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=8)
+        if grab.returncode or not grab.stdout.startswith(b"\x89PNG"):
+            raise RuntimeError("Native evidence acquisition failed")
+        return grab.stdout
+
     def start_recording(self):
         if self.geometry is None or self.ffmpeg_proc is not None:
             raise RuntimeError("Native video not ready for recording")
