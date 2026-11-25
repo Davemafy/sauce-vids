@@ -6,7 +6,7 @@ and independently verified from native display pixels.
 """
 from __future__ import annotations
 import hashlib,json,os,re,select,subprocess,sys,time,tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager,ExitStack
 from pathlib import Path
 from urllib.parse import urljoin,urlsplit
 from urllib.robotparser import RobotFileParser
@@ -316,7 +316,10 @@ def tab(page,label):
     return matches[0]
 
 def panel(page):
-    rows=panels(page)
+    if os.getenv("SAUCE_NATIVE_X11_POINTER")=="1" and os.getenv("SAUCE_CURIOUS_ANALYTICS")=="1":
+        from backend.native_analytical_checks import batch_panels
+        rows=batch_panels(page)
+    else:rows=panels(page)
     if not rows and os.getenv("SAUCE_PRESENTATION_RADIOS")=="1":
         from backend.presentation_radios import result_region
         region=result_region(page)
@@ -420,6 +423,9 @@ def apply(page,url,action,picker,click):
         return picker
     if action["kind"]=="option" and analytic_name(picker):
         require(analytic_option(picker,label),"Unrecognized analytical preset")
+        if os.getenv("SAUCE_NATIVE_X11_POINTER")=="1":
+            from backend.native_analytical_checks import apply_preset
+            return apply_preset(page,url,picker,label,click)
         scope=native_analytic_picker(page,url,picker,lambda loc:click(loc,None))
         click(native_analytic_handle(scope,label,option=True),label)
         dismiss_picker(page,scope)
@@ -684,7 +690,7 @@ def action_start(index,count):
 def capture(url,plan,proofs,out):
     out.mkdir(mode=0o700,parents=True,exist_ok=False)
     native=lambda r:{k:round(r[k]*D,4) for k in ("x","y","width","height")}
-    with native_display(out) as display, browser(url,display=display) as p:
+    with native_display(out) as display, browser(url,display=display) as p, ExitStack() as stack:
         # This is before FFmpeg starts. Never use Playwright screenshots during recording.
         p.mouse.move(W*.25,H*.2);browser_pixels=shot(p);p.wait_for_timeout(1800)
         opening=screen(display)
@@ -693,6 +699,16 @@ def capture(url,plan,proofs,out):
         # the native source clock starts. No screenshots during recording.
         opening_anchor=first_action_anchor(p,plan)
         source=out/"source.mp4";pts=[];events=[];pos=[W*.25,H*.2];pending_proof=[];timings=[]
+        native_input=None
+        if os.getenv("SAUCE_NATIVE_X11_POINTER")=="1":
+            from backend.native_x11_pointer import native_pointer
+            native_input=stack.enter_context(native_pointer(display,W*D,H*D))
+        operations=[]
+        def span(name,fn):
+            begun=time.monotonic()
+            try:return fn()
+            finally:operations.append({"step":name,"seconds":round(time.monotonic()-begun,6)})
+
         with (out/"capture.log").open("ab") as log:
             enc=subprocess.Popen(["ffmpeg","-v","error","-nostdin","-f","x11grab","-draw_mouse","0",
                 "-video_size",f"{W*D}x{H*D}","-framerate","60","-i",display,"-t",str(SECONDS),
@@ -702,10 +718,17 @@ def capture(url,plan,proofs,out):
         def now():return round(time.monotonic()-clock,6)
         def wait(t):time.sleep(max(0,t-now()))
         def move(x,y):
-            p.mouse.move(x,y);pos[:]=[x,y];t=now()
+            if native_input:
+                px,py=span("native_move",lambda:native_input[0](x*D,y*D))
+                x,y=px/D,py/D
+            else:span("browser_move",lambda:p.mouse.move(x,y))
+            pos[:]=[x,y];t=now()
             if t<SECONDS and (not pts or t>pts[-1]["t"]):pts.append({"t":t,"x":x*D,"y":y*D})
         def click(loc,label):
-            loc.scroll_into_view_if_needed(timeout=3000);p.wait_for_timeout(100);r=loc.bounding_box()
+            if not native_input:
+                span("scroll",lambda:loc.scroll_into_view_if_needed(timeout=3000))
+                p.wait_for_timeout(100)
+            r=span("target_bounds",loc.bounding_box)
             require(r and 0<=r["x"]<r["x"]+r["width"]<=W and 0<=r["y"]<r["y"]+r["height"]<=H,
                     "Target clipped before click")
             # Preserve the real stationary interval before a new approach.
@@ -715,8 +738,16 @@ def capture(url,plan,proofs,out):
                 q=i/12;q=q*q*(3-2*q)
                 move(sx+(tx-sx)*q,sy+(ty-sy)*q)
                 time.sleep(max(0,start+.48*i/12-time.monotonic()))
-            require(loc.evaluate("e=>{let r=e.getBoundingClientRect(),h=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return h&&(h===e||e.contains(h))&&!e.closest('form,[data-private],[data-secret],[data-sensitive]')}"),"Target obstructed")
-            move(*pos);p.mouse.down();t=now();p.wait_for_timeout(65);p.mouse.up();end=now()
+            hit=span("target_hit_test",lambda:loc.evaluate("e=>{let r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2,h=document.elementFromPoint(x,y);return h&&(h===e||e.contains(h))&&!e.disabled&&!e.closest('form,a[href],[data-private],[data-secret],[data-sensitive],[inert]')?{x,y}:null}"))
+            require(hit and abs(hit["x"]-tx)<=2 and abs(hit["y"]-ty)<=2,"Target shifted or obstructed")
+            move(*pos)
+            if native_input:
+                require(native_input[2]()==(round(pos[0]*D),round(pos[1]*D)),"Native pointer moved before press")
+                span("native_down",lambda:native_input[1](True));t=now()
+                time.sleep(.065)
+                span("native_up",lambda:native_input[1](False));end=now()
+            else:
+                span("browser_down",p.mouse.down);t=now();p.wait_for_timeout(65);span("browser_up",p.mouse.up);end=now()
             if label:
                 events.extend([{"kind":"pointerdown","actionKind":"click","label":label,"t":t,"targetRect":native(r)},
                                {"kind":"pointerup","label":label,"t":end}])
@@ -725,8 +756,8 @@ def capture(url,plan,proofs,out):
             move(*pos)
             opening_pointer_approach(move,wait,opening_anchor)
             for i,(action,expected) in enumerate(zip(plan["actions"],proofs)):
-                wait(action_start(i,len(proofs)));started=now();before=screen(display);old=panel(p)
-                current=apply(p,url,action,current,click)
+                wait(action_start(i,len(proofs)));started=now();before=span("before_screen",lambda:screen(display));old=span("before_panel",lambda:panel(p))
+                current=span("apply_total",lambda:apply(p,url,action,current,click))
                 applied=now()
                 try:
                     after,box,delta,t=verify(p,url,before,old,lambda _:screen(display),allow_localized=os.getenv("SAUCE_EVIDENCE_FIRST")=="1" and action["kind"]=="option")
@@ -748,6 +779,7 @@ def capture(url,plan,proofs,out):
             wait(29);enc.wait(timeout=20);require(enc.returncode==0,"Native recording failed")
         finally:
             if enc.poll() is None:enc.terminate();enc.wait(timeout=10)
+            save(out/"native-operation-timing.json",operations)
         for i,before,after in pending_proof:
             persist_screen(out/f"{i}-before.png",before);persist_screen(out/f"{i}-after.png",after)
         verify_live_terminal_frames(source,1800)
