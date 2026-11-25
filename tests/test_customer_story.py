@@ -207,6 +207,10 @@ def test_default_evidence_led_editorial_plan_reaches_source_compiler(tmp_path,mo
         def ask(self,prompt,*,response_schema=None,**kwargs):
             assert response_schema==customer_editorial.schema(["p0","l1","s2"])
             assert "real before/after evidence" in prompt
+            assert '"action_id": "p0", "label": "Deep", "kind": "option", "before_image": 1, "after_image": 2' in prompt
+            assert '"action_id": "s2", "label": "Airy", "kind": "option", "before_image": 5, "after_image": 6' in prompt
+            assert "last after-image" in prompt
+            assert "not evidence of temporal motion or sound" in prompt
             return json.dumps({"accept":True,"reason":"Verified and distinctive","backdrop":"muted","duration_seconds":30,"beats":beats})
     with patch("backend.customer_story.probe_story",return_value=([{"id":a["id"],"delta":.12,"result":{}} for a in catalog],[],None)):
         plan,calls,proofs=investigate_story(json.dumps(raw),catalog,{"url":"https://example.com/editor","title":"Editor","picker":"Palette"},b"",tmp_path,Conversation(),"Client: show the product")

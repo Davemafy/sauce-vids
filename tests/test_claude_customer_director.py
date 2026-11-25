@@ -85,3 +85,11 @@ def test_claude_client_brief_does_not_force_thirty_seconds():
     assert "earns its runtime" in brief and "Emphasize the result" in brief
     assert "30-second" not in brief
     assert "30-second" in director_brief()
+
+def test_v2_director_prioritizes_witnessed_end_state_over_cosmetic_motion():
+    assert claude.PROMPT_VERSION == "motion-director-v2"
+    prompt = claude.system_prompt("story-editorial")
+    for rule in ("final image first", "unrelated marketing page", "390px-wide",
+                 "shortest executable duration", "viewport shrink/white flashes",
+                 "final after-image", "Do not infer motion or audio from stills"):
+        assert rule in prompt

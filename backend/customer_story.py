@@ -658,7 +658,9 @@ def compare_outcomes(catalog,metadata,opening,out,conv,creative):
             save(trial/"comparison.json",records)
     require(len(witnessed)>=MIN_ACTIONS,"Insufficient witnessed outcomes for a connected film")
     # Paired screenshots are in the same order as the admitted catalog.
-    raw=conv.ask(creative+" You now have actual independent before/after image pairs for each verified option below, in order. Direct a connected workflow using only 3-4 of these witnessed IDs. Prioritize a clear payoff and avoid redundant theme cycling. The images show independent tests, not an already verified sequence; Sauce will replay the entire sequence. Abstain if these do not support a compelling demo. JSON {ids:[...],story:'...',hero_action_id:'one selected ID'}. Choose exactly one hero action whose verified result most clearly demonstrates buyer value; make the remaining actions support that payoff. If abstaining, use empty ids and an empty hero_action_id. Observed outcomes: "+json.dumps([r for r in records if r["status"]=="verified"])+" Catalog: "+json.dumps(witnessed),
+    image_order=[{"action_id":a["id"],"label":a["label"],"kind":a["kind"],
+                  "before_image":2*i+1,"after_image":2*i+2} for i,a in enumerate(witnessed)]
+    raw=conv.ask(creative+" You now have actual independent before/after image pairs for each verified option below, in order. Images are numbered from 1; exact mapping: "+json.dumps(image_order)+". Direct a connected workflow using only 3-4 of these witnessed IDs. Work backwards from a single witnessed buyer-relevant payoff. Every selected action must teach something different; later actions must preserve, explain or complete the hero, not discard it for a marketing view. Avoid redundant theme cycling. The images show independent tests, not an already verified sequence; Sauce will replay the entire sequence. Abstain if these do not support a compelling demo. JSON {ids:[...],story:'...',hero_action_id:'one selected ID'}. Choose exactly one hero action whose verified result most clearly demonstrates buyer value; make the remaining actions support that payoff. If abstaining, use empty ids and an empty hero_action_id. Observed outcomes: "+json.dumps([r for r in records if r["status"]=="verified"])+" Catalog: "+json.dumps(witnessed),
                  media=tuple(images),json_mode=True,phase="story-from-outcomes",stop_on_rate_limit=True,response_schema=story_response_schema(witnessed))
     return require_provider_reply(raw,conv),witnessed
 
@@ -708,7 +710,16 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
             ids=[a["id"] for a in plan["actions"]]
             is_claude=getattr(conv,"provider_name",None)=="Claude"
             directed_edit=is_claude or editorial_direction_enabled()
-            task=creative+" Challenge this connected workflow against all real before/after evidence. Reject repetitive, decorative or navigation-only outcomes. "+json.dumps(proofs)
+            image_order=[{"action_id":a["id"],"label":a["label"],"kind":a["kind"],
+                          "before_image":2*i+1,"after_image":2*i+2}
+                         for i,a in enumerate(plan["actions"])]
+            task=(creative+" Challenge this connected workflow against all real before/after evidence. "
+                  "Images are numbered from 1 in actual replay order: "+json.dumps(image_order)+". "
+                  "Inspect the last after-image: it must preserve, explain or complete the hero payoff. "
+                  "Reject a misleading or unrelated marketing detour, repetitive decoration or navigation-only outcomes. "
+                  "Each accepted beat should state a distinct observable change or useful context, and what a viewer learns from it. "
+                  "Choose the shortest feasible edit; keep the labels that explain the result. "
+                  "These are stills, not evidence of temporal motion or sound. Measured results: "+json.dumps(proofs))
             kwargs={}
             if directed_edit:
                 task+=(" You are directing the edit, not operating a QA recorder. What single memorable outcome does the sequence prove? "
