@@ -131,6 +131,16 @@ def safe_camera_plan(job,release,source_sha):
 def build(roots,annotations):
     for name,root in roots.items():
         if not name.isidentifier() or not Path(root).is_dir():raise ValueError("Explicit root required")
+    # Research exports can live directly in arbitrary experimental folders.
+    # Bind reports to actual binaries by SHA, never infer a match from names.
+    reports={}
+    for root in roots.values():
+        root=Path(root).resolve()
+        for qpath in sorted(root.rglob("encoded-quality.json")):
+            if qpath.is_symlink() or not qpath.resolve().is_relative_to(root):continue
+            q=as_json(qpath)
+            if is_sha(q.get("film_sha256")) and q.get("verdict") in VALID:
+                reports.setdefault(q["film_sha256"],[]).append((qpath,q))
     collected=[];locator={}
     for name,root in sorted(roots.items()):
         root=Path(root).resolve()
@@ -139,18 +149,26 @@ def build(roots,annotations):
                 continue
             sha=file_sha(video)
             job=video.parent.parent
-            quality_file=job/"export/encoded-quality.json"
+            quality_file=video.parent/"encoded-quality.json"
             if not quality_file.is_file():quality_file=job/"encoded-quality.json"
             q=as_json(quality_file)
-            rel=as_json(job/"export/release.json")
+            rel=as_json(video.parent/"release.json")
+            matches=reports.get(sha,[])
+            # Different historical QA verdicts/codes for an identical binary
+            # are ambiguous. Preserve that ambiguity rather than select a pass.
+            signatures={(v["verdict"],tuple(sorted({f["code"] for f in qa_findings(v.get("findings"))}))) for _,v in matches}
+            conflict=len(signatures)>1
+            if matches and not conflict:
+                quality_file,q=next(((p,v) for p,v in matches if p==quality_file),matches[0])
             qa_sha=q.get("film_sha256")
             binding=("sha_match" if qa_sha==sha else
                      "sha_mismatch" if is_sha(qa_sha) else
                      "unbound" if q else "missing")
+            if conflict:binding="conflicting_reports"
             # A missing report film hash is *not* a trustworthy QA binding.
             verdict=q.get("verdict") if binding=="sha_match" else None
             if verdict not in VALID:verdict=None
-            source_sha=rel.get("source_sha256")
+            source_sha=rel.get("source_sha256") if rel.get("film_sha256")==sha else None
             if not is_sha(source_sha):source_sha=None
             source_check="not_checked"
             if source_sha:
@@ -162,9 +180,9 @@ def build(roots,annotations):
             release_sha=rel.get("film_sha256")
             rel_match=("sha_match" if release_sha==sha else
                        "sha_mismatch" if is_sha(release_sha) else "not_claimed")
-            duration=q.get("duration")
+            duration=q.get("duration") if verdict else None
             if type(duration) not in (int,float) or not 0<duration<3600:duration=None
-            actions=rel.get("observed_actions")
+            actions=rel.get("observed_actions") if rel_match=="sha_match" else None
             if type(actions) is not int or not 0<=actions<=100:actions=None
             row={"id":"film-"+sha[:20],"film_sha256":sha,
                  "quality":{"machine_verdict":verdict,"human_premium_label":"unreviewed",
@@ -175,13 +193,19 @@ def build(roots,annotations):
                  "evidence":{"qa_report_sha256":file_sha(quality_file) if q else None,
                              "qa_binding":binding,"release_film_binding":rel_match,
                              "source_sha256_claim":source_sha,"source_sha_check":source_check,
-                             "plan_sha256_claim":rel.get("plan_sha256") if is_sha(rel.get("plan_sha256")) else None}}
-            camera=safe_camera_plan(job,rel,source_sha)
+                             "plan_sha256_claim":rel.get("plan_sha256") if rel_match=="sha_match" and is_sha(rel.get("plan_sha256")) else None}}
+            camera=safe_camera_plan(job,rel,source_sha) if rel_match=="sha_match" else None
             if camera is not None:row["safe_camera_plan"]=camera
             collected.append(row)
             locator.setdefault(row["id"],[]).append({"root":name,"path":video.relative_to(root).as_posix()})
     found={}
-    for row in collected:found.setdefault(row["film_sha256"],row)
+    def evidence_rank(row):
+        ev=row["evidence"]
+        return (ev["qa_binding"]=="sha_match",ev["release_film_binding"]=="sha_match",
+                ev["source_sha_check"]=="sha_match",row.get("safe_camera_plan",{}).get("hash_check")=="sha_match")
+    for row in collected:
+        sha=row["film_sha256"]
+        if sha not in found or evidence_rank(row)>evidence_rank(found[sha]):found[sha]=row
     missed=0
     for review in annotations:
         if (not isinstance(review,dict) or not is_sha(review.get("film_sha256")) or
@@ -222,6 +246,11 @@ REJECTION_CODES={
     "Insufficient final source hold":"INSUFFICIENT_FINAL_HOLD",
     "No verified story within bounded recovery budget":"STORY_REPLAN_EXHAUSTED",
     "No verified story after bounded recovery":"STORY_REPLAN_EXHAUSTED",
+    "Insufficient witnessed outcomes for a connected film":"INSUFFICIENT_WITNESSED_OUTCOMES",
+    "Target shifted or obstructed":"TARGET_SHIFT_OR_OCCLUSION",
+    "Unsettled starting state":"UNSTABLE_INITIAL_STATE",
+    "Editorial story not admitted":"EDITORIAL_REJECTION",
+    "Observed option no longer unique or visible":"REPLAY_STATE_MISMATCH",
 }
 
 def build_failed_attempts(roots):
