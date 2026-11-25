@@ -15,7 +15,7 @@ import numpy as np
 from PIL import ImageGrab
 from playwright.sync_api import sync_playwright
 from backend.curious_sequence import (discover,exact,open_picker,dismiss_picker,
-    safe_label,panels,shot,arr,assert_local)
+    safe_label,panels,shot,arr,assert_local,OPTIONS)
 from backend.curious_showcase import Conversation,MAX_CALLS
 from backend.curious_interactive import parse
 from backend.product_explorer import CHROME
@@ -358,6 +358,31 @@ def verify(page,url,before,old,snapshot,*,allow_localized=False,proof_metrics=No
     if weak is not None:raise WeakVisualOutcome(*weak)
     raise StoryRejected("Product outcome did not settle")
 
+def exact_observed_option(scope,label):
+    """Resolve a previously observed safe label to one current DOM handle.
+
+    Full option discovery remains authoritative for model selection. Replay
+    needs only the chosen label, not dozens of remote locator round trips.
+    Never use model selectors or positional identity; ambiguity fails closed.
+    """
+    require(safe_label(label),"Unsafe option label")
+    handle=scope.evaluate_handle(r"""(root,args)=>{
+        const normalize=e=>e.innerText.trim().replace(/\s+/g,' ');
+        const eligible=[...root.querySelectorAll(args.selector)].slice(0,80).filter(e=>{
+            const r=e.getBoundingClientRect(),style=getComputedStyle(e);
+            return e.isConnected&&!e.disabled&&r.width>0&&r.height>0&&style.visibility==='visible'
+                &&!e.closest('form,[data-private],[data-secret],[data-sensitive],a[href],[inert]')
+                &&normalize(e)===args.label;
+        });
+        return eligible.length===1?eligible[0]:null;
+    }""",{"selector":OPTIONS,"label":label}).as_element()
+    require(handle is not None and handle.is_visible() and
+            " ".join(handle.inner_text().split())==label,
+            "Observed option no longer unique or visible")
+    require(handle.evaluate("(e,selector)=>e.isConnected&&!e.disabled&&e.matches(selector)&&!e.closest('form,[data-private],[data-secret],[data-sensitive],a[href],[inert]')",OPTIONS),
+            "Sensitive option")
+    return handle
+
 def apply(page,url,action,picker,click):
     label=action["label"]
     if action["kind"]=="option" and action.get("group"):
@@ -373,7 +398,7 @@ def apply(page,url,action,picker,click):
         return picker
     if action["kind"]=="option":
         scope=open_picker(page,url,picker,lambda loc:click(loc,None))
-        loc=exact(discover(page,scope),label)
+        loc=exact_observed_option(scope,label)
         click(loc,label);dismiss_picker(page,scope)
         require(label in [q["label"] for q in discover(page)],"Applied option label not observed")
         return label
@@ -740,6 +765,12 @@ def render(folder,source,manifest,plan,calls,progress,audio):
     if q["responsibility"]["technical"]:
         raise RuntimeError("Customer craft rejected encoded technical defects: "+",".join(q["responsibility"]["technical"]))
     subprocess.run(["ffmpeg","-v","error","-xerror","-i",str(master),"-f","null","-"],check=True,timeout=100)
+    editorial=None
+    if os.getenv("SAUCE_CUSTOMER_ENCODED_REVIEW")=="1":
+        from backend.customer_story_review import review
+        editorial=review(master,q,source,manifest,plan,private/"encoded-review")
+        calls+=editorial["ai_calls"]
+
     subprocess.run(["ffmpeg","-v","error","-i",str(master),"-vf","scale=1280:720:flags=lanczos,fps=30",
         "-c:v","libx264","-preset","fast","-crf","18","-c:a","aac","-movflags","+faststart",str(export/"preview.mp4")],check=True,timeout=120)
     release={"continuous_motion":True,"source_verified":True,"source_sha256":sha(source),
@@ -748,7 +779,8 @@ def render(folder,source,manifest,plan,calls,progress,audio):
         "encoded_quality_findings":[x["code"] for x in q["findings"]],"creative_approved":False,
         "source_duration_seconds":SECONDS,"film_sha256":sha(master),"plan_sha256":sha(filmplan),
         "craft_contract":json.loads((export/"camera-metrics.json").read_text())["customerCraft"],
-        "soundtrack":chosen,"encoded_quality_responsibility":q["responsibility"]}
+        "soundtrack":chosen,"encoded_quality_responsibility":q["responsibility"],
+        "encoded_editorial":editorial}
     save(export/"release.json",release)
     from backend.url_engine import customer_quality_summary
     progress("needs_review")
