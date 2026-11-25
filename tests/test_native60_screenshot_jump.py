@@ -66,3 +66,19 @@ class Native60ScreenshotSafetyTests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+
+
+def test_native_snapshot_uses_bounded_fast_input(monkeypatch,tmp_path):
+    from unittest.mock import Mock
+    from backend.native60_capture import Native60Recorder
+    r=Native60Recorder(tmp_path)
+    r.geometry={'x':0,'y':87,'width':1920,'height':1080}
+    r.display=':99'
+    run=Mock(return_value=Mock(returncode=0,stdout=b'\x89PNGfixture'))
+    monkeypatch.setattr('backend.native60_capture.subprocess.run',run)
+    assert r.snapshot()==b'\x89PNGfixture'
+    cmd=run.call_args.args[0]
+    assert cmd[cmd.index('-framerate')+1]=='60'
+    assert cmd[cmd.index('-analyzeduration')+1]=='0'
+    assert cmd[cmd.index('-grab_y')+1]=='87'
+    assert run.call_args.kwargs['timeout']==8

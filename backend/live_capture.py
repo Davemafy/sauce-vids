@@ -491,17 +491,24 @@ def capture(url:str,private:Path,report:dict,plan:dict,*,cursor_pack=None):
       }
     }""")
    baseline=None
-   if compact:
-    from backend.curious_sequence import shot,panels
-    page.mouse.move(930,530)
-    before=shot(page);page.wait_for_timeout(350);steady=shot(page)
-    baseline=(before,steady,panels(page))
-    (private/'sequence-opening.png').write_bytes(before)
    if native_recorder:
-    # Two independently read real browser frames align page pixels to the
-    # full X11 window. The capture excludes browser chrome and is rejected
-    # rather than guessed when the geometry differs.
+    # Finish browser readiness and evidence acquisition BEFORE the source
+    # clock starts. Never film the loading/measurement preflight.
     native_recorder.calibrate(page)
+    if plan.get('sequence') and local_only:
+     from backend.curious_sequence import arr,panels
+     from backend.source_action_preflight import image_change
+     page.mouse.move(930,530)
+     for _ in range(6):
+      before=native_recorder.snapshot()
+      page.wait_for_timeout(350)
+      steady=native_recorder.snapshot()
+      if image_change(arr(before),arr(steady))<=.025:
+       baseline=(before,steady,panels(page))
+       break
+     if baseline is None or not baseline[2]:
+      raise RuntimeError('Native sequence did not reach a stable visible product')
+     (private/'sequence-opening.png').write_bytes(steady)
     video_begin=native_recorder.start_recording()
     video=None
    else:

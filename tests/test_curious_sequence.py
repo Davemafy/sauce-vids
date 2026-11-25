@@ -135,3 +135,32 @@ def test_option_hypotheses_normalizes_only_unique_observed_names():
     assert option_hypotheses(raw,rows)==['Last 24 hours','Today']
     assert option_hypotheses('{"ids":["Today","c0","today","Last 7 days"]}',rows)==['Today','Last 7 days']
     assert option_hypotheses('{"ids":["Today"]}',rows+[{'label':'Today'}])==[]
+
+@pytest.mark.parametrize("obstructed",[False,True])
+def test_native_sequence_click_checks_real_target_before_dispatch(monkeypatch,obstructed):
+    import time
+    import backend.curious_sequence as s
+    page=Mock()
+    loc=Mock()
+    loc.bounding_box.return_value={'x':10,'y':20,'width':40,'height':30}
+    loc.evaluate.return_value=None if obstructed else {'x':30,'y':35}
+    scope=Mock()
+    def open_picker(p,u,label,click):
+        click(loc)
+        return scope
+    monkeypatch.setattr(s,'open_picker',open_picker)
+    monkeypatch.setattr(s,'option_items',lambda *args:[{'label':'Preview','locator':loc}])
+    monkeypatch.setattr(s,'dismiss_picker',Mock())
+    monkeypatch.setattr(s,'observed_result',lambda *a,**kw:(b'after',{'result_rect':{'x':0,'y':0,'width':200,'height':100}},2.0))
+    args=(page,'https://example.com/demo',{'picker':'Appearance','option':'Preview'},time.monotonic(),Mock())
+    kwargs={'baseline':(b'before',b'steady',[]),'compact':True,'snapshot':Mock()}
+    if obstructed:
+        with pytest.raises(ValueError,match='obstructed'):
+            s.capture_sequence(*args,**kwargs)
+        page.mouse.down.assert_not_called()
+    else:
+        events,_=s.capture_sequence(*args,**kwargs)
+        assert page.mouse.down.call_count==2
+        assert page.mouse.up.call_count==2
+        assert events[0]['t']>=0
+    loc.click.assert_not_called()

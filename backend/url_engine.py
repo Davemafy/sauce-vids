@@ -233,6 +233,9 @@ def execute(url:str,folder:Path,progress=None, *, brief="", audio="auto",
         if plan is None:
             raise NoVerifiedProductAction('No independently verified public option transformation')
         source='gemini-sequential-curiosity'
+        if os.getenv('SAUCE_SEQUENCE_COMPACT')=='1':
+            plan['sequence_pace']='compact'
+
     elif curious_interactive:
         from backend.curious_interactive import investigate
         selected,calls=investigate(url,report,private/'interactive-curiosity',

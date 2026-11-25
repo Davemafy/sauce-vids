@@ -335,6 +335,7 @@ def dismiss_picker(page,scope):
 
 def capture_sequence(page,url,sequence,video_begin,pointer,*,baseline=None,compact=False,snapshot=None):
     import time
+    native_snapshot=snapshot is not None
     snapshot=snapshot or shot
     if baseline is None:
         before=snapshot(page);page.wait_for_timeout(350);steady=snapshot(page);old=panels(page)
@@ -346,8 +347,21 @@ def capture_sequence(page,url,sequence,video_begin,pointer,*,baseline=None,compa
         if not rect:raise ValueError('No visible target')
         pointer(page,rect['x']+rect['width']/2,rect['y']+rect['height']/2)
         page.wait_for_timeout(130 if compact else 220)
-        t=time.monotonic()-video_begin
-        loc.click(timeout=3500)
+        if native_snapshot:
+            # Verify the real handle at its current center, then dispatch
+            # directly. Locator auto-wait can precede the physical click by
+            # seconds, invalidating a timestamp sampled before loc.click().
+            hit=loc.evaluate("""e=>{const r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2,h=document.elementFromPoint(x,y);return h&&(h===e||e.contains(h))&&!e.disabled&&!e.closest('form,[data-private],[data-secret],[data-sensitive],a[href]')?{x,y}:null}""")
+            if not hit or abs(hit['x']-(rect['x']+rect['width']/2))>2 or abs(hit['y']-(rect['y']+rect['height']/2))>2:
+                raise ValueError('Native sequence target shifted or became obstructed')
+            t=time.monotonic()-video_begin
+            page.mouse.down()
+            page.mouse.up()
+            if time.monotonic()-video_begin-t>.25:
+                raise ValueError('Native click dispatch exceeded source clock budget')
+        else:
+            t=time.monotonic()-video_begin
+            loc.click(timeout=3500)
         return t
     scope=open_picker(page,url,sequence['picker'],click)
     page.wait_for_timeout(260 if compact else 400)
