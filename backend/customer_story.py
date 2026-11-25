@@ -308,6 +308,10 @@ def tab(page,label):
 
 def panel(page):
     rows=panels(page)
+    if not rows and os.getenv("SAUCE_PRESENTATION_RADIOS")=="1":
+        from backend.presentation_radios import result_region
+        region=result_region(page)
+        if region:rows.append(region)
     # An actual large named same-origin preview iframe is a product surface.
     # Read geometry only; inspect the actual visible pixels, never inject UI.
     for f in page.locator('iframe[title]:visible').all()[:8]:
@@ -385,6 +389,15 @@ def exact_observed_option(scope,label):
 
 def apply(page,url,action,picker,click):
     label=action["label"]
+    if action.get("control")=="visible-radio":
+        from backend.presentation_radios import handle,applied
+        require(os.getenv("SAUCE_PRESENTATION_RADIOS")=="1","Unsupported presentation radio")
+        loc=handle(page,action)
+        require(loc is not None,"Observed presentation control no longer unique")
+        click(loc,label)
+        assert_local(page,url)
+        require(applied(page,action),"Presentation radio did not apply")
+        return picker
     if action["kind"]=="option" and action.get("group"):
         group=action["group"]
         scope=open_radio_menu(page,url,group,lambda loc:click(loc,None))
@@ -423,6 +436,9 @@ def explore(url,out,progress,*,request=None,brief=""):
         title=p.title()[:140];opening=shot(p)
         (out/"opening.png").write_bytes(opening)
         radio_catalog=scan_radio_menus(p,url)
+        if len(radio_catalog)<MIN_ACTIONS and os.getenv("SAUCE_PRESENTATION_RADIOS")=="1":
+            from backend.presentation_radios import catalog
+            radio_catalog=catalog(p)
         if len(radio_catalog)>=MIN_ACTIONS:
             picker=None;catalog=radio_catalog;picker_image=opening
             save(out/"discovery.json",{"picker":picker,"catalog":catalog,"title":title,"kind":"radio-menus"})
@@ -600,7 +616,10 @@ def first_action_anchor(page,plan):
     """
     first=plan["actions"][0]
     loc=None
-    if first["kind"]=="option" and first.get("group"):
+    if first.get("control")=="visible-radio":
+        from backend.presentation_radios import handle
+        loc=handle(page,first)
+    elif first["kind"]=="option" and first.get("group"):
         hits=[h for name,h in menu_triggers(page) if name==first["group"]]
         if len(hits)==1:loc=hits[0]
     elif first["kind"]=="option":
