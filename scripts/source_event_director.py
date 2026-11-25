@@ -25,10 +25,12 @@ def direction(video:Path,manifest:Path):
     evidence=json.loads(Path(manifest).read_text())
     duration=packet["actualCapture"]["durationSeconds"]
     events=evidence.get("events",[])
-    if (not 1<=len(events)<=4 or not (6<=duration<=25 if len(events)==1 else 8<=duration<=(30 if len(events)>=3 else 25)) or
+    long_story=25<duration<=30 and 3<=len(events)<=6
+    short_story=1<=len(events)<=4 and (6<=duration<=25 if len(events)==1 else 8<=duration<=25)
+    if (not (long_story or short_story) or
         evidence.get("cursorless") is not True or
         not packet["actualCapture"]["pointerProvenance"].get("recordedPointerTrackAvailable")):
-        raise ValueError("Need 1..4 source-verified visible UI actions and original recorded pointer")
+        raise ValueError("Need 1..4 short or 3..6 long source-verified visible UI actions and original recorded pointer")
     for i,e in enumerate(events):
         if (not e.get("evidence") or e["start"]<.7 or
             e["t"]-e["start"]>3.5 or e["t"]>=duration-.9 or
@@ -93,6 +95,27 @@ def direction(video:Path,manifest:Path):
                    "minVisible":.90,"minContextVisible":.68}
        }
     }
+    if long_story:
+        # Preserve product context across a continuous long workflow. A
+        # large result in one panel is not permission to crop the editor.
+        def whole(at,view,start=None):
+            k={"at":at,"scale":.88,"viewScale":view,"center":[.5,.5],"yaw":0,"pitch":0}
+            if start is not None:k["startAt"]=start
+            return k
+        camera=[whole(0,1.)]
+        for i,e in enumerate(events):
+            begin=after_visible(e["t"])
+            peak=native(begin+.45)
+            next_press=events[i+1]["start"] if i+1<len(events) else duration
+            release=native(min(next_press-.25,peak+1.25))
+            if release<=peak+.2:
+                continue
+            camera.extend([whole(peak,1.035,begin),
+                           whole(release,1.,native(max(peak,release-.65)))])
+        camera.append(whole(duration,1.))
+        plan["studioStage"]["camera"]=camera
+        plan["studioStage"]["motion"]={"profile":"cinematic","immersive":True,"shutter":0}
+        plan["studioStage"]["payoff"].update(mode="overview",minVisible=.99,minContextVisible=.99)
     if len(events)==1 and events[0]["kind"]=="draw_stroke":
         e=events[0]
         # Preserve the complete drawing surface during the actual stroke.

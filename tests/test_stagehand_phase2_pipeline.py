@@ -97,7 +97,7 @@ class Phase2NativeDirectorTests(unittest.TestCase):
             record=json.loads(manifest.read_text())
             first=record["events"][0]
             record["duration"]=30.
-            record["events"]=[dict(first,start=t,end=t+.1,t=t+1.) for t in (2.,8.,15.,22.)]
+            record["events"]=[dict(first,start=t,end=t+.1,t=t+1.) for t in (2.,6.,10.,14.,19.,24.)]
             packet={"actualCapture":{"durationSeconds":30.,"nativeFps":60,
                      "resolution":[2880,1800],
                      "pointerProvenance":{"recordedPointerTrackAvailable":True}}}
@@ -105,7 +105,9 @@ class Phase2NativeDirectorTests(unittest.TestCase):
                 manifest.write_text(json.dumps(record))
                 plan=source_event_director.direction(video,manifest)
                 self.assertEqual(plan["durationSeconds"],30.)
-                self.assertEqual(plan["audio"]["eventIndices"],[0,1,2,3])
+                self.assertEqual(plan["audio"]["eventIndices"],list(range(6)))
+                self.assertEqual(plan["studioStage"]["payoff"]["mode"],"overview")
+                self.assertTrue(all(k["center"]==[.5,.5] and k["viewScale"]<=1.035 for k in plan["studioStage"]["camera"]))
                 for n in (1,2):
                     manifest.write_text(json.dumps(dict(record,events=record["events"][:n])))
                     with self.assertRaises(ValueError):

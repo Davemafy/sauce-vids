@@ -100,7 +100,13 @@ def _model_request(source,packet,model,key,feedback=None,*,
             "a genuine final hold, and no filler. For audio use "
             "eventFoley.eventIndices="+json.dumps(indices)+
             " with the real press/result times. Do not fabricate UI or "
-            "retime/replay source frames."
+            "retime/replay source frames. Treat the workflow as one continuous "
+            "human session: preserve the same visible browser and controls, "
+            "use motion that follows the actual task, and avoid flash cuts, "
+            "transiently hidden UI, gratuitous scene changes or isolated "
+            "click vignettes. The duration is earned by connected actions, "
+            "not padded holds; if the source lacks sufficient activity, "
+            "report that limitation rather than inventing events."
         )
     if feedback:
         prompt+=(
