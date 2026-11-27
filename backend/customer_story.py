@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib,json,os,re,select,subprocess,sys,time,tempfile
 from contextlib import contextmanager,ExitStack
 from pathlib import Path
-from urllib.parse import urljoin,urlsplit
+from urllib.parse import urljoin,urlsplit,urlunsplit
 from urllib.robotparser import RobotFileParser
 import cv2
 import numpy as np
@@ -75,6 +75,10 @@ def director_brief(brief="", *, provider="gemini"):
     return base + (" Customer creative preferences (not permission to override engine constraints): "+brief if brief.strip() else "")
 
 class StoryRejected(ValueError):pass
+
+class ProductAccessRequired(StoryRejected):
+    """A visible authentication barrier, not authorization to sign in."""
+
 
 class PublicSetupUnavailable(StoryRejected):
     """Observed public setup absent in a fresh disposable browser."""
@@ -162,6 +166,13 @@ def validated_selection(raw,catalog):
     if (len(actions)==2 or len(groups(catalog))>=2) and len(groups(actions))<2 and not sample_comparison:
         return None
     return {"actions":actions,"story":reason,"hero_action_id":hero}
+
+def canonical_public_entry(url):
+    validate_public_url(url)
+    p=urlsplit(url)
+    # Chromium serializes an empty HTTP(S) path as a slash. No other
+    # redirect, host, query or path equivalence is inferred.
+    return urlunsplit((p.scheme,p.netloc,p.path or "/",p.query,p.fragment))
 
 def admitted_initial_route(original,chain,final):
     """Only bounded observed same-origin, query-free HTTP redirect chains."""
@@ -278,7 +289,7 @@ def customer_browser_args(display=None):
 
 @contextmanager
 def browser(url,*,display=None,include_robots=False):
-    validate_public_url(url)
+    url=canonical_public_entry(url)
     with sync_playwright() as pw:
         b=pw.chromium.launch(headless=display is None,
             executable_path=str(FULL_CHROME if display else CHROME),
@@ -324,7 +335,7 @@ def browser(url,*,display=None,include_robots=False):
                 cdp.send("Browser.setWindowBounds",{"windowId":win,"bounds":{"windowState":"fullscreen"}})
                 p.wait_for_timeout(6000)
                 require(p.evaluate("()=>[innerWidth,innerHeight,devicePixelRatio]")==[W,H,D],"Wrong native viewport")
-            require(not visible_authentication_barrier(p),"Authentication barrier")
+            if visible_authentication_barrier(p):raise ProductAccessRequired("Authenticated product access required")
             clear_welcome(p,actual)
             if test_state is not None:check_test_surface(p)
             yield (p,robots) if include_robots else p
@@ -1395,6 +1406,7 @@ def render(folder,source,manifest,plan,calls,progress,audio,*,competitive=True):
 
 def execute_story_once(url,folder,progress,*,audio="auto",brief="",competitive=True):
     from backend.url_engine import NoVerifiedProductAction
+    from backend.url2video import NeedsAccess
     if audio=="narrated":raise NoVerifiedProductAction("30s story currently supports clean/auto audio")
     private=folder/"private"/"customer-story"
     try:
@@ -1403,6 +1415,9 @@ def execute_story_once(url,folder,progress,*,audio="auto",brief="",competitive=T
         progress("capturing")
         source,manifest=capture(plan["url"],plan,proofs,private/"native")
         return render(folder,source,manifest,plan,calls,progress,audio,competitive=competitive)
+    except ProductAccessRequired as e:
+        if private.is_dir():save(private/"rejection.json",{"reason":"Authenticated product access required","creative_approved":False})
+        raise NeedsAccess("Provide an authorized test workspace or an interactive public product demo.") from e
     except StoryRejected as e:
         if private.is_dir():save(private/"rejection.json",{"reason":str(e),"creative_approved":False})
         raise NoVerifiedProductAction(str(e)) from e

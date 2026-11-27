@@ -227,3 +227,21 @@ def test_native_customer_browser_uses_kiosk_without_changing_headless_discovery(
     headless=customer_browser_args()
     assert native == headless + ["--kiosk"]
     assert "--force-device-scale-factor=2" in native
+
+def test_root_entry_canonicalization_does_not_change_other_routes(monkeypatch):
+    import backend.customer_story as s
+    monkeypatch.setattr(s,"validate_public_url",lambda u:u)
+    assert s.canonical_public_entry("https://example.com")=="https://example.com/"
+    assert s.canonical_public_entry("https://example.com/")=="https://example.com/"
+    assert s.canonical_public_entry("https://example.com/editor")=="https://example.com/editor"
+    assert s.canonical_public_entry("https://example.com/editor/")=="https://example.com/editor/"
+
+def test_access_barrier_is_not_discovery_failure_or_render(tmp_path,monkeypatch):
+    import backend.customer_story as s
+    from backend.url2video import NeedsAccess
+    import pytest
+    with patch.object(s,"explore",side_effect=s.ProductAccessRequired("Authenticated product access required")), patch.object(s,"capture") as capture, patch.object(s,"render") as render:
+        with pytest.raises(NeedsAccess,match="authorized test workspace"):
+            s.execute_story("https://example.com/",tmp_path,lambda _:None)
+        capture.assert_not_called()
+        render.assert_not_called()
