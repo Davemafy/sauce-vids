@@ -219,3 +219,11 @@ def test_default_evidence_led_editorial_plan_reaches_source_compiler(tmp_path,mo
     assert plan["director_provider"]=="gemini"
     assert plan["editorial"]["duration_seconds"]==30
     assert (tmp_path/"direction.json").is_file()
+
+
+def test_native_customer_browser_uses_kiosk_without_changing_headless_discovery():
+    from backend.customer_story import customer_browser_args
+    native=customer_browser_args(":42")
+    headless=customer_browser_args()
+    assert native == headless + ["--kiosk"]
+    assert "--force-device-scale-factor=2" in native

@@ -252,6 +252,18 @@ def scan_radio_menus(page,url):
         dismiss_picker(page,scope)
     return balanced_menu_catalog(groups)
 
+def customer_browser_args(display=None):
+    args=["--no-sandbox","--disable-dev-shm-usage",
+          "--window-position=0,0","--window-size=1920,1080",
+          "--force-device-scale-factor=2","--no-first-run"]
+    # Native X11 capture includes browser chrome, unlike page screenshots.
+    # Kiosk suppresses Chrome's fullscreen-exit notice; CDP still establishes
+    # the actual fullscreen bounds for Playwright's newly created window.
+    if display:
+        args.append("--kiosk")
+    return args
+
+
 @contextmanager
 def browser(url,*,display=None,include_robots=False):
     validate_public_url(url)
@@ -259,9 +271,7 @@ def browser(url,*,display=None,include_robots=False):
         b=pw.chromium.launch(headless=display is None,
             executable_path=str(FULL_CHROME if display else CHROME),
             env={**os.environ,"DISPLAY":display} if display else None,
-            args=["--no-sandbox","--disable-dev-shm-usage",
-                  "--window-position=0,0","--window-size=1920,1080",
-                  "--force-device-scale-factor=2","--no-first-run"])
+            args=customer_browser_args(display))
         c=b.new_context(viewport={"width":W,"height":H},device_scale_factor=D,
             service_workers="block",accept_downloads=False,permissions=[])
         try:
