@@ -43,7 +43,8 @@ def test_three_independent_directions_select_actual_ranked_proxy(tmp_path):
                 rows=[{'id':i,'rubric':{k:v for k in WEIGHTS}} for i,v in [('A',50),('B',92),('C',60)]]
                 return json.dumps({'scores':rows})
             i=int(self.d.parent.name[-1])-1
-            return json.dumps({'accept':True,'reason':'Observed',**base,'backdrop':tones[i]})
+            beats=[{**b,'framing':'accent'} if i==0 and b['action_id']=='b' else b for b in base['beats']]
+            return json.dumps({'accept':True,'reason':'Observed',**base,'backdrop':tones[i],'beats':beats})
     def run(script,*args):
         if script=='source_event_director.py':Path(args[args.index('--out')+1]).write_text(Path(args[args.index('--editorial-intent')+1]).read_text())
         else:
@@ -64,3 +65,16 @@ def test_fixed_source_long_prose_cannot_reject_valid_camera():
     assert fixed_source_intent(v,base,ids,'a')==base
     v['beats'][1]['action_id']='invented'
     with pytest.raises(ValueError):fixed_source_intent(v,base,ids,'a')
+
+
+def test_last_all_wide_candidate_reserves_verified_hero_contrast():
+    from backend.customer_competitive_edit import contrast_candidate
+    ids=['a','b'];base={'backdrop':'graphite','duration_seconds':16,'beats':[
+        {'action_id':i,'framing':'wide','pace':'readable','purpose':'Verified original'} for i in ids]}
+    candidate=contrast_candidate(base,[base,base],ids,'b')
+    assert candidate['beats'][0]==base['beats'][0]
+    assert candidate['beats'][1]=={**base['beats'][1],'framing':'detail'}
+    assert candidate['duration_seconds']==16 and candidate['backdrop']=='graphite'
+    assert base['beats'][1]['framing']=='wide'
+    assert contrast_candidate(base,[base],ids,'b')==base
+    assert contrast_candidate(base,[base,candidate],ids,'b')==base

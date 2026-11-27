@@ -32,6 +32,17 @@ def fixed_source_intent(verdict,baseline,ids,hero):
         clean.append({**b,'purpose':original['purpose']})
     return ed.validate({'backdrop':verdict.get('backdrop'),'duration_seconds':baseline['duration_seconds'],'beats':clean},ids,hero)
 
+def contrast_candidate(intent,prior,ids,hero):
+    """Reserve the last slot for a genuine camera alternative if all are wide."""
+    if len(prior)!=2 or not all(b["framing"]=="wide" for a in [*prior,intent] for b in a["beats"]):
+        return intent
+    # This is a deterministic proposed alternative, not a model decision.
+    # The source compiler must still fit the entire result and pointer;
+    # insufficient time/geometry can downgrade it or fail validation.
+    alternative={**intent,"beats":[{**b,"framing":"detail"} if b["action_id"]==hero else dict(b) for b in intent["beats"]]}
+    return ed.validate(alternative,ids,hero)
+
+
 def compete(source,manifest,plan,directory,run,*,factory=None):
     from backend.customer_story import sha,save,media
     from backend.claude_customer_director import ClaudeConversation
@@ -64,6 +75,11 @@ def compete(source,manifest,plan,directory,run,*,factory=None):
             v=json.loads(raw)
             save(d/'raw-verdict.json',v)
             intent=fixed_source_intent(v,baseline,ids,hero)
+            alternative=contrast_candidate(intent,[p[1] for p in proposals],ids,hero) if index==2 else intent
+            if alternative!=intent:
+                row["direction_source"]="engine-hero-contrast"
+                save(d/'model-intent.json',intent)
+                intent=alternative
             save(d/'intent.json',{'ids':ids,'hero':hero,'editorial':intent})
             run('source_event_director.py','--source',source,'--manifest',manifest,'--out',d/'plan.json','--hero-event-index',ids.index(hero),'--editorial-intent',d/'intent.json')
             run('render_event_video.py','--video',source,'--manifest',manifest,'--film-plan',d/'plan.json','--customer-craft-contract','--ranking-preview','--output',d/'preview.mp4')
