@@ -34,3 +34,12 @@ def test_named_public_presentation_radio_controls_only():
             assert not catalog(page)
             assert result_region(page) is None
         finally:browser.close()
+
+
+def test_opt_in_presentation_radios_excludes_authorized_session(monkeypatch):
+    from backend import customer_story,agentmail_auth
+    monkeypatch.setenv('SAUCE_PRESENTATION_RADIOS','1')
+    monkeypatch.setattr(agentmail_auth,'test_session_active',lambda:False)
+    assert customer_story.presentation_radios_enabled()
+    monkeypatch.setattr(agentmail_auth,'test_session_active',lambda:True)
+    assert not customer_story.presentation_radios_enabled()

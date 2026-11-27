@@ -51,6 +51,12 @@ def evidence_first_enabled():
     return os.getenv("SAUCE_EVIDENCE_FIRST", "1") == "1"
 
 
+def presentation_radios_enabled():
+    """Explicit public-only presentation adapter; never expand test-account controls."""
+    from backend.agentmail_auth import test_session_active
+    return os.getenv('SAUCE_PRESENTATION_RADIOS')=='1' and not test_session_active()
+
+
 def editorial_direction_enabled():
     """Let the model direct source-bounded framing and pacing, not timestamps.
 
@@ -462,7 +468,7 @@ def panel(page):
         from backend.native_analytical_checks import batch_panels
         rows=batch_panels(page)
     else:rows=panels(page)
-    if not rows and os.getenv("SAUCE_PRESENTATION_RADIOS")=="1":
+    if not rows and presentation_radios_enabled():
         from backend.presentation_radios import result_region
         region=result_region(page)
         if region:rows.append(region)
@@ -613,7 +619,7 @@ def apply(page,url,action,picker,click):
         return picker
     if action.get("control")=="visible-radio":
         from backend.presentation_radios import handle,applied
-        require(os.getenv("SAUCE_PRESENTATION_RADIOS")=="1","Unsupported presentation radio")
+        require(presentation_radios_enabled(),"Unsupported presentation radio")
         loc=handle(page,action)
         require(loc is not None,"Observed presentation control no longer unique")
         click(loc,label)
@@ -688,7 +694,7 @@ def explore(url,out,progress,*,request=None,brief=""):
         # Do not open unrelated menus when this supported surface is present.
         analytical=analytic_triggers(p)
         radio_catalog=[] if analytical else scan_radio_menus(p,url)
-        if not analytical and len(radio_catalog)<MIN_ACTIONS and os.getenv("SAUCE_PRESENTATION_RADIOS")=="1":
+        if not analytical and len(radio_catalog)<MIN_ACTIONS and presentation_radios_enabled():
             from backend.presentation_radios import catalog
             radio_catalog=catalog(p)
         if len(radio_catalog)<MIN_ACTIONS and not analytical and evidence_first_enabled():

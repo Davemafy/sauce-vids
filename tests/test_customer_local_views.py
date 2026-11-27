@@ -84,3 +84,28 @@ def test_setup_replays_in_real_browser(page):
     page.evaluate("()=>window.scrollTo(0,0)")
     story.replay_setup(page,{"url":"https://example.com/demo","setup":setup})
     assert local.catalog(page,setup)
+
+
+def test_named_native_section_below_fold_replays_without_guessed_scroll(page):
+    html=HTML.replace('[role=region]{margin:500px','section{margin:4500px').replace('min-height:2000px','min-height:6200px').replace('<div role=region aria-label="Analytics interactive demo">','<section aria-labelledby="heading"><h2 id="heading" style="margin:0;font-size:22px">Analytics interactive demo</h2>').replace('</div>\n<script>','</section>\n<script>')
+    page.set_content(html)
+    setup=local.prepare(page,'https://example.com/demo')
+    assert setup=={'kind':'local-demo-views','region':'Analytics interactive demo'}
+    assert page.evaluate('scrollY')>4000
+    before=story.shot(page);a=local.catalog(page,setup)[0];old=story.action_panel(page,a)
+    story.apply(page,'https://example.com/demo',a,None,lambda e,_:e.click())
+    assert story.verify(page,'https://example.com/demo',before,old,story.shot)[2]>.7
+    page.set_content(html.replace('4500px','8500px').replace('6200px','10000px'))
+    page.evaluate('window.scrollTo(0,0)')
+    assert local.prepare(page,'https://example.com/demo') is None and page.evaluate('scrollY')==0
+
+
+def test_side_by_side_demo_excludes_entire_control_column(page):
+    html=HTML.replace('<div role=group aria-label="Business unit">','<div style="width:280px;float:left"><div role=group aria-label="Business unit">').replace('<div id=result>','</div><div id=result style="margin-left:300px;height:650px">').replace('height:55px','height:100px')
+    page.set_content(html)
+    setup=local.prepare(page,'https://example.com/demo');assert setup
+    box=local.result_region(page,setup['region']);groups=local.region_for(page,setup['region'])['groups']
+    assert all(box['x']>=g['rect']['x']+g['rect']['width'] for g in groups)
+    a=local.catalog(page,setup)[0];before=story.shot(page)
+    story.apply(page,'https://example.com/demo',a,None,lambda e,_:e.click())
+    assert story.verify(page,'https://example.com/demo',before,box,story.shot)[2]>.8

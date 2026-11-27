@@ -6,27 +6,29 @@ DEMO=re.compile(r"\b(demo|playground|preview)\b",re.I)
 FILTER=re.compile(r"\b(filter|business unit|segment|category|period|range|metric|dimension|region|channel|view|department|product|status|timeframe)\b",re.I)
 SCAN=r"""(pick)=>{
  const unsafe='form,a[href],nav,[role=navigation],[inert],[data-private],[data-secret],[data-sensitive]';
+ const regions='[role=region][aria-label],[role=region][aria-labelledby],section:not([role])[aria-label],section:not([role])[aria-labelledby]';
+ const name=e=>(e.getAttribute('aria-label')||((e.getAttribute('aria-labelledby')||'').split(/\s+/).map(id=>document.getElementById(id)).filter(Boolean).map(n=>n.innerText).join(' '))).trim().replace(/\s+/g,' ');
  const box=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}};
  const text=e=>(e.getAttribute('aria-label')||e.innerText||'').trim().replace(/\s+/g,' ');
  const visible=e=>{const r=box(e),h=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return r.x>=0&&r.y>=0&&r.x+r.width<=innerWidth&&r.y+r.height<=innerHeight&&r.width>=8&&r.height>=8&&h&&e.contains(h)};
  const rows=[],hits=[];
- for(const region of [...document.querySelectorAll('[role=region][aria-label]')].slice(0,32)){
+ for(const region of [...document.querySelectorAll(regions)].slice(0,32)){
   if(region.closest(unsafe)||!region.checkVisibility()||region.querySelector('input[type=password],[data-private],[data-secret],[data-sensitive]'))continue;
   const groups=[];
   for(const g of [...region.querySelectorAll('[role=group],[role=tablist]')].slice(0,32)){
-   if(g.closest(unsafe)||g.closest('[role=region][aria-label]')!==region||!g.checkVisibility())continue;
+   if(g.closest(unsafe)||g.closest(regions)!==region||!g.checkVisibility())continue;
    const kind=g.getAttribute('role')==='tablist'?'tab':'filter',state=kind==='tab'?'aria-selected':'aria-pressed';
    const nodes=[...g.querySelectorAll(kind==='tab'?'button[role=tab][aria-selected]':'button[aria-pressed]')].filter(e=>e.closest('[role=group],[role=tablist]')===g);
    if(nodes.length<2||nodes.length>16||nodes.some(e=>!e.checkVisibility()||e.disabled||e.form||e.closest(unsafe)||e.getAttribute('aria-disabled')==='true'||e.getAttribute('type')==='submit'||!['true','false'].includes(e.getAttribute(state))))continue;
    const labels=nodes.map(text);
    if(new Set(labels).size!==labels.length||nodes.filter(e=>e.getAttribute(state)==='true').length!==1)continue;
-   const name=(g.getAttribute('aria-label')||((g.getAttribute('aria-labelledby')||'').split(/\s+/).map(id=>document.getElementById(id)).filter(Boolean).map(n=>n.innerText).join(' '))).trim().replace(/\s+/g,' ');
-   const key=kind+':'+(name||labels.slice().sort().join(' / '));
-   groups.push({kind,name,key,rect:box(g),options:nodes.map(e=>({label:text(e),selected:e.getAttribute(state)==='true',visible:!!visible(e)}))});
-   if(pick&&pick.region===text(region)&&pick.group===key)
+   const groupName=name(g);
+   const key=kind+':'+(groupName||labels.slice().sort().join(' / '));
+   groups.push({kind,name:groupName,key,rect:box(g),options:nodes.map(e=>({label:text(e),selected:e.getAttribute(state)==='true',visible:!!visible(e)}))});
+   if(pick&&pick.region===name(region)&&pick.group===key)
     hits.push(...nodes.filter(e=>text(e)===pick.label&&e.getAttribute(state)==='false'&&visible(e)));
   }
-  rows.push({label:text(region),rect:box(region),groups});
+  rows.push({label:name(region),rect:box(region),groups});
  }
  return pick?(hits.length===1?hits[0]:null):rows;
 }"""
@@ -61,17 +63,27 @@ def result_region(page,label):
     if not r or not v:return None
     b=r["rect"]
     if b["x"]<0 or b["y"]<0 or b["x"]+b["width"]>v["width"]+1 or b["y"]+b["height"]>v["height"]+1:return None
-    # Exclude control rows: button color alone cannot prove a product result.
-    x=round(b["x"]+8);right=round(b["x"]+b["width"]-8)
-    y=round(max([b["y"]]+[g["rect"]["y"]+g["rect"]["height"] for g in r["groups"]])+8)
-    bottom=round(b["y"]+b["height"]-8)
-    if right<=x or bottom<=y or (right-x)*(bottom-y)<v["width"]*v["height"]*.18:return None
-    return {"x":x,"y":y,"width":right-x,"height":bottom-y,"local_view_region":label}
+    # Keep every control group outside the outcome proof. A conventional
+    # toolbar earns the existing below-controls rectangle; a side-by-side
+    # demo earns the larger disjoint side. No guessed selector or UI pixels.
+    x=round(b['x']+8);right=round(b['x']+b['width']-8)
+    top=round(b['y']+8);bottom=round(b['y']+b['height']-8)
+    g=[a['rect'] for a in r['groups']]
+    below=round(max([b['y']]+[a['y']+a['height'] for a in g])+8)
+    left=round(min([b['x']+b['width']]+[a['x'] for a in g])-8)
+    after=round(max([b['x']]+[a['x']+a['width'] for a in g])+8)
+    candidates=[(x,below,right,bottom),(after,top,right,bottom),(x,top,left,bottom)]
+    candidates=[a for a in candidates if a[2]>a[0] and a[3]>a[1]]
+    if not candidates:return None
+    x,y,right,bottom=max(candidates,key=lambda a:(a[2]-a[0])*(a[3]-a[1]))
+    if (right-x)*(bottom-y)<v['width']*v['height']*.18:return None
+    return {'x':x,'y':y,'width':right-x,'height':bottom-y,'local_view_region':label}
+
 def prepare(page,url,setup=None):
     r=candidate(page)
     if not r or (setup and setup.get("region")!=r["label"]):return None
     v=page.viewport_size;b=r["rect"];label=r["label"];initial=page.evaluate("()=>scrollY");shift=round(b["y"]-(v["height"]-b["height"])/2)
-    if abs(shift)>900:return None
+    if abs(shift)>6000:return None
     if abs(shift)>3:
         page.evaluate("(dy)=>window.scrollBy({top:dy,behavior:'instant'})",shift)
         page.wait_for_timeout(450);assert_local(page,url)
