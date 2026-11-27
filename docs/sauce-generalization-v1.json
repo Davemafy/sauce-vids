@@ -1,0 +1,187 @@
+{
+  "version": "generalization-v1",
+  "frozen_date": "2026-11-27",
+  "engine_code_commit": "1401f8a016d90f076a17b6940b6bb685e240072d",
+  "novelty": "No hostname match in 83 available historical job receipts or current living handoff; not proof of global model-training novelty. Public directory/search-based selection; product accessibility and suitability not pretested.",
+  "development": [
+    {
+      "name": "Hubviz",
+      "url": "https://www.hubviz.com/en/demo"
+    },
+    {
+      "name": "Shadcn Studio",
+      "url": "https://shadcnstudio.com/theme-generator"
+    },
+    {
+      "name": "Radix",
+      "url": "https://www.radix-ui.com/themes/playground"
+    },
+    {
+      "name": "Excalidraw",
+      "url": "https://excalidraw.com/"
+    },
+    {
+      "name": "Mermaid",
+      "url": "https://mermaid.live/"
+    },
+    {
+      "name": "JSON Crack",
+      "url": "https://jsoncrack.com/editor"
+    },
+    {
+      "name": "Plausible",
+      "url": "https://plausible.io/plausible.io"
+    },
+    {
+      "name": "tldraw",
+      "url": "https://www.tldraw.com/"
+    },
+    {
+      "name": "Desmos",
+      "url": "https://www.desmos.com/calculator"
+    },
+    {
+      "name": "TapCub",
+      "url": "https://tapcub.com/demo"
+    }
+  ],
+  "holdout": [
+    {
+      "id": "H01",
+      "category": "workflow",
+      "name": "NUSK",
+      "url": "https://nusk.dev/demo"
+    },
+    {
+      "id": "H02",
+      "category": "design",
+      "name": "Picstea",
+      "url": "https://www.picstea.com/"
+    },
+    {
+      "id": "H03",
+      "category": "analytics",
+      "name": "AnalyticFast",
+      "url": "https://app.analyticfast.com/demo"
+    },
+    {
+      "id": "H04",
+      "category": "operations",
+      "name": "TradeWMS",
+      "url": "https://tradewms.com/demo"
+    },
+    {
+      "id": "H05",
+      "category": "developer",
+      "name": "GoJS",
+      "url": "https://gojs.app/"
+    },
+    {
+      "id": "H06",
+      "category": "ai-data",
+      "name": "ORINEL",
+      "url": "https://orinel.app/demo"
+    },
+    {
+      "id": "H07",
+      "category": "workflow",
+      "name": "Log My Business",
+      "url": "https://www.logmybusiness.com/demo"
+    },
+    {
+      "id": "H08",
+      "category": "design",
+      "name": "Koi",
+      "url": "https://koi.photo/"
+    },
+    {
+      "id": "H09",
+      "category": "analytics",
+      "name": "Skald",
+      "url": "https://skaldanalytics.com/demo/"
+    },
+    {
+      "id": "H10",
+      "category": "operations",
+      "name": "Business OS",
+      "url": "https://tharigopula.com/showcase/business-software"
+    },
+    {
+      "id": "H11",
+      "category": "developer",
+      "name": "Playcode",
+      "url": "https://playcode.io/code-playground"
+    },
+    {
+      "id": "H12",
+      "category": "ai-data",
+      "name": "Rhubarb",
+      "url": "https://rhubarbviz.com/"
+    },
+    {
+      "id": "H13",
+      "category": "workflow",
+      "name": "Trawpie",
+      "url": "https://trawpie.org/demo"
+    },
+    {
+      "id": "H14",
+      "category": "design",
+      "name": "Vectopea",
+      "url": "https://vectopea.com/"
+    },
+    {
+      "id": "H15",
+      "category": "analytics",
+      "name": "Owleye",
+      "url": "https://owleye.dev/demo/"
+    },
+    {
+      "id": "H16",
+      "category": "operations",
+      "name": "Solvena",
+      "url": "https://solvena.dev/en/demos"
+    },
+    {
+      "id": "H17",
+      "category": "developer",
+      "name": "OpenFlowKit",
+      "url": "https://app.openflowkit.com/"
+    },
+    {
+      "id": "H18",
+      "category": "ai-data",
+      "name": "Oronts",
+      "url": "https://oronts.com/en/demos"
+    },
+    {
+      "id": "H19",
+      "category": "workflow",
+      "name": "Kiva",
+      "url": "https://kiva.uniform.net/"
+    },
+    {
+      "id": "H20",
+      "category": "design",
+      "name": "Wishwa",
+      "url": "https://wishissue.github.io/wishwa/"
+    }
+  ],
+  "protocol": {
+    "submission": "URL only via verified deployed private POST /v1/jobs. No manual actions, accounts, selectors, plans, site hints, uploads, or new permissions. Existing guardrails remain.",
+    "freeze": "All 20 URLs and their order fixed before first submission. One engine code/config snapshot per run; record actual service PID, commit and flags at submission. Never mix revisions in one aggregate; if concurrent deployment changes executable code or flags, stop this run and mark remaining pending. No tuning on holdout, no feeding its outputs into prompts or few-shot references. Develop on development cohort; any holdout used for tuning is retired and a fresh independent cohort is required.",
+    "capacity": "At most two admitted jobs in flight; use existing API admission limits. Queue-full is not an admitted product attempt. Record and stop on uncertain admission; never blindly retry. No new infrastructure or unbounded inference. First pass one admitted job per URL; internal existing revision allowed and counted.",
+    "denominator": "20 fixed products; discovery rejection, access block, unsupported interaction, capture/render failure and creative rejection are not successes. Report pending separately; never extrapolate partial results. Public/demo surfaces may be synthetic; label source honestly.",
+    "metrics": [
+      "admitted jobs and terminal outcomes",
+      "verified native capture yield",
+      "encoded master yield",
+      "technical decode/stream checks",
+      "creative critic decision and score where available, not human approval",
+      "independent owner publishability review, source truth, readability, action-first framing, pacing",
+      "actual provider requests/tokens/known costs",
+      "signed playable review link and exact SHA256"
+    ],
+    "acceptance": "Human approval only, >=85/100 target and all source/craft gates; no automatic release. No scoring based solely on passing tests. All failures remain in denominator. Re-evaluation on the same cohort is a regression set, not a new unseen benchmark."
+  }
+}
