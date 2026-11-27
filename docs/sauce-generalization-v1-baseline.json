@@ -1,0 +1,256 @@
+{
+  "version": "generalization-v1-baseline",
+  "date": "2026-11-27",
+  "engine_checkout": "ae149cf19284b21f6b1c6fcf65aeca8843db2776",
+  "engine_code": "1401f8a016d90f076a17b6940b6bb685e240072d",
+  "manifest_sha256": "aa0b617d9b9a4145dc56ae49df8148519d6edd059b7e054e2ce026d7005ba475",
+  "service_pid": 1186374,
+  "configuration": {
+    "director": "claude",
+    "story_seconds": 30,
+    "encoded_review": true,
+    "autonomous_revision": true,
+    "competitive_edit": true,
+    "presentation_radios": true
+  },
+  "counts": {
+    "admitted": 20,
+    "terminal": 20,
+    "pending": 0,
+    "unsupported_controls": 17,
+    "url_validation": 2,
+    "user_decision": 1,
+    "encoded_masters": 0,
+    "human_approved": 0,
+    "recorded_provider_attempts": 7
+  },
+  "notes": [
+    "All 20 admitted through existing private URL-only customer API; no manual workflow, source footage, per-product hints, code changes during run or relaxed guardrails.",
+    "Seven recorded provider attempts, not a verified billing count; tokens/charges not independently verified.",
+    "No output MP4 in any cohort job. No creative quality score can be assigned to absent films.",
+    "The cohort includes public product demos and browser tools, not a representative random sample of all SaaS. Historical non-overlap is limited to available receipts and handoff.",
+    "Do not use holdout URLs or outcomes for tuning or few-shot prompts. If any is used for development, retire it and establish a new untouched evaluation cohort."
+  ],
+  "rows": [
+    {
+      "id": "H01",
+      "category": "workflow",
+      "name": "NUSK",
+      "url": "https://nusk.dev/demo",
+      "job_id": "8d201a9d3acd9eedc50b1d85",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    },
+    {
+      "id": "H02",
+      "category": "design",
+      "name": "Picstea",
+      "url": "https://www.picstea.com/",
+      "job_id": "8db47c215c19aca4347f593a",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    },
+    {
+      "id": "H03",
+      "category": "analytics",
+      "name": "AnalyticFast",
+      "url": "https://app.analyticfast.com/demo",
+      "job_id": "59ececf18f4e0c577e5e315b",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    },
+    {
+      "id": "H04",
+      "category": "operations",
+      "name": "TradeWMS",
+      "url": "https://tradewms.com/demo",
+      "job_id": "521127a90eb0115c49fd22a7",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    },
+    {
+      "id": "H05",
+      "category": "developer",
+      "name": "GoJS",
+      "url": "https://gojs.app/",
+      "job_id": "dc45ceda4411ae1599533ea6",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 1
+    },
+    {
+      "id": "H06",
+      "category": "ai-data",
+      "name": "ORINEL",
+      "url": "https://orinel.app/demo",
+      "job_id": "ae70f17b9e5b483919bfd1b8",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 1
+    },
+    {
+      "id": "H07",
+      "category": "workflow",
+      "name": "Log My Business",
+      "url": "https://www.logmybusiness.com/demo",
+      "job_id": "c7d4a59105b31da049a197c2",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 1
+    },
+    {
+      "id": "H08",
+      "category": "design",
+      "name": "Koi",
+      "url": "https://koi.photo/",
+      "job_id": "a2306d9b3edf5c473c99452e",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    },
+    {
+      "id": "H09",
+      "category": "analytics",
+      "name": "Skald",
+      "url": "https://skaldanalytics.com/demo/",
+      "job_id": "8eb84c1c9b030a09afa6bf7c",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    },
+    {
+      "id": "H10",
+      "category": "operations",
+      "name": "Business OS",
+      "url": "https://tharigopula.com/showcase/business-software",
+      "job_id": "722a2b4afa937cb5bba3915b",
+      "status": "needs_product_demo_url",
+      "reason": "Unexpected initial public URL",
+      "mp4_count": 0,
+      "recorded_attempts": 1
+    },
+    {
+      "id": "H11",
+      "category": "developer",
+      "name": "Playcode",
+      "url": "https://playcode.io/code-playground",
+      "job_id": "c1e68f448878fe3706602fb7",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 1
+    },
+    {
+      "id": "H12",
+      "category": "ai-data",
+      "name": "Rhubarb",
+      "url": "https://rhubarbviz.com/",
+      "job_id": "53855498edf3fac1fec0edf9",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 1
+    },
+    {
+      "id": "H13",
+      "category": "workflow",
+      "name": "Trawpie",
+      "url": "https://trawpie.org/demo",
+      "job_id": "96e99878d907491e44feff6e",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    },
+    {
+      "id": "H14",
+      "category": "design",
+      "name": "Vectopea",
+      "url": "https://vectopea.com/",
+      "job_id": "c294af83317e462d2314c434",
+      "status": "needs_product_demo_url",
+      "reason": "Opening dialog needs user decision",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    },
+    {
+      "id": "H15",
+      "category": "analytics",
+      "name": "Owleye",
+      "url": "https://owleye.dev/demo/",
+      "job_id": "f58324589ff53206850ba0e0",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    },
+    {
+      "id": "H16",
+      "category": "operations",
+      "name": "Solvena",
+      "url": "https://solvena.dev/en/demos",
+      "job_id": "fd2507d545f51939bf88359e",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    },
+    {
+      "id": "H17",
+      "category": "developer",
+      "name": "OpenFlowKit",
+      "url": "https://app.openflowkit.com/",
+      "job_id": "32d52411b34f4224614f161b",
+      "status": "needs_product_demo_url",
+      "reason": "Unexpected post-load route change",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    },
+    {
+      "id": "H18",
+      "category": "ai-data",
+      "name": "Oronts",
+      "url": "https://oronts.com/en/demos",
+      "job_id": "5607ee361f55bd486353df8f",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 1
+    },
+    {
+      "id": "H19",
+      "category": "workflow",
+      "name": "Kiva",
+      "url": "https://kiva.uniform.net/",
+      "job_id": "75127b1ce7791167a9ef6310",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    },
+    {
+      "id": "H20",
+      "category": "design",
+      "name": "Wishwa",
+      "url": "https://wishissue.github.io/wishwa/",
+      "job_id": "bc087af0375ad2635bf4a2b7",
+      "status": "needs_product_demo_url",
+      "reason": "No supported local product picker or independent product views",
+      "mp4_count": 0,
+      "recorded_attempts": 0
+    }
+  ]
+}
