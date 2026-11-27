@@ -34,7 +34,7 @@ def test_replan_keeps_safety_and_editorial_call_budget(tmp_path,monkeypatch):
     assert [c.kwargs["phase"] for c in conv.ask.call_args_list]==["story-replan","story-editorial"]
     assert json.loads((tmp_path/"direction.json").read_text())==result[0]
     assert (tmp_path/"attempt-1/direction.json").is_file()
-    assert result[0]["editorial"]==editorial
+    assert result[0]["editorial"]=={**editorial,"duration_seconds":30}
     assert conv.ask.call_args_list[1].kwargs["response_schema"]["properties"]["beats"]["items"]["properties"]["action_id"]["enum"]==ids
 
 @pytest.mark.parametrize("reason",["Authentication barrier","Sensitive menu","Unsettled starting state"])
