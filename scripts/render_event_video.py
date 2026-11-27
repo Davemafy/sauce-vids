@@ -137,6 +137,10 @@ MANIFEST_PATH=(args.manifest or ROOT/"linear-interactions.json").resolve()
 if not SRC.is_file() or not MANIFEST_PATH.is_file():
     parser.error("Existing --video and --manifest inputs are required")
 MANIFEST=json.loads(MANIFEST_PATH.read_text())
+if "nativeCrop" in MANIFEST:
+    sys.path.insert(0,str(PROJECT))
+    from backend.customer_aperture import validate_binding
+    validate_binding(SRC,MANIFEST_PATH)
 if args.cloud_overview and (MANIFEST.get("events") or MANIFEST.get("pointer_samples")
                             or MANIFEST.get("edit_camera")):
     parser.error("Passive cloud overview requires a recording with no interaction claims")

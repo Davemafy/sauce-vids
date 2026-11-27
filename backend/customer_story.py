@@ -133,6 +133,11 @@ def validated_selection(raw,catalog):
     if not isinstance(hero,str) or hero not in ids:
         return None
     actions=[known[i] for i in ids]
+    # A state-dependent observation is valid only immediately after its
+    # independently verified prerequisite, not in an invented initial state.
+    for i,a in enumerate(actions):
+        if "requires" in a and (i==0 or a["requires"]!=actions[i-1]["id"]):
+            return None
     if len(actions)==2 and not (evidence_first_enabled() and editorial_direction_enabled()):
         return None
     if not any(a["kind"]=="option" for a in actions):
@@ -758,7 +763,7 @@ def compare_outcomes(catalog,metadata,opening,out,conv,creative):
         sample=balance_hypotheses(catalog,[known[i] for i in ids])
     trial=out/"outcomes";trial.mkdir(mode=0o700)
     save(trial/"sample.json",sample)
-    witnessed=[];images=[];records=[]
+    witnessed=[];images=[];records=[];state_candidates=[]
     def probes():
         yield from sample
         # A weak first batch can justify more observation, not looser proof.
@@ -822,11 +827,46 @@ def compare_outcomes(catalog,metadata,opening,out,conv,creative):
                             "localized":localized or None,"result":box})
             witnessed.append(action);images.extend((media(steady),media(after)))
             save(trial/"comparison.json",records)
+            if metadata.get("setup",{}).get("kind")=="local-demo-views" and len(state_candidates)<2:
+                from backend.customer_local_views import catalog as local_catalog
+                initial={(a["group"],a["label"]) for a in catalog}
+                for row in local_catalog(p,metadata["setup"]):
+                    identity=(row["group"],row["label"])
+                    if identity in initial or row["group"]==action.get("group") or any((a["group"],a["label"])==identity for a in state_candidates):
+                        continue
+                    state_candidates.append({**row,"id":f"state{len(state_candidates)}","requires":action["id"]})
+                    if len(state_candidates)>=2:break
+    # At most two newly revealed actions, always probed in a fresh browser
+    # by replaying and verifying the real prerequisite first.
+    if state_candidates:save(trial/"state-candidates.json",state_candidates)
+    for action in state_candidates:
+        if len(witnessed)>=8:break
+        parent=next(a for a in witnessed if a["id"]==action["requires"])
+        d=trial/action["id"];d.mkdir(mode=0o700)
+        with browser(metadata["url"]) as p:
+            require(p.url==metadata["url"],"Unexpected investigation route")
+            replay_setup(p,metadata)
+            steady=shot(p);p.wait_for_timeout(350)
+            require(image_change(arr(steady),arr(shot(p)))<=.025,"Unsettled starting state")
+            old=action_panel(p,parent)
+            apply(p,metadata["url"],parent,metadata["picker"],lambda loc,label:loc.click(timeout=3500))
+            try:
+                before,_,_,_=verify(p,metadata["url"],steady,old,shot,allow_localized=parent["kind"]=="option")
+                old=action_panel(p,action)
+                apply(p,metadata["url"],action,metadata["picker"],lambda loc,label:loc.click(timeout=3500))
+                after,box,delta,_=verify(p,metadata["url"],before,old,shot,allow_localized=action["kind"]=="option")
+            except WeakVisualOutcome as e:
+                records.append({"id":action["id"],"requires":parent["id"],"status":"weak","delta":e.delta})
+                save(trial/"comparison.json",records);continue
+            (d/"before.png").write_bytes(before);(d/"after.png").write_bytes(after)
+            records.append({"id":action["id"],"requires":parent["id"],"status":"verified","delta":delta,"result":box})
+            witnessed.append(action);images.extend((media(before),media(after)))
+            save(trial/"comparison.json",records)
     require(len(witnessed)>=MIN_ACTIONS,"Insufficient witnessed outcomes for a connected film")
     # Paired screenshots are in the same order as the admitted catalog.
     image_order=[{"action_id":a["id"],"label":a["label"],"kind":a["kind"],
                   "before_image":2*i+1,"after_image":2*i+2} for i,a in enumerate(witnessed)]
-    raw=conv.ask(creative+" You now have actual independent before/after image pairs for each verified product action below, in order. Images are numbered from 1; exact mapping: "+json.dumps(image_order)+". Direct a connected workflow using only 2-4 of these witnessed IDs. Work backwards from a single witnessed buyer-relevant payoff. A two-action story is permitted only for distinct capabilities that together prove a complete buyer benefit; never pad a story to three actions. Every selected action must teach something different; later actions must preserve, explain or complete the hero, not discard it for a marketing view. Avoid redundant theme cycling or a navigation tour. Independent product views must explain complementary evidence about one useful task, not merely show different tabs. The images show independent tests, not an already verified sequence; Sauce will replay the entire sequence. Abstain if these do not support a compelling demo. JSON {ids:[...],story:'...',hero_action_id:'one selected ID'}. Choose exactly one hero action whose verified result most clearly demonstrates buyer value; make the remaining actions support that payoff. If abstaining, use empty ids and an empty hero_action_id. Observed outcomes: "+json.dumps([r for r in records if r["status"]=="verified"])+" Catalog: "+json.dumps(witnessed),
+    raw=conv.ask(creative+" You now have actual independent before/after image pairs for each verified product action below, in order. Images are numbered from 1; exact mapping: "+json.dumps(image_order)+". Direct a connected workflow using only 2-4 of these witnessed IDs. Work backwards from a single witnessed buyer-relevant payoff. A two-action story is permitted only for distinct capabilities that together prove a complete buyer benefit; never pad a story to three actions. Every selected action must teach something different; later actions must preserve, explain or complete the hero, not discard it for a marketing view. Avoid redundant theme cycling or a navigation tour. Independent product views must explain complementary evidence about one useful task, not merely show different tabs. A candidate with requires must appear immediately after its listed verified prerequisite; its images were acquired only after that prerequisite. Other images show independent tests. Sauce will replay the entire sequence. Abstain if these do not support a compelling demo. JSON {ids:[...],story:'...',hero_action_id:'one selected ID'}. Choose exactly one hero action whose verified result most clearly demonstrates buyer value; make the remaining actions support that payoff. If abstaining, use empty ids and an empty hero_action_id. Observed outcomes: "+json.dumps([r for r in records if r["status"]=="verified"])+" Catalog: "+json.dumps(witnessed),
                  media=tuple(images),json_mode=True,phase="story-from-outcomes",stop_on_rate_limit=True,response_schema=story_response_schema(witnessed))
     return require_provider_reply(raw,conv),witnessed
 
@@ -1030,6 +1070,14 @@ def capture(url,plan,proofs,out):
     save(out/"capture-schedule.json",{"requestedActionStarts":starts,"durationSeconds":duration,"editorialDirected":"editorial" in plan})
     with native_display(out) as display, browser(url,display=display) as p, ExitStack() as stack:
         replay_setup(p,plan)
+        aperture_regions=[]
+        local_setup=plan.get("setup",{}).get("kind")=="local-demo-views"
+        def observe_aperture():
+            if local_setup:
+                from backend.customer_local_views import region_for
+                row=region_for(p,plan["setup"]["region"])
+                aperture_regions.append(native(row["rect"]) if row else None)
+        observe_aperture()
         # This is before FFmpeg starts. Never use Playwright screenshots during recording.
         p.mouse.move(W*.25,H*.2);browser_pixels=shot(p);p.wait_for_timeout(1800)
         opening=screen(display)
@@ -1096,6 +1144,7 @@ def capture(url,plan,proofs,out):
             opening_pointer_approach(move,wait,opening_anchor)
             for i,(action,expected) in enumerate(zip(plan["actions"],proofs)):
                 wait(starts[i]);started=now();before=span("before_screen",lambda:screen(display));old=span("before_panel",lambda:action_panel(p,action))
+                observe_aperture()
                 components=span("before_components",lambda:observed_components(p,old))
                 current=span("apply_total",lambda:apply(p,url,action,current,click))
                 applied=now()
@@ -1122,6 +1171,7 @@ def capture(url,plan,proofs,out):
                     result_event["componentChangedFraction"]=detail["changedFraction"]
                     result_event["componentBeforeAt"]=started
                 events.append(result_event)
+                observe_aperture()
                 pending_proof.append((i,before,after))
             wait(duration-1);enc.wait(timeout=20);require(enc.returncode==0,"Native recording failed")
         finally:
@@ -1143,6 +1193,9 @@ def capture(url,plan,proofs,out):
         from scripts.quality_preview_supervisor import probe,full_rate_temporal_frames,transient_frame_reversion_finding
         stream=next(s for s in probe(source)["streams"] if s["codec_type"]=="video")
         require(not transient_frame_reversion_finding(full_rate_temporal_frames(source,stream),fps=60),"Original source transient viewport jump")
+        if local_setup:
+            from backend.customer_aperture import derive
+            return derive(source,out/"manifest.json",aperture_regions)
         return source,out/"manifest.json"
 
 def render(folder,source,manifest,plan,calls,progress,audio):

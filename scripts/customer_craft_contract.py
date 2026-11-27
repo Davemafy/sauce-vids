@@ -115,10 +115,15 @@ def verify_plan(plan,manifest,stage,pointer,fps,frames,trim=0):
     else:
         from customer_editorial import durations
     compact=len(events)==2 and plan.get("durationSeconds") in durations(2)
+    crop=manifest.get("nativeCrop")
+    native_resolution=(min(stage.source_size)>=1800 or
+        (isinstance(crop,dict) and crop.get("schema")=="sauce-native-aperture-v1"
+         and stage.source_size[0]>=1920 and stage.source_size[1]>=1080
+         and crop.get("rect",[])[2:]==list(stage.source_size)))
     if (fps!=60 or not (compact or 3<=len(events)<=6) or trim!=0 or
             frames!=round(plan["durationSeconds"]*60) or
             frames!=round(manifest["duration"]*60) or
-            min(stage.source_size)<1800 or stage.output_size!=(1920,1080) or
+            not native_resolution or stage.output_size!=(1920,1080) or
             manifest.get("cursorless") is not True):
         raise ValueError("Customer craft requires complete native source timeline and verified actions")
     if (set(plan)-{"schema","sourceSha256","manifestSha256","durationSeconds","presentation","cursor","audio","studioStage","camera","cursorPack"}
