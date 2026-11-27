@@ -192,3 +192,37 @@ def test_setup_absence_retries_and_expands_weak_exploration(tmp_path,monkeypatch
     assert records[0]["status"]=="setup-unavailable" and records[0]["attempts"]==2
     assert len(json.loads((tmp_path/"outcomes/extra-sample.json").read_text()))==4
     assert len(conv.ask.call_args.kwargs["media"])==8
+
+
+def test_adaptive_exploration_observes_before_selecting_next(tmp_path,monkeypatch):
+    import json
+    from contextlib import contextmanager
+    from unittest.mock import Mock
+    import backend.customer_story as s
+    rows=[{"id":f"a{i}","kind":"option","label":str(i)} for i in range(5)]
+    opened=[]
+    @contextmanager
+    def browser(url):
+        p=Mock();p.url=url;opened.append(p);yield p
+    monkeypatch.setattr(s,"browser",browser)
+    monkeypatch.setattr(s,"shot",lambda p:b"source")
+    monkeypatch.setattr(s,"arr",lambda b:np.zeros((8,8,3),np.uint8))
+    monkeypatch.setattr(s,"media",lambda b:b)
+    monkeypatch.setattr(s,"action_panel",lambda *a:{"x":0,"y":0,"width":8,"height":8})
+    monkeypatch.setattr(s,"apply",lambda *a:None)
+    monkeypatch.setattr(s,"verify",lambda *a,**kw:(b"changed",{"x":0,"y":0,"width":8,"height":8},.2,1))
+    conv=Mock();conv.calls=0
+    phases=[]
+    def ask(*a,**kw):
+        conv.calls+=1;phases.append(kw["phase"])
+        if kw["phase"]=="outcome-hypotheses":return '{"ids":["a0","a1","a2","a3"]}'
+        if kw["phase"]=="adaptive-outcome-hypotheses":
+            assert len(opened)==2 and len(kw["media"])==4
+            return '{"ids":["a4"]}'
+        assert len(opened)==3
+        return '{"ids":["a0","a4"],"story":"comparison","hero_action_id":"a4"}'
+    conv.ask.side_effect=ask
+    _,allowed=s.compare_outcomes(rows,{"url":"https://example.com/","picker":None},b"opening",tmp_path,conv,"brief")
+    assert [a["id"] for a in allowed]==["a0","a1","a4"]
+    assert phases==["outcome-hypotheses","adaptive-outcome-hypotheses","story-from-outcomes"]
+    assert json.loads((tmp_path/"outcomes/adaptive-sample.json").read_text())["selected"]==["a4"]

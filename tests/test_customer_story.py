@@ -147,6 +147,7 @@ def test_gemini_only_selects_a_real_observed_entry_id(monkeypatch,tmp_path):
         assert include_robots
         yield Page(),RobotFileParser()
     monkeypatch.setattr(s,'browser',fake_browser)
+    monkeypatch.setattr('backend.customer_observed_workspace.scan',lambda page:[])
     monkeypatch.setattr(s,'observed_product_entry_links',lambda *args:[{
         'id':'r0','url':'https://example.com/editor/theme','label':'Try It Now'}])
     monkeypatch.setattr(s,'shot',lambda p:b'image')
