@@ -277,12 +277,17 @@ def browser(url,*,display=None,include_robots=False):
             executable_path=str(FULL_CHROME if display else CHROME),
             env={**os.environ,"DISPLAY":display} if display else None,
             args=customer_browser_args(display))
+        from backend.agentmail_auth import session_for,check_test_surface,origin as auth_origin
+        test_state=session_for(url)
         c=b.new_context(viewport={"width":W,"height":H},device_scale_factor=D,
-            service_workers="block",accept_downloads=False,permissions=[])
+            service_workers="block",accept_downloads=False,permissions=[],
+            **({"storage_state":test_state} if test_state is not None else {}))
         try:
             loaded=False;robots=None
             def guard(route):
                 req=route.request
+                if test_state is not None and (auth_origin(req.url)!=auth_origin(url) or req.method not in ("GET","HEAD")):
+                    return route.abort("blockedbyclient")
                 if req.is_navigation_request():
                     if robots is not None and req.frame.parent_frame is not None and preview_frame_allowed(req.url,url,robots):
                         return guard_route(route)
@@ -314,6 +319,7 @@ def browser(url,*,display=None,include_robots=False):
                 require(p.evaluate("()=>[innerWidth,innerHeight,devicePixelRatio]")==[W,H,D],"Wrong native viewport")
             require(not visible_authentication_barrier(p),"Authentication barrier")
             clear_welcome(p,actual)
+            if test_state is not None:check_test_surface(p)
             yield (p,robots) if include_robots else p
         finally:
             c.close();b.close()
@@ -351,6 +357,11 @@ def resolve_public_product_entry(url,out,conv,creative):
     Gemini only selects a witnessed anchor ID; source URL is retained and
     target is reopened under the same independent browser/robots guards.
     """
+    from backend.agentmail_auth import session_for
+    if session_for(url) is not None:
+        save(out/'entry-route.json',{'submitted_url':url,'chosen_url':url,'model_selected':False,
+                                    'retained_reason':'owner-authorized test product route'})
+        return url
     with browser(url,include_robots=True) as observed:
         page,robots=observed
         candidates=observed_product_entry_links(page,url,robots)
@@ -537,13 +548,19 @@ def intersection(old,new,*,minimum_fraction=.18):
     return box
 
 def verify(page,url,before,old,snapshot,*,allow_localized=False,proof_metrics=None):
+    from backend.agentmail_auth import test_session_active,check_test_surface
     assert_local(page,url)
+    if test_session_active():check_test_surface(page)
     new=result_panel(page,old);box=intersection(old,new,minimum_fraction=.04 if "tab_result_id" in old else .18)
     x,y,w,h=(round(box[k]) for k in ("x","y","width","height"))
     weak=None
     for _ in range(3):
-        page.wait_for_timeout(500);after=snapshot(page);t=time.monotonic()
-        page.wait_for_timeout(250);settled=snapshot(page)
+        page.wait_for_timeout(500)
+        if test_session_active():check_test_surface(page)
+        after=snapshot(page);t=time.monotonic()
+        page.wait_for_timeout(250)
+        if test_session_active():check_test_surface(page)
+        settled=snapshot(page)
         assert_local(page,url)
         if image_change(pixels(after),pixels(settled))>.025:continue
         a=pixels(before)[y:y+h,x:x+w];b=pixels(after)[y:y+h,x:x+w]
