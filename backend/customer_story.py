@@ -25,6 +25,7 @@ from backend.source_action_preflight import image_change,visible_authentication_
 from backend.native60_capture import FULL_CHROME,verify_live_terminal_frames
 from scripts.capture_safety import validate_public_url,guard_route
 from scripts import customer_editorial
+from backend.customer_detail import observed_components,select_component
 
 ROOT=Path(__file__).resolve().parents[1]
 W,H,D=1920,1080,2
@@ -675,6 +676,7 @@ def probe_story(plan,out):
             before=shot(p);p.wait_for_timeout(350);steady=shot(p)
             require(image_change(arr(before),arr(steady))<=.025,"Unsettled starting state")
             old=action_panel(p,action)
+            components=observed_components(p,old)
             current=apply(p,plan["url"],action,current,lambda loc,label:loc.click(timeout=3500))
             try:
                 after,box,delta,_=verify(p,plan["url"],steady,old,shot,allow_localized=evidence_first_enabled() and action["kind"]=="option")
@@ -692,7 +694,8 @@ def probe_story(plan,out):
                 save(out/"probe.json",proofs)
                 return proofs,images,failure
             (out/f"{i}-before.png").write_bytes(steady);(out/f"{i}-after.png").write_bytes(after)
-            proofs.append({"id":action["id"],"delta":delta,"result":box})
+            detail=select_component(pixels(steady),pixels(after),components,observed_components(p,box),box)
+            proofs.append({"id":action["id"],"delta":delta,"result":box,"detail":detail})
             images.extend((media(steady),media(after)))
     save(out/"probe.json",proofs)
     return proofs,images,None
@@ -732,7 +735,7 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
                        "Use wide deliberately to avoid a push on every click; reserve attention for the actual payoff. "
                        "Choose backdrop cobalt (bright cloud), muted (subdued blue-gray cloud), or graphite (dark desaturated cloud). "
                        "Choose for the product's actual palette, not a generic aesthetic. Sauce validates the true action, result, cursor, and source timing; "
-                       "detail may safely back off if the entire verified result cannot fit. Return accept, reason, backdrop, duration_seconds, beats. "
+                       "If measured proof includes a named changed component inside a dense result, prefer a detail beat when the labels would otherwise be unreadable. Detail may use that complete witnessed component after a full-result hold; otherwise it safely backs off if the entire verified result cannot fit. Return accept, reason, backdrop, duration_seconds, beats. "
                        "If rejecting, return empty beats. Exact action order: "+json.dumps(ids)+" Hero: "+plan["hero_action_id"])
                 kwargs["response_schema"]=customer_editorial.schema(ids)
             else:
@@ -918,6 +921,7 @@ def capture(url,plan,proofs,out):
             opening_pointer_approach(move,wait,opening_anchor)
             for i,(action,expected) in enumerate(zip(plan["actions"],proofs)):
                 wait(starts[i]);started=now();before=span("before_screen",lambda:screen(display));old=span("before_panel",lambda:action_panel(p,action))
+                components=span("before_components",lambda:observed_components(p,old))
                 current=span("apply_total",lambda:apply(p,url,action,current,click))
                 applied=now()
                 try:
@@ -934,8 +938,15 @@ def capture(url,plan,proofs,out):
                 if confirmed>=duration-2:
                     save(out/"timing-rejection.json",{"index":i,"confirmed":confirmed,"action_id":action["id"],"source_duration":duration})
                     raise StoryRejected("Insufficient final source hold")
-                events.append({"kind":"verified_result","label":action["label"],"t":confirmed,
-                    "resultRect":native(box),"evidence":"Verified live same-product panel change; fraction "+str(round(delta,4))})
+                result_event={"kind":"verified_result","label":action["label"],"t":confirmed,
+                    "resultRect":native(box),"evidence":"Verified live same-product panel change; fraction "+str(round(delta,4))}
+                detail=span("after_components",lambda:select_component(before,after,components,observed_components(p,box),box))
+                if detail:
+                    result_event["componentRect"]=native(detail["rect"])
+                    result_event["componentLabel"]=detail["label"]
+                    result_event["componentChangedFraction"]=detail["changedFraction"]
+                    result_event["componentBeforeAt"]=started
+                events.append(result_event)
                 pending_proof.append((i,before,after))
             wait(duration-1);enc.wait(timeout=20);require(enc.returncode==0,"Native recording failed")
         finally:

@@ -126,6 +126,19 @@ def convert(source,receipt):
             if isinstance(price,str) and re.fullmatch(
                     r"\$[0-9][0-9,]*(?:\.[0-9]{2})? / mo",price):
                 action["observedPublicPrice"]=price
+            if "componentRect" in e:
+                component=rect(e["componentRect"])
+                x,y,bw,bh=(component[k] for k in ("x","y","width","height"))
+                rx,ry,rw,rh=(result[k] for k in ("x","y","width","height"))
+                if (rx<=x<x+bw<=rx+rw and ry<=y<y+bh<=ry+rh
+                    and .025<=bw*bh/(rw*rh)<=.45
+                    and isinstance(e.get("componentLabel"),str)
+                    and 0<len(e["componentLabel"])<=80
+                    and type(e.get("componentChangedFraction")) in (int,float)
+                    and .04<=e["componentChangedFraction"]<=1
+                    and type(e.get("componentBeforeAt")) in (int,float)
+                    and max(0,start-6)<=e["componentBeforeAt"]<=start-.05):
+                    action["componentCandidate"]={"rect":component,"label":e["componentLabel"],"beforeAt":e["componentBeforeAt"]}
             actions.append(action)
     if outstanding or not 1<=len(actions)<=6:raise ValueError("Incomplete action chain")
     if any(e["kind"]=="draw_stroke" for e in actions) and len(actions)!=1:
@@ -146,6 +159,23 @@ def convert(source,receipt):
             frac=float(np.mean(np.max(cv2.absdiff(before,after),axis=2)>12))
             if frac<.013:raise ValueError("Observed outcome lacks original source pixel change")
             changes.append(round(frac,5))
+            candidate=e.pop("componentCandidate",None)
+            if candidate:
+                r=candidate["rect"];x,y,rw,rh=[int(round(r[k])) for k in ("x","y","width","height")]
+                b=crop(candidate["beforeAt"])
+                a=crop(min(duration-1/60,e["t"]+.15))
+                settled=crop(min(duration-1/60,e["t"]+.70))
+                mask=np.max(cv2.absdiff(b,a),axis=2)>12
+                retained=mask & (np.max(cv2.absdiff(b,settled),axis=2)>12)
+                stable=float(np.mean(np.max(cv2.absdiff(a,settled),axis=2)>18))
+                if mask.mean()>=.04 and retained.sum()>=.8*mask.sum() and stable<=.05:
+                    e["componentRect"]=r
+                    e["componentLabel"]=candidate["label"]
+                    e["componentProof"]={"schema":"sauce-decoded-component-v1",
+                        "changedFraction":round(float(mask.mean()),5),
+                        "retainedFraction":round(float(retained.sum()/mask.sum()),5),
+                        "settledDifference":round(stable,5)}
+
     finally:cap.release()
     return {"source":old["source"],"duration":duration,"cursorless":True,
         "capture_rect":{"width":w,"height":h},"events":actions,

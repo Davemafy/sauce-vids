@@ -140,7 +140,7 @@ def direction(video:Path,manifest:Path,hero_event_index=None,editorial_intent=No
                 if is_hero:hold=max(1.,hold)
                 peak=after_visible(begin+.60)
             if (is_hero and beats is None) or (beats is not None and beats[i]["framing"]=="detail"):
-                fit,transform,base,_,limit=hero_geometry(evidence,i,(source_w,source_h),(1920,1080))
+                fit,transform,base,detail_begin,limit=hero_geometry(evidence,i,(source_w,source_h),(1920,1080))
                 # Back off only when the complete result/pointer or native
                 # source interval cannot support a safe close-up. Never force
                 # a minimum zoom by cropping the verified payoff.
@@ -148,7 +148,8 @@ def direction(video:Path,manifest:Path,hero_event_index=None,editorial_intent=No
                 while candidate>=HERO_MIN_ZOOM:
                     seconds=hero_motion_budget(candidate,transform(candidate),base,(1920,1080))
                     # A close-up earns at least 1s of settled reading time.
-                    if 2*seconds+1.05<=limit-begin:
+                    if 2*seconds+1.05<=limit-after_visible(detail_begin):
+                        begin=after_visible(detail_begin)
                         zoom=candidate;travel=seconds;hold=max(hold,1.05)
                         peak=after_visible(begin+seconds);detail_indices.append(i)
                         break

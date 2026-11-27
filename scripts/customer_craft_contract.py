@@ -28,6 +28,22 @@ HERO_MIN_ZOOM=1.20
 HERO_PADDING=36.
 HERO_OVERVIEW_MAX=1.075
 
+def detail_region(event,source_size):
+    """A complete independently decoded component is a later editorial detail."""
+    full=event["resultRect"];r=event.get("componentRect");proof=event.get("componentProof")
+    if not isinstance(r,dict) or not isinstance(proof,dict) or proof.get("schema")!="sauce-decoded-component-v1":
+        return full,0.
+    if not all(type(proof.get(k)) in (int,float) for k in ("changedFraction","retainedFraction","settledDifference")):
+        return full,0.
+    if not (.04<=proof["changedFraction"]<=1 and .8<=proof["retainedFraction"]<=1 and 0<=proof["settledDifference"]<=.05):
+        return full,0.
+    x,y,w,h=(r[k] for k in ("x","y","width","height"))
+    rx,ry,rw,rh=(full[k] for k in ("x","y","width","height"))
+    if not (rx<=x<x+w<=rx+rw and ry<=y<y+h<=ry+rh and .025<=w*h/(rw*rh)<=.45
+            and rw*rh/(source_size[0]*source_size[1])>.55):
+        return full,0.
+    return r,.60
+
 def hero_geometry(manifest,index,source_size,output_size):
     """Fit the entire verified result and real pointer, not guessed content.
 
@@ -41,10 +57,10 @@ def hero_geometry(manifest,index,source_size,output_size):
     e=events[index];sw,sh=source_size;ow,oh=output_size
     x0,y0,x1,y1,_=window_geometry(source_size,output_size)
     sx=(x1-x0)/(sw-1);sy=(y1-y0)/(sh-1)
-    r=e["resultRect"];x,y,rw,rh=(float(r[k]) for k in ("x","y","width","height"))
+    r,context_hold=detail_region(e,source_size);x,y,rw,rh=(float(r[k]) for k in ("x","y","width","height"))
     if not (0<=x<x+rw<=sw and 0<=y<y+rh<=sh):
         raise ValueError("Hero result outside native source")
-    begin=float(e["t"])
+    begin=float(e["t"])+context_hold
     end=float(events[index+1]["start"] if index+1<len(events) else manifest.get("duration",30.))-.25
     # Include the observed pointer throughout the potential hero window.
     # Interpolation is only between recorded samples, exactly as playback.
@@ -122,7 +138,7 @@ def verify_plan(plan,manifest,stage,pointer,fps,frames,trim=0):
     if quads.shape!=(frames,4,2) or not np.isfinite(quads).all():raise ValueError("Invalid projected window")
     hero=getattr(stage,"hero_detail_index",None)
     detail=np.zeros(frames,dtype=bool)
-    hero_min=1.;hero_padding=None
+    hero_min=1.;hero_padding=None;component_events=[]
     for shot_index,begin,end,_,_ in getattr(stage,"detail_shots",()):
         hero=shot_index
         if type(hero) is not int or not 0<=hero<len(events):
@@ -131,9 +147,11 @@ def verify_plan(plan,manifest,stage,pointer,fps,frames,trim=0):
         if np.any(detail & current):raise ValueError("Overlapping detail windows")
         detail |= current
         e=events[hero];next_press=events[hero+1]["start"] if hero+1<len(events) else frames/fps
-        if begin<e["t"]-1e-7 or end>next_press-.20 or not current.any():
+        region,context_hold=detail_region(e,stage.source_size)
+        if context_hold:component_events.append(hero)
+        if begin<e["t"]+context_hold-1e-7 or end>next_press-.20 or not current.any():
             raise ValueError("Hero detail overlaps unverified source time")
-        box=tuple(e["resultRect"][k] for k in ("x","y","width","height"))
+        box=tuple(region[k] for k in ("x","y","width","height"))
         sw,sh=stage.source_size
         source=np.float32([[0,0],[sw-1,0],[sw-1,sh-1],[0,sh-1]])
         x,y,w,h=box
@@ -197,7 +215,7 @@ def verify_plan(plan,manifest,stage,pointer,fps,frames,trim=0):
             "minimumWindowMarginPx":round(margin,3),"maximumQuadSpeedPx":round(speed,4),
             "maximumQuadAccelerationPx":round(acceleration,4),
             "minimumTargetVisible":round(min_target,5),"minimumResultVisible":round(min_result,5),
-            "heroEventIndex":getattr(stage,"hero_detail_index",None),"detailEventIndices":[v[0] for v in getattr(stage,"detail_shots",())],"heroDetailFrames":int(detail.sum()),
+            "heroEventIndex":getattr(stage,"hero_detail_index",None),"detailEventIndices":[v[0] for v in getattr(stage,"detail_shots",())],"heroDetailFrames":int(detail.sum()),"detailComponentEvents":component_events,
             "heroMinimumResultVisible":round(hero_min,5),
             "heroMinimumPaddingPx":round(hero_padding,3) if hero_padding is not None else None,
             "creativeApproved":False}
