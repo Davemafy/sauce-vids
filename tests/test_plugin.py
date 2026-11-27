@@ -136,4 +136,67 @@ class PluginTest(unittest.TestCase):
     def test_tool_errors_are_json(self):
         self.assertFalse(json.loads(tools.capture({"project":"../secrets","url":"https://www.brimble.io"}))["ok"])
         self.assertFalse(json.loads(tools.render({"run_id":"../secrets"}))["ok"])
+    def test_sandbox_default_and_explicit_opt_in(self):
+        import os
+        from unittest.mock import patch
+        pw = MagicMock()
+        for value, expected in (("", True), ("true", True), ("1", False)):
+            with patch.dict(os.environ, {"SAUCE_ALLOW_UNSANDBOXED_CHROMIUM":value}):
+                tools._launch_chromium(pw)
+                pw.chromium.launch.assert_called_with(
+                    headless=True, chromium_sandbox=expected,
+                    args=["--disable-dev-shm-usage"])
+        with patch.dict(os.environ, {}, clear=True):
+            pw.chromium.launch.side_effect = RuntimeError("Sandbox unavailable")
+            pw.chromium.launch.reset_mock()
+            with self.assertRaisesRegex(RuntimeError, "Sandbox unavailable"):
+                tools._launch_chromium(pw)
+            pw.chromium.launch.assert_called_once()
+
+    def test_real_hover_and_click_link_fixture(self):
+        import os
+        import tempfile
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from urllib.parse import urlsplit
+        from unittest.mock import patch
+        if os.getenv("SAUCE_BROWSER_TEST") != "1":
+            self.skipTest("Set SAUCE_BROWSER_TEST=1 with installed Chromium")
+        class Fixture(BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = {
+                    "/": """<h1>Fixture</h1><button id="hover" onmouseenter="document.querySelector('#next').href='/hovered'">Hover first</button><a id="next" href="/wrong">Continue</a>""",
+                    "/hovered": "<h1>Verified after hover</h1>",
+                    "/wrong": "<h1>Hover did not run</h1>",
+                }.get(self.path, "")
+                self.send_response(200 if body else 404)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(body.encode())
+            def log_message(self, *args):
+                pass
+        with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
+            thread=threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            origin=f"http://127.0.0.1:{server.server_port}"
+            def fixture_url(value, host=None):
+                parsed=urlsplit(value)
+                if f"{parsed.scheme}://{parsed.netloc}" != origin:
+                    raise ValueError("Fixture only")
+                return parsed.hostname
+            try:
+                with tempfile.TemporaryDirectory() as tmp, patch.object(tools,"ROOT",Path(tmp)), patch.object(tools,"_url",side_effect=fixture_url):
+                    result=json.loads(tools.capture({"project":"fixture","url":origin+"/","actions":[
+                        {"type":"hover","selector":"#hover","seconds":0.2},
+                        {"type":"click_link","selector":"#next","expected_visible_heading":"Verified after hover","seconds":0.5}
+                    ]}))
+                    self.assertTrue(result["ok"],result)
+                    self.assertEqual([e["type"] for e in result["events"]],["page","hover","click_link"])
+                    self.assertTrue(result["events"][-1]["heading_verified"])
+                    self.assertEqual(result["events"][-1]["url"],origin+"/hovered")
+                    self.assertTrue(Path(result["recording"]).is_file())
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+
 if __name__=="__main__":unittest.main()

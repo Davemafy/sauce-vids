@@ -132,6 +132,15 @@ def _verify_recording(path):
     return {"duration_s":duration, "width":1920, "height":1080, "fps":fps}
 
 
+def _launch_chromium(pw):
+    """Sandbox by default; never silently retry without it."""
+    return pw.chromium.launch(
+        headless=True,
+        chromium_sandbox=os.environ.get("SAUCE_ALLOW_UNSANDBOXED_CHROMIUM") != "1",
+        args=["--disable-dev-shm-usage"],
+    )
+
+
 def capture(args, **kwargs):
     try:
         project = _id(args.get("project"))
@@ -144,7 +153,7 @@ def capture(args, **kwargs):
         events = []
         start = time.monotonic()
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+            browser = _launch_chromium(pw)
             context = browser.new_context(
                 viewport=CAPTURE_VIEWPORT,
                 device_scale_factor=CAPTURE_DEVICE_SCALE,

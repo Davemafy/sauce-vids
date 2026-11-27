@@ -115,7 +115,7 @@ def scout(args, **kwargs):
         scout_id = project + "-scout-" + uuid.uuid4().hex[:8]
         folder = tools._dir(scout_id)
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
+            browser = tools._launch_chromium(pw)
             try:
                 ctx = browser.new_context(viewport={"width": 1440, "height": 810},
                                           device_scale_factor=1)

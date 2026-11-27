@@ -147,7 +147,7 @@ Requires Python 3.11+, [Playwright](https://playwright.dev/python/), Chromium, a
 ```bash
 git clone https://github.com/Davemafy/sauce-vids.git
 cd sauce-vids
-python3 -m pip install "playwright>=1.55,<2"
+python3 -m pip install "playwright>=1.64,<2"
 python3 -m playwright install chromium
 # Install ffmpeg and ffprobe with your system package manager
 export SAUCE_ALLOWED_HOSTS="www.brimble.io,brimble.io"
@@ -202,3 +202,7 @@ python3 -m unittest discover -s tests -v
 The plugin runs Chromium and FFmpeg locally, saves the footage on the host, and only records sites explicitly listed in `SAUCE_ALLOWED_HOSTS`. It is designed for authorized public websites and trusted operators. For hosted multi-tenant use, run capture workers inside a network-restricted sandbox.
 
 **Open source:** MIT. Built for Hermes. Earlier visual research referenced the MIT-licensed [screen-demo](https://github.com/Third-Space-interactive/screen-demo) project; that code is not bundled here.
+
+### Chromium sandbox
+
+Hermes capture and scout explicitly enable Chromium sandboxing by default. Configure the Linux host to support it. Only on a separately isolated, trusted worker that cannot support Chromium sandboxing may an operator explicitly set `SAUCE_ALLOW_UNSANDBOXED_CHROMIUM=1`. This weakens browser isolation; never enable it for untrusted browsing. There is no automatic fallback.
