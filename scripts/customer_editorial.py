@@ -4,7 +4,7 @@ PACES=("quick","readable","linger")
 TONES=("cobalt","muted","graphite")
 WEIGHTS={"quick":1,"readable":2,"linger":3}
 DURATIONS=(22,26,30)
-COMPACT_DURATIONS=(13,16,18,20)
+COMPACT_DURATIONS=(12,13,16,18,20)
 THREE_ACTION_DURATIONS=(18,22,26,30)
 
 def durations(count):
@@ -16,7 +16,7 @@ def final_slot(count,duration):
     Legacy slots remain unchanged. Capture still rejects a late confirmation
     rather than squeezing or fabricating a result.
     """
-    return 7.2 if (count,duration) in ((2,13),(3,18)) else 9.2
+    return 6.2 if (count,duration)==(2,12) else (7.2 if (count,duration) in ((2,13),(3,18)) else 9.2)
 
 def minimum_duration(count,duration):
     return .8+5*(count-1)+final_slot(count,duration)
@@ -25,7 +25,7 @@ def slot_budgets(beats,duration):
     """Reserve native proof + context + camera travel + readable detail."""
     count=len(beats)
     return [9.0 if b["framing"]=="detail" else 5.0 for b in beats[:-1]] + [
-        max(9.7,final_slot(count,duration)) if beats[-1]["framing"]=="detail" else final_slot(count,duration)]
+        (7.2 if (count,duration)==(2,13) else max(9.7,final_slot(count,duration))) if beats[-1]["framing"]=="detail" else final_slot(count,duration)]
 
 def fit_duration(data,ids,hero):
     """Compile the requested duration as a lower bound, never retime footage."""
@@ -113,3 +113,15 @@ def protect_local_readability(data,actions,hero,proofs,viewport):
     beats[i]["pace"]="readable"
     amended=fit_duration({**data,"beats":beats},ids,hero)
     return amended,{"action_id":ids[i],"reason":"small-verified-local-result","requested_duration":data["duration_seconds"],"compiled_duration":amended["duration_seconds"]}
+
+
+def compact_fast_local(data,actions,hero,proofs):
+    """Use short native capture only for quick, witnessed two-step local demos."""
+    ids=[a['id'] for a in actions]
+    if len(ids)!=2 or not all(a.get('control')=='local-demo-view' for a in actions):return data,None
+    if len(proofs)!=2 or any(p.get('id')!=a['id'] or not isinstance(p.get('probe_seconds'),(int,float)) or not 0<p['probe_seconds']<=2.0 for a,p in zip(actions,proofs)):return data,None
+    if data['beats'][0]['framing']=='detail':return data,None
+    target=13 if data['beats'][-1]['framing']=='detail' else 12
+    if target>=data['duration_seconds']:return data,None
+    result=validate({**data,'duration_seconds':target},ids,hero)
+    return result,{'reason':'measured-fast-local-workflow','previous_duration':data['duration_seconds'],'duration':target,'probe_seconds':[p['probe_seconds'] for p in proofs]}

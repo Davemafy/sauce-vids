@@ -55,6 +55,39 @@ def sampled_encoded_evidence(film,duration,manifest):
         return tuple(media),actual
     finally:cap.release()
 
+def pacing_evidence(film,manifest,duration):
+    """Measured low-change runs and event gaps; not proof of subjective boredom."""
+    events=manifest.get('events',[])
+    times=[float(e['t']) for e in events]
+    report={'first_verified_result_s':round(times[0],2) if times else None,
+            'final_result_to_end_s':round(duration-times[-1],2) if times else None,
+            'between_results_s':[round(b-a,2) for a,b in zip(times,times[1:])],
+            'low_change_runs':[]}
+    cap=cv2.VideoCapture(str(film));prev=None;start=None;runs=[]
+    try:
+        fps=cap.get(cv2.CAP_PROP_FPS);count=int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if not cap.isOpened() or not math.isfinite(fps) or fps<=0 or count<1:raise ValueError('Unreadable pacing evidence')
+        stride=max(1,round(fps/6));last=0.
+        for i in range(count):
+            if not cap.grab():raise ValueError('Incomplete pacing evidence')
+            if i%stride:continue
+            ok,frame=cap.retrieve()
+            if not ok:raise ValueError('Incomplete pacing sample')
+            t=i/fps;im=cv2.resize(frame,(320,180),interpolation=cv2.INTER_AREA)
+            if prev is not None:
+                delta=float(cv2.mean(cv2.absdiff(im,prev))[0]+cv2.mean(cv2.absdiff(im,prev))[1]+cv2.mean(cv2.absdiff(im,prev))[2])/3
+                if delta<.25:
+                    if start is None:start=last
+                elif start is not None:
+                    if last-start>=1.5:runs.append((start,last))
+                    start=None
+            prev=im;last=t
+        if start is not None and last-start>=1.5:runs.append((start,last))
+        report['low_change_runs']=[{'start':round(a,2),'end':round(b,2),'seconds':round(b-a,2)} for a,b in sorted(runs,key=lambda r:r[1]-r[0],reverse=True)[:8]]
+        report['sampling_hz']=round(fps/stride,2)
+        return report
+    finally:cap.release()
+
 def review(film,qa,source,manifest,plan,directory,*,conversation=None):
     from backend.customer_story import sha,save
     film,source,manifest,directory=map(Path,(film,source,manifest,directory))
@@ -103,6 +136,14 @@ def review(film,qa,source,manifest,plan,directory,*,conversation=None):
             attachments=(_media(view,'video/mp4',12*1024*1024),)
             result['review_mode']='full-duration-video-proxy'
         prompt=("You are the creative director of a world-class motion studio. Watch the entire attached actual encoded product film, not the planned story. The master is native 60fps; this full-duration review proxy is 30fps. Do not infer source frame rate from the proxy. Would a cold viewer understand the value, stay interested and want to try the product? Be demanding. Identify timestamped visible evidence of weak pacing, tiny UI, disappearing content, camera, pointer and actual product payoff. Distinguish a bad story from capture or rendering defects. Say what to change in the next capture using specific observed moments; do not ask for invented UI, pointer data or unsupported camera effects. Judge the film as a flagship launch asset, not a tutorial or a technical pass. Reject when the sampled evidence shows materially weak product payoff, repetitive composition or unreadable UI, even if the recording is technically valid. Do not reject solely because a numerical warning exists. Explain the first meaningful change, the strongest visible result, and whether each later beat earns its screen time. Separate observed defects from unverified continuous motion or audio. Recommend one specific editorial change grounded in the visible product outcome; do not prescribe zooms merely to add motion. Return JSON with decision (keep or reject) and observations (string with timestamps). Keep means only retain for human review, never approval. Independent encoded QA: "+json.dumps(qa['findings'])[:2000]+". Planned story, not evidence of what occurred: "+str(plan.get('story',''))[:1200]+". Selected hero action ID (intent only): "+str(plan.get("hero_action_id",""))[:80])
+        # Put the repair first so the downstream director receives it even
+        # when model observations are truncated. Use measured source clock gaps.
+        try:
+            timing=pacing_evidence(film,json.loads(manifest.read_text()),float(qa['duration']))
+            result['pacing_evidence']=timing
+            prompt+=' Measured encoded pacing (low change is not automatically dead air): '+json.dumps(timing)
+        except (ValueError,OSError,TypeError,KeyError):pass
+        prompt+=' Start observations with a concise REPAIR: specify what to shorten, remove or reframe and why, using exact observed time ranges. Keep the entire response under 1100 characters. Explicitly distinguish a necessary reading hold from dead air. Prefer decisive camera movement and native-speed actions; no slow-motion, arbitrary camera drift, or idle ending. Do not recommend speed changes to verified source actions. If no alternate useful action exists, shorten the next native capture instead of inventing one.'
         kwargs={}
         if sampled:
             prompt=prompt.replace("Watch the entire attached actual encoded product film, not the planned story. The master is native 60fps; this full-duration review proxy is 30fps. Do not infer source frame rate from the proxy.",

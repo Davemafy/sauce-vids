@@ -19,6 +19,19 @@ def score_rows(raw,labels):
         scores[label]=sum(values[k]*w for k,w in WEIGHTS.items())/100
     return scores
 
+def fixed_source_intent(verdict,baseline,ids,hero):
+    """Descriptions are not camera inputs; preserve the already verified purposes."""
+    if verdict.get('accept') is not True:raise ValueError('Director abstained')
+    if verdict.get('duration_seconds')!=baseline['duration_seconds']:raise ValueError('Source duration changed')
+    beats=verdict.get('beats')
+    if not isinstance(beats,list) or len(beats)!=len(ids):raise ValueError('Wrong beat count')
+    clean=[]
+    for b,original in zip(beats,baseline['beats']):
+        if not isinstance(b,dict) or set(b)!={'action_id','framing','pace','purpose'} or b['action_id']!=original['action_id']:
+            raise ValueError('Wrong beat identity')
+        clean.append({**b,'purpose':original['purpose']})
+    return ed.validate({'backdrop':verdict.get('backdrop'),'duration_seconds':baseline['duration_seconds'],'beats':clean},ids,hero)
+
 def compete(source,manifest,plan,directory,run,*,factory=None):
     from backend.customer_story import sha,save,media
     from backend.claude_customer_director import ClaudeConversation
@@ -47,34 +60,43 @@ def compete(source,manifest,plan,directory,run,*,factory=None):
         d=directory/f'director-{index+1}';d.mkdir(mode=0o700)
         c=factory(d/'model');row={'id':str(index+1),'status':'started'};state['candidates'].append(row);persist()
         try:
-            raw=c.ask('Independently direct this actual recorded workflow with emphasis on '+lens+'. Use the exact unchanged action order and duration; no edits to source time or actions. Select a distinct useful framing and backdrop. Return accept, reason, backdrop, duration_seconds, beats. Evidence: '+json.dumps(packet),media=tuple(attachments),json_mode=True,phase='story-editorial',stop_on_rate_limit=True,response_schema=ed.schema(ids),max_attempts=1)
+            raw=c.ask('Independently direct this actual recorded workflow with emphasis on '+lens+'. Use the exact unchanged action order and duration; no edits to source time or actions. Select a distinct useful framing and backdrop. Never add a gratuitous slow camera move to disguise dead time. Keep each purpose under 120 characters; the existing verified action purposes are retained. Return accept, reason, backdrop, duration_seconds, beats. Evidence: '+json.dumps(packet),media=tuple(attachments),json_mode=True,phase='story-editorial',stop_on_rate_limit=True,response_schema=ed.schema(ids),max_attempts=1)
             v=json.loads(raw)
-            if v.get('accept') is not True:raise ValueError('Director abstained')
-            intent={k:v[k] for k in ('backdrop','duration_seconds','beats')}
-            if intent['duration_seconds']!=duration:raise ValueError('Source duration changed')
-            ed.validate(intent,ids,hero)
+            save(d/'raw-verdict.json',v)
+            intent=fixed_source_intent(v,baseline,ids,hero)
             save(d/'intent.json',{'ids':ids,'hero':hero,'editorial':intent})
             run('source_event_director.py','--source',source,'--manifest',manifest,'--out',d/'plan.json','--hero-event-index',ids.index(hero),'--editorial-intent',d/'intent.json')
             run('render_event_video.py','--video',source,'--manifest',manifest,'--film-plan',d/'plan.json','--customer-craft-contract','--ranking-preview','--output',d/'preview.mp4')
             row.update(status='rendered',preview_sha256=sha(d/'preview.mp4'),plan_sha256=sha(d/'plan.json'))
             proposals.append((row,intent,d))
         except (ValueError,TypeError,KeyError,OSError,RuntimeError,subprocess.SubprocessError) as exc:
-            row.update(status='failed',error_type=type(exc).__name__)
+            row.update(status='failed',error_type=type(exc).__name__,reason=str(exc)[:240])
         finally:
             state['calls']+=c.calls;persist()
         if any(a.get('http_status')==429 for a in c.data.get('attempts',[])):break
     # No pretend three-way comparison if a candidate fails or duplicates.
-    if len(proposals)!=3 or len({r['preview_sha256'] for r,_,_ in proposals})!=3:
+    unique={}
+    for proposal in proposals:
+        row,intent,d=proposal
+        # Equivalent camera/backdrop choices aren't three creative alternatives.
+        # Compare physical plan identity rather than incidental MP4 metadata.
+        key=row['plan_sha256']
+        if key not in unique:unique[key]=proposal
+        else:row['status']='duplicate-plan'
+    proposals=list(unique.values())
+    if len(proposals)<2:
         state['status']='incomplete-or-duplicate';persist();return baseline,state['calls']
     random.SystemRandom().shuffle(proposals)
-    labels=['A','B','C'];mapping=dict(zip(labels,proposals));state['blind_mapping']={k:v[0]['id'] for k,v in mapping.items()};persist()
-    parts=[]
+    labels=['A','B','C'][:len(proposals)];mapping=dict(zip(labels,proposals));state['blind_mapping']={k:v[0]['id'] for k,v in mapping.items()};persist()
+    parts=[];pacing={}
+    from backend.customer_story_review import pacing_evidence
     import base64
     # Same event-oriented sample times for each actual rendered proxy.
     times=review_sample_times(duration,evidence)
     # Keep equal coverage and bounded image cost; retain opening and ending.
     times=[times[round(i*(len(times)-1)/7)] for i in range(8)]
     for label,(_,_,d) in mapping.items():
+        pacing[label]=pacing_evidence(d/'preview.mp4',evidence,duration)
         cap=cv2.VideoCapture(str(d/'preview.mp4'))
         try:
             if round(cap.get(cv2.CAP_PROP_FPS))!=12 or round(cap.get(cv2.CAP_PROP_FRAME_COUNT))!=round(duration*12):raise ValueError('Proxy clock mismatch')
@@ -87,9 +109,9 @@ def compete(source,manifest,plan,directory,run,*,factory=None):
         finally:cap.release()
     critic=factory(directory/'critic');schema={'type':'OBJECT','required':['scores'],'properties':{'scores':{'type':'ARRAY','items':{'type':'OBJECT','required':['id','rubric'],'properties':{'id':{'type':'STRING','enum':labels},'rubric':{'type':'OBJECT','required':list(WEIGHTS),'properties':{k:{'type':'INTEGER'} for k in WEIGHTS}}}}}}}
     try:
-        raw=critic.ask('Rank all three anonymous actual rendered visual previews against the same rubric. Score each dimension 0–100. Motion_proxy measures only observable framing changes between supplied samples; do not claim continuous motion or audio review. No candidate is approved by this ranking. Weights: '+json.dumps(WEIGHTS),media=tuple(parts),json_mode=True,phase='encoded-long-story-review',stop_on_rate_limit=True,response_schema=schema,max_attempts=1)
+        raw=critic.ask('Rank every anonymous actual rendered visual preview against the same rubric. Score each dimension 0–100. Penalize redundant holds, slow pointless pushes, delayed payoff and an idle ending under motion_proxy and publishability; do not reward motion for its own sake. Motion_proxy measures only observable framing changes and sampled frame differences; do not claim continuous motion or audio review. No candidate is approved by this ranking. Measured pacing: '+json.dumps(pacing)+'. Weights: '+json.dumps(WEIGHTS),media=tuple(parts),json_mode=True,phase='encoded-long-story-review',stop_on_rate_limit=True,response_schema=schema,max_attempts=1)
         scores=score_rows(raw,labels);state['scores']=scores
-        best=max(labels,key=lambda k:scores[k]);state['selected']=mapping[best][0]['id'];state['status']='ranked'
+        best=max(labels,key=lambda k:scores[k]);state['selected']=mapping[best][0]['id'];state['status']='ranked' if len(proposals)==3 else 'ranked-two';state['pacing']=pacing
         return mapping[best][1],state['calls']+critic.calls
     except (ValueError,TypeError,KeyError,OSError,RuntimeError) as exc:
         state.update(status='critic-unavailable',error_type=type(exc).__name__);return baseline,state['calls']+critic.calls

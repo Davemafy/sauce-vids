@@ -903,6 +903,7 @@ def probe_story(plan,out):
             require(image_change(arr(before),arr(steady))<=.025,"Unsettled starting state")
             old=action_panel(p,action)
             components=observed_components(p,old)
+            probe_started=time.monotonic()
             current=apply(p,plan["url"],action,current,lambda loc,label:loc.click(timeout=3500))
             try:
                 after,box,delta,_=verify(p,plan["url"],steady,old,shot,allow_localized=evidence_first_enabled() and action["kind"]=="option")
@@ -921,7 +922,7 @@ def probe_story(plan,out):
                 return proofs,images,failure
             (out/f"{i}-before.png").write_bytes(steady);(out/f"{i}-after.png").write_bytes(after)
             detail=select_component(pixels(steady),pixels(after),components,observed_components(p,box),box)
-            proofs.append({"id":action["id"],"delta":delta,"result":box,"detail":detail})
+            proofs.append({"id":action["id"],"delta":delta,"result":box,"detail":detail,"probe_seconds":round(time.monotonic()-probe_started,6)})
             images.extend((media(steady),media(after)))
     save(out/"probe.json",proofs)
     return proofs,images,None
@@ -957,7 +958,7 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
                        "For an accepted workflow, assign each selected action in exact order a distinct editorial purpose (max 240 chars), "
                        "framing wide (locked context), accent (small whole-window push), or detail (source-fit close-up; up to two independently chosen detail beats; the hero may remain wide), "
                        "and pace quick, readable, or linger (relative source hold allocation, not timestamps). "
-                       "Choose the shortest supported duration_seconds that earns its runtime (13/16/18/20 for two actions, 18/22/26/30 for three, 26/30 for four, as restricted by the schema). The shortest cut is preferable for simple visible transformations; detail needs a 9s nonfinal or 9.7s final slot. Sauce will extend the requested duration to the shortest supported duration that fits the selected framing, never speed up source footage. For four actions use at most one nonfinal detail, optionally a final detail. Do not add silent holds to make a longer film. "
+                       "Choose the shortest supported duration_seconds that earns its runtime (12/13/16/18/20 for two actions, 18/22/26/30 for three, 26/30 for four, as restricted by the schema). The shortest cut is preferable for simple visible transformations; detail needs a 9s nonfinal or 9.7s final slot (7.2s for a 13-second two-action film, subject to actual camera fit). Sauce will extend the requested duration to the shortest supported duration that fits the selected framing, never speed up source footage. For four actions use at most one nonfinal detail, optionally a final detail. Do not add silent holds to make a longer film. "
                        "Use wide deliberately to avoid a push on every click; reserve attention for the actual payoff. "
                        "Choose backdrop cobalt (bright cloud), muted (subdued blue-gray cloud), or graphite (dark desaturated cloud). "
                        "Choose for the product's actual palette, not a generic aesthetic. Sauce validates the true action, result, cursor, and source timing; "
@@ -976,6 +977,8 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
                     plan["editorial"],readability=customer_editorial.protect_local_readability(
                         plan["editorial"],plan["actions"],plan["hero_action_id"],proofs,(W,H))
                     if readability:save(trial/"readability-adjustment.json",readability)
+                    plan["editorial"],pacing=customer_editorial.compact_fast_local(plan["editorial"],plan["actions"],plan["hero_action_id"],proofs)
+                    if pacing:save(trial/"pacing-adjustment.json",pacing)
                 except (ValueError,TypeError) as exc:
                     raise StoryRejected("Invalid model-authored editorial direction") from exc
                 plan["director_provider"]="claude" if is_claude else "gemini"

@@ -177,7 +177,7 @@ def test_compact_verified_camera_and_foley(tmp_path,monkeypatch,duration):
     assert metrics["checkedActions"]==2 and metrics["checkedFrames"]==duration*60
     assert metrics["minimumResultVisible"]==1. and metrics["detailEventIndices"]==[1]
     assert plan["audio"]["eventIndices"]==[0,1]
-    assert editorial.schema(ids)["properties"]["duration_seconds"]["enum"]==[13,16,18,20]
+    assert editorial.schema(ids)["properties"]["duration_seconds"]["enum"]==[12,13,16,18,20]
     assert editorial.schedule(a,ids,"a1")[-1]<=duration-9.2+1e-6
     for bad in (15,22,30):
         with pytest.raises(ValueError):editorial.validate({**a,"duration_seconds":bad},ids,"a1")
@@ -215,21 +215,22 @@ def test_shortest_native_story_preserves_real_action_time_and_reading_hold(tmp_p
     assert metrics["checkedActions"]==count and metrics["minimumResultVisible"]==1.
     assert duration-ev[-1]["t"]==pytest.approx(3.7)
     assert plan["audio"]["eventIndices"]==list(range(count))
-    assert editorial.schema(ids)["properties"]["duration_seconds"]["enum"][0]==duration
+    assert editorial.schema(ids)["properties"]["duration_seconds"]["enum"][0]==(12 if count==2 else duration)
     with pytest.raises(ValueError):
-        editorial.validate({**a,"duration_seconds":duration-1},ids,ids[-1])
+        editorial.validate({**a,"duration_seconds":11 if count==2 else duration-1},ids,ids[-1])
 
 
 def test_supporting_detail_compiles_short_model_request_into_native_budget():
     ids=IDS[:2]
     a=intent();a["duration_seconds"]=13;a["beats"]=a["beats"][:2]
     a["beats"][1]["framing"]="detail"
+    a["duration_seconds"]=12
     with pytest.raises(ValueError,match="detail travel"):
         editorial.validate(a,ids,"a0")
     compiled=editorial.fit_duration(a,ids,"a0")
-    assert a["duration_seconds"]==13 and compiled["duration_seconds"]==16
+    assert a["duration_seconds"]==12 and compiled["duration_seconds"]==13
     starts=editorial.schedule(compiled,ids,"a0")
-    assert compiled["duration_seconds"]-starts[-1]>=9.7-1e-6
+    assert compiled["duration_seconds"]-starts[-1]>=7.2-1e-6
     assert compiled["beats"]==a["beats"]
 
 def test_nonfinal_detail_earns_time_even_with_quick_pace():
@@ -258,3 +259,14 @@ def test_small_verified_local_result_earns_detail_and_native_budget():
     assert editorial.protect_local_readability(a,[{"id":i} for i in ids],ids[0],proofs,(1920,1080))==(a,None)
     broad=[{"id":i,"result":{"x":0,"y":0,"width":1920,"height":1080}} for i in ids]
     assert editorial.protect_local_readability(a,actions,ids[0],broad,(1920,1080))==(a,None)
+
+
+def test_fast_local_pacing_shortens_only_witnessed_fast_workflows():
+    ids=['a','b'];actions=[{'id':i,'control':'local-demo-view'} for i in ids];proofs=[{'id':i,'probe_seconds':1.2} for i in ids]
+    a={'backdrop':'muted','duration_seconds':16,'beats':[{'action_id':i,'framing':'wide','pace':'readable','purpose':'Proof'} for i in ids]}
+    short,receipt=editorial.compact_fast_local(a,actions,'a',proofs)
+    assert short['duration_seconds']==12 and receipt['previous_duration']==16
+    a['beats'][1]['framing']='detail';short,_=editorial.compact_fast_local(a,actions,'a',proofs)
+    assert short['duration_seconds']==13
+    proofs[0]['probe_seconds']=2.5
+    assert editorial.compact_fast_local(a,actions,'a',proofs)==(a,None)

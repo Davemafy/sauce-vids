@@ -45,7 +45,7 @@ def test_three_independent_directions_select_actual_ranked_proxy(tmp_path):
             i=int(self.d.parent.name[-1])-1
             return json.dumps({'accept':True,'reason':'Observed',**base,'backdrop':tones[i]})
     def run(script,*args):
-        if script=='source_event_director.py':Path(args[args.index('--out')+1]).write_text('{}')
+        if script=='source_event_director.py':Path(args[args.index('--out')+1]).write_text(Path(args[args.index('--editorial-intent')+1]).read_text())
         else:
             target=Path(args[args.index('--output')+1]);video(target,12,int(target.parent.name[-1])*40)
     d=tmp_path/'competitive';chosen,count=compete(source,manifest,plan,d,run,factory=Model)
@@ -55,3 +55,12 @@ def test_three_independent_directions_select_actual_ranked_proxy(tmp_path):
     assert len({c['preview_sha256'] for c in receipt['candidates']})==3
     assert receipt['source_sha256']==sha(source)
     assert all(m.calls==1 for m in created)
+
+
+def test_fixed_source_long_prose_cannot_reject_valid_camera():
+    from backend.customer_competitive_edit import fixed_source_intent
+    ids=['a','b'];base={'backdrop':'muted','duration_seconds':16,'beats':[{'action_id':i,'framing':'wide','pace':'readable','purpose':'Verified original'} for i in ids]}
+    v={'accept':True,**base,'beats':[{**b,'purpose':'x'*400} for b in base['beats']]}
+    assert fixed_source_intent(v,base,ids,'a')==base
+    v['beats'][1]['action_id']='invented'
+    with pytest.raises(ValueError):fixed_source_intent(v,base,ids,'a')
