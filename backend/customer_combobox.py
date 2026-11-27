@@ -75,9 +75,18 @@ def triggers(page):
     return [(g,h) for g,h in rows if h is not None and sum(x==g for x,_ in rows)==1]
 
 def handle(page,group):
-    hits=[h for g,h in triggers(page) if g==group]
-    need(len(hits)==1,"Observed combobox no longer unique")
-    return hits[0]
+    need(safe_label(group) and group.lower() in GROUPS,"Unsafe presentation group")
+    d=drawer(page)
+    need(d is not None,"Presentation drawer absent")
+    h=d.evaluate_handle(r"""(root,args)=>{
+        const visible=(e)=>{const r=e.getBoundingClientRect(),h=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return r.width>=8&&r.height>=8&&r.x>=0&&r.y>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&h&&e.contains(h)&&!e.disabled&&!e.form&&!e.closest('form,a[href],[data-private],[data-secret],[data-sensitive],[inert]')&&e.getAttribute('aria-disabled')!=='true'};
+        const hits=[...root.querySelectorAll('button[type=button][role=combobox][aria-controls][aria-expanded=false]')].slice(0,24).filter(e=>{
+          const l=[...e.parentElement.children].filter(x=>x.tagName==='LABEL');
+          return (l.length===1?l[0].innerText.trim():e.getAttribute('aria-label')||'')===args && visible(e);
+        });return hits.length===1?hits[0]:null;
+    }""",group).as_element()
+    need(h is not None,"Observed combobox no longer unique")
+    return h
 
 def open_list(page,url,group,click):
     h=handle(page,group);ident=h.get_attribute("aria-controls")
@@ -99,6 +108,18 @@ def options(scope):
         if safe_label(label):rows.append((label,e.element_handle()))
     return [(l,h) for l,h in rows if h is not None and sum(x==l for x,_ in rows)==1]
 
+def exact_option(scope,label):
+    need(safe_label(label),"Unsafe presentation option")
+    h=scope.evaluate_handle(r"""(root,label)=>{
+      const hits=[...root.querySelectorAll('[role=option][aria-selected=false]:not([aria-disabled=true])')].slice(0,40).filter(e=>{
+        if(e.innerText.trim().replace(/\s+/g,' ')!==label)return false;
+        const r=e.getBoundingClientRect(),h=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+        return r.width>=8&&r.height>=8&&r.x>=0&&r.y>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&h&&e.contains(h)&&!e.disabled&&!e.form&&!e.closest('form,a[href],[data-private],[data-secret],[data-sensitive],[inert]')&&e.getAttribute('aria-disabled')!=='true';
+      });return hits.length===1?hits[0]:null;
+    }""",label).as_element()
+    need(h is not None,"Observed combobox option no longer unique")
+    return h
+
 def catalog(page,url):
     groups=[]
     for group,_ in triggers(page):
@@ -113,8 +134,6 @@ def catalog(page,url):
 def apply(page,url,action,click):
     group,label=action["group"],action["label"]
     scope=open_list(page,url,group,click)
-    hits=[h for l,h in options(scope) if l==label]
-    need(len(hits)==1,"Observed combobox option no longer unique")
-    click(hits[0],label);scope.wait_for(state="hidden",timeout=3000)
+    click(exact_option(scope,label),label);scope.wait_for(state="hidden",timeout=3000)
     assert_local(page,url)
     need(" ".join(handle(page,group).inner_text().split())==label,"Selected combobox value not observed")

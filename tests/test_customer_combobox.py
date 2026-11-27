@@ -81,3 +81,14 @@ def test_direct_product_not_redirected_to_marketing_navigation(page,tmp_path,mon
     conv=Mock()
     assert story.resolve_public_product_entry(url,tmp_path,conv,"brief")==url
     conv.ask.assert_not_called()
+
+
+def test_exact_replay_no_inventory_and_duplicate_rejected(page,monkeypatch):
+    c.prepare(page,"https://example.com/editor")
+    def forbidden(*a):raise AssertionError('Full inventory during replay')
+    monkeypatch.setattr(c,'triggers',forbidden);monkeypatch.setattr(c,'options',forbidden)
+    c.apply(page,"https://example.com/editor",{'group':'Style','label':'Blue'},lambda e,_:e.click())
+    scope=c.open_list(page,"https://example.com/editor",'Theme',lambda e,_:e.click())
+    scope.evaluate("e=>e.append(e.firstElementChild.cloneNode(true))")
+    with pytest.raises(ValueError,match='no longer unique'):c.exact_option(scope,'Blue')
+    with pytest.raises(ValueError):c.exact_option(scope,'Delete account')

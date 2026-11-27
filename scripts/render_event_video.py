@@ -828,7 +828,9 @@ def ranking_preview(output):
     """Same validated composition at every fifth native frame; silent 720p proxy."""
     if not args.customer_craft_contract or FPS!=60 or TRIM_FRAMES or args.preview is not None:
         raise ValueError("Ranking preview requires full native customer contract")
-    cap=cv2.VideoCapture(str(SRC));writer=cv2.VideoWriter(str(output),cv2.VideoWriter_fourcc(*"mp4v"),12.,(1280,720))
+    proxy=output.with_suffix(".intermediate.mp4")
+    if proxy.exists():raise ValueError("Ranking intermediate already exists")
+    cap=cv2.VideoCapture(str(SRC));writer=cv2.VideoWriter(str(proxy),cv2.VideoWriter_fourcc(*"mp4v"),12.,(1280,720))
     count=0
     try:
         if not cap.isOpened() or not writer.isOpened():raise ValueError("Cannot open ranking preview")
@@ -842,7 +844,9 @@ def ranking_preview(output):
     finally:
         cap.release();writer.release()
     if count!=round(DURATION*12):raise ValueError("Ranking preview duration mismatch")
+    subprocess.run(["ffmpeg","-v","error","-xerror","-i",str(proxy),"-c:v","libx264","-profile:v","baseline","-level","3.1","-pix_fmt","yuv420p","-crf","18","-preset","fast","-movflags","+faststart","-an",str(output)],check=True,timeout=90)
     subprocess.run(["ffmpeg","-v","error","-xerror","-i",str(output),"-f","null","-"],check=True,timeout=90)
+    proxy.unlink()
     print("RANKING_PREVIEW",count,flush=True)
 
 def render(output,seconds=None,static=False):
