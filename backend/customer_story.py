@@ -796,7 +796,7 @@ def compare_outcomes(catalog,metadata,opening,out,conv,creative):
         if extra:save(trial/"extra-sample.json",extra)
         yield from extra
     for action in probes():
-        if len(witnessed)>=8:break
+        if len(witnessed)>=(6 if metadata.get("setup",{}).get("kind")=="local-demo-views" else 8):break
         d=trial/action["id"];d.mkdir(mode=0o700)
         with ExitStack() as session:
             p=None
@@ -844,40 +844,44 @@ def compare_outcomes(catalog,metadata,opening,out,conv,creative):
                             "localized":localized or None,"result":box})
             witnessed.append(action);images.extend((media(steady),media(after)))
             save(trial/"comparison.json",records)
-            if metadata.get("setup",{}).get("kind")=="local-demo-views" and len(state_candidates)<2:
-                from backend.customer_local_views import catalog as local_catalog
-                initial={(a["group"],a["label"]) for a in catalog}
-                for row in local_catalog(p,metadata["setup"]):
-                    identity=(row["group"],row["label"])
-                    if identity in initial or row["group"]==action.get("group") or any((a["group"],a["label"])==identity for a in state_candidates):
-                        continue
-                    state_candidates.append({**row,"id":f"state{len(state_candidates)}","requires":action["id"]})
-                    if len(state_candidates)>=2:break
-    # At most two newly revealed actions, always probed in a fresh browser
-    # by replaying and verifying the real prerequisite first.
+            if metadata.get("setup",{}).get("kind")=="local-demo-views":
+                from backend.customer_state_search import enqueue
+                enqueue(state_candidates,catalog,witnessed,p,metadata,action)
+    # Breadth-first bounded discovery, with reserved evidence capacity for
+    # one deeper chain. Every ancestor is independently replayed and verified.
+    from backend.customer_state_search import chain,enqueue
     if state_candidates:save(trial/"state-candidates.json",state_candidates)
-    for action in state_candidates:
-        if len(witnessed)>=8:break
-        parent=next(a for a in witnessed if a["id"]==action["requires"])
+    processed=set()
+    while len(witnessed)<8:
+        available=[a for a in state_candidates if a["id"] not in processed]
+        if not available:break
+        # Give a newly discovered third-order branch priority over another
+        # second-order sibling while the evidence packet has capacity.
+        action=max(available,key=lambda a:len(chain(a,witnessed)))
+        processed.add(action["id"])
+        parents=chain(action,witnessed)
         d=trial/action["id"];d.mkdir(mode=0o700)
         with browser(metadata["url"]) as p:
             require(p.url==metadata["url"],"Unexpected investigation route")
             replay_setup(p,metadata)
-            steady=shot(p);p.wait_for_timeout(350)
-            require(image_change(arr(steady),arr(shot(p)))<=.025,"Unsettled starting state")
-            old=action_panel(p,parent)
-            apply(p,metadata["url"],parent,metadata["picker"],lambda loc,label:loc.click(timeout=3500))
+            before=shot(p);p.wait_for_timeout(350)
+            require(image_change(arr(before),arr(shot(p)))<=.025,"Unsettled starting state")
             try:
-                before,_,_,_=verify(p,metadata["url"],steady,old,shot,allow_localized=parent["kind"]=="option")
+                for step in parents:
+                    old=action_panel(p,step)
+                    apply(p,metadata["url"],step,metadata["picker"],lambda loc,label:loc.click(timeout=3500))
+                    before,_,_,_=verify(p,metadata["url"],before,old,shot,allow_localized=step["kind"]=="option")
                 old=action_panel(p,action)
                 apply(p,metadata["url"],action,metadata["picker"],lambda loc,label:loc.click(timeout=3500))
                 after,box,delta,_=verify(p,metadata["url"],before,old,shot,allow_localized=action["kind"]=="option")
             except WeakVisualOutcome as e:
-                records.append({"id":action["id"],"requires":parent["id"],"status":"weak","delta":e.delta})
+                records.append({"id":action["id"],"requires":action["requires"],"status":"weak","delta":e.delta})
                 save(trial/"comparison.json",records);continue
             (d/"before.png").write_bytes(before);(d/"after.png").write_bytes(after)
-            records.append({"id":action["id"],"requires":parent["id"],"status":"verified","delta":delta,"result":box})
+            records.append({"id":action["id"],"requires":action["requires"],"status":"verified","delta":delta,"result":box})
             witnessed.append(action);images.extend((media(before),media(after)))
+            enqueue(state_candidates,catalog,witnessed,p,metadata,action)
+            save(trial/"state-candidates.json",state_candidates)
             save(trial/"comparison.json",records)
     require(len(witnessed)>=MIN_ACTIONS,"Insufficient witnessed outcomes for a connected film")
     # Paired screenshots are in the same order as the admitted catalog.
@@ -1215,7 +1219,7 @@ def capture(url,plan,proofs,out):
             return derive(source,out/"manifest.json",aperture_regions)
         return source,out/"manifest.json"
 
-def render(folder,source,manifest,plan,calls,progress,audio):
+def render(folder,source,manifest,plan,calls,progress,audio,*,competitive=True):
     export=folder/"export";export.mkdir(mode=0o700,exist_ok=False)
     private=folder/"private"/"customer-story";filmplan=private/"film-plan.json"
     master=export/"master-1080p60.mp4"
@@ -1235,6 +1239,12 @@ def render(folder,source,manifest,plan,calls,progress,audio):
     hero_index=ids.index(hero)
     # Capture and receipt adapter preserve action order; use only actual verified
     # event times and geometry, never model-supplied coordinates or timestamps.
+    from backend.agentmail_auth import test_session_active
+    if (competitive and not test_session_active() and os.getenv("SAUCE_CUSTOMER_COMPETITIVE_EDIT") == "1"
+            and plan.get("director_provider")=="claude" and "editorial" in plan):
+        from backend.customer_competitive_edit import compete
+        chosen,ranking_calls=compete(source,manifest,plan,private/"competitive-edit",run)
+        plan={**plan,"editorial":chosen};calls+=ranking_calls
     editorial_args=()
     if "editorial" in plan:
         editorial_file=private/"editorial-intent.json"
@@ -1300,7 +1310,7 @@ def render(folder,source,manifest,plan,calls,progress,audio):
         "render_mode":release["render_mode"],"preview":"preview.mp4","narrated":False,
         **customer_quality_summary(release)}
 
-def execute_story_once(url,folder,progress,*,audio="auto",brief=""):
+def execute_story_once(url,folder,progress,*,audio="auto",brief="",competitive=True):
     from backend.url_engine import NoVerifiedProductAction
     if audio=="narrated":raise NoVerifiedProductAction("30s story currently supports clean/auto audio")
     private=folder/"private"/"customer-story"
@@ -1309,7 +1319,7 @@ def execute_story_once(url,folder,progress,*,audio="auto",brief=""):
         plan,calls,proofs=explore(url,private,progress,brief=brief)
         progress("capturing")
         source,manifest=capture(plan["url"],plan,proofs,private/"native")
-        return render(folder,source,manifest,plan,calls,progress,audio)
+        return render(folder,source,manifest,plan,calls,progress,audio,competitive=competitive)
     except StoryRejected as e:
         if private.is_dir():save(private/"rejection.json",{"reason":str(e),"creative_approved":False})
         raise NoVerifiedProductAction(str(e)) from e
@@ -1319,7 +1329,8 @@ def execute_story(url,folder,progress,*,audio="auto",brief=""):
     if os.getenv("SAUCE_CUSTOMER_AUTONOMOUS_REVISION")!="1":
         return baseline
     from backend.customer_story_revision import revise
-    outcome=revise(url,folder,baseline,progress,audio,brief,execute_story_once)
+    from functools import partial
+    outcome=revise(url,folder,baseline,progress,audio,brief,partial(execute_story_once,competitive=False))
     baseline["editorial_revision"]=outcome
     baseline["ai_calls"]+=outcome.get("ai_calls",0)
     progress("needs_review")

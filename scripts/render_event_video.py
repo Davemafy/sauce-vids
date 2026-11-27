@@ -35,6 +35,7 @@ parser.add_argument("--output",type=Path,help="Output MP4 path (default: alongsi
 parser.add_argument("--music",type=Path,help="Optional licensed audio recording")
 parser.add_argument("--foley-bank",choices=["bencho","procedural"],default="bencho",help="Licensed Bencho cues or legacy procedural sounds for eventFoley")
 parser.add_argument("--preview",type=float)
+parser.add_argument("--ranking-preview",action="store_true",help="Private full-duration sampled 12fps visual proxy, never a master")
 parser.add_argument("--seconds",type=float)
 parser.add_argument("--static",action="store_true")
 parser.add_argument("--anchored-result-cut",action="store_true",
@@ -823,6 +824,27 @@ def diagnostics():
     print("CAMERA_METRICS",json.dumps(metrics),flush=True)
     return metrics
 
+def ranking_preview(output):
+    """Same validated composition at every fifth native frame; silent 720p proxy."""
+    if not args.customer_craft_contract or FPS!=60 or TRIM_FRAMES or args.preview is not None:
+        raise ValueError("Ranking preview requires full native customer contract")
+    cap=cv2.VideoCapture(str(SRC));writer=cv2.VideoWriter(str(output),cv2.VideoWriter_fourcc(*"mp4v"),12.,(1280,720))
+    count=0
+    try:
+        if not cap.isOpened() or not writer.isOpened():raise ValueError("Cannot open ranking preview")
+        for i in range(round(DURATION*FPS)):
+            if not cap.grab():raise ValueError("Missing native ranking source frame")
+            if i%5:continue
+            ok,frame=cap.retrieve()
+            if not ok:raise ValueError("Cannot decode ranking source frame")
+            image=apply(frame,i/FPS,static=False)
+            writer.write(cv2.resize(image,(1280,720),interpolation=cv2.INTER_AREA));count+=1
+    finally:
+        cap.release();writer.release()
+    if count!=round(DURATION*12):raise ValueError("Ranking preview duration mismatch")
+    subprocess.run(["ffmpeg","-v","error","-xerror","-i",str(output),"-f","null","-"],check=True,timeout=90)
+    print("RANKING_PREVIEW",count,flush=True)
+
 def render(output,seconds=None,static=False):
     end_frames=min(round((seconds or DURATION)*FPS),round(DURATION*FPS))
     frames=end_frames-TRIM_FRAMES
@@ -967,7 +989,10 @@ if __name__=="__main__":
             "keyframes":len(FILM_PLAN.camera_keys),
             "creativeApproval":False},sort_keys=True),flush=True)
         sys.exit(0)
-    if args.preview is not None:
+    if args.ranking_preview:
+        if not args.output or args.output.exists():raise ValueError("Ranking preview requires fresh output path")
+        ranking_preview(args.output)
+    elif args.preview is not None:
         if args.preview < 0 or args.preview >= DURATION:
             parser.error("--preview must be within the actual recording duration")
         cmd=["ffmpeg","-hide_banner","-loglevel","error",
