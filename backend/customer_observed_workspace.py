@@ -103,3 +103,13 @@ def result_region(page,key):
 
 def apply(page,url,action,click):
     click(locate(page,action),action['label']);assert_local(page,url)
+
+
+def aperture_region(page,setup):
+    """Full observed workspace, not the preview graphic alone."""
+    rows=[r for r in scan(page) if r['workspace']==setup['workspace'] and r['visible'] and r['resultVisible']]
+    if not rows:return None
+    base=rows[0]['surface'];v=page.viewport_size
+    if any(r['surface']!=base for r in rows) or not v:return None
+    if not (0<=base['x']<base['x']+base['width']<=v['width']+1 and 0<=base['y']<base['y']+base['height']<=v['height']+1):return None
+    return base

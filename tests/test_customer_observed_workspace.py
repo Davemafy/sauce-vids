@@ -26,3 +26,11 @@ def test_no_invented_target_or_ambiguous_identity(page):
     with pytest.raises(ValueError):c.locate(page,{**a,'label':'Invented'})
     page.locator('button').nth(2).evaluate("e=>e.innerText='Line'")
     with pytest.raises(ValueError):c.locate(page,a)
+
+
+def test_aperture_contains_full_workspace_not_just_chart(page):
+    setup=c.prepare(page,'https://example.com/editor');assert setup
+    a=c.catalog(page,setup)[1];r=c.aperture_region(page,setup);assert r
+    chart=c.result_region(page,a['key']);assert r['width']>chart['width'] and r['height']>chart['height']
+    before=dict(r);s.apply(page,'https://example.com/editor',a,None,lambda e,_:e.click());assert c.aperture_region(page,setup)==before
+    page.evaluate('window.scrollTo(0,0)');assert c.aperture_region(page,setup) is None

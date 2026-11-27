@@ -1215,12 +1215,17 @@ def capture(url,plan,proofs,out):
     require(url==plan["url"],"Capture route differs from verified plan")
     with native_display(out) as display, prepared_browser(plan,display=display) as p, ExitStack() as stack:
         aperture_regions=[]
-        local_setup=plan.get("setup",{}).get("kind")=="local-demo-views"
+        setup_kind=plan.get("setup",{}).get("kind")
+        local_setup=setup_kind in ("local-demo-views","observed-workspace")
         def observe_aperture():
-            if local_setup:
+            if setup_kind=="local-demo-views":
                 from backend.customer_local_views import region_for
                 row=region_for(p,plan["setup"]["region"])
                 aperture_regions.append(native(row["rect"]) if row else None)
+            elif setup_kind=="observed-workspace":
+                from backend.customer_observed_workspace import aperture_region
+                r=aperture_region(p,plan["setup"])
+                aperture_regions.append(native(r) if r else None)
         observe_aperture()
         # This is before FFmpeg starts. Never use Playwright screenshots during recording.
         p.mouse.move(W*.25,H*.2);browser_pixels=shot(p);p.wait_for_timeout(1800)
