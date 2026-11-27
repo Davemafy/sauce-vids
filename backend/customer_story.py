@@ -912,6 +912,9 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
                 try:
                     plan["editorial"]=customer_editorial.fit_duration(
                         {"backdrop":verdict.get("backdrop"),"duration_seconds":verdict.get("duration_seconds"),"beats":verdict.get("beats")},ids,plan["hero_action_id"])
+                    plan["editorial"],readability=customer_editorial.protect_local_readability(
+                        plan["editorial"],plan["actions"],plan["hero_action_id"],proofs,(W,H))
+                    if readability:save(trial/"readability-adjustment.json",readability)
                 except (ValueError,TypeError) as exc:
                     raise StoryRejected("Invalid model-authored editorial direction") from exc
                 plan["director_provider"]="claude" if is_claude else "gemini"

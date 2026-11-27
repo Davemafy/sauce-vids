@@ -241,3 +241,20 @@ def test_nonfinal_detail_earns_time_even_with_quick_pace():
     starts=editorial.schedule(compiled,IDS,"a1")
     assert starts[1]-starts[0]>=9.
     assert starts[2]-starts[1]>=5.
+
+
+def test_small_verified_local_result_earns_detail_and_native_budget():
+    ids=["lv2","lv3"]
+    actions=[{"id":i,"control":"local-demo-view"} for i in ids]
+    proofs=[{"id":i,"result":{"x":408,"y":418,"width":1104,"height":483}} for i in ids]
+    a={"backdrop":"cobalt","duration_seconds":13,"beats":[
+        {"action_id":ids[0],"framing":"wide","pace":"readable","purpose":"Filter"},
+        {"action_id":ids[1],"framing":"accent","pace":"linger","purpose":"Table"}]}
+    amended,receipt=editorial.protect_local_readability(a,actions,ids[0],proofs,(1920,1080))
+    assert amended["beats"][0]["framing"]=="detail" and amended["duration_seconds"]>=18
+    assert amended["beats"][1]==a["beats"][1] and a["beats"][0]["framing"]=="wide"
+    assert receipt["action_id"]==ids[0]
+    assert editorial.protect_local_readability(amended,actions,ids[0],proofs,(1920,1080))==(amended,None)
+    assert editorial.protect_local_readability(a,[{"id":i} for i in ids],ids[0],proofs,(1920,1080))==(a,None)
+    broad=[{"id":i,"result":{"x":0,"y":0,"width":1920,"height":1080}} for i in ids]
+    assert editorial.protect_local_readability(a,actions,ids[0],broad,(1920,1080))==(a,None)

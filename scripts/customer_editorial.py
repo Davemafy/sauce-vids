@@ -83,3 +83,33 @@ def schedule(data,ids,hero):
         t+=base+extra*w/sum(weights)
         starts.append(round(t,6))
     return starts
+
+
+def protect_local_readability(data,actions,hero,proofs,viewport):
+    """Reserve one detail shot for a small, verified embedded product payoff.
+
+    Only the existing named local-demo adapter is admitted here. The native
+    camera contract still decides actual fit, pointer visibility and timing.
+    Preserve any deliberate model-selected detail and all other beat choices.
+    """
+    ids=[a["id"] for a in actions]
+    validate(data,ids,hero,check_budget=False)
+    if any(b["framing"]=="detail" for b in data["beats"]):return data,None
+    w,h=viewport
+    candidates=[]
+    for i,(action,proof) in enumerate(zip(actions,proofs)):
+        if action.get("control")!="local-demo-view" or proof.get("id")!=action["id"]:continue
+        r=proof.get("result")
+        if not isinstance(r,dict):continue
+        x,y,rw,rh=(r.get(k) for k in ("x","y","width","height"))
+        if not all(type(v) in (int,float) for v in (x,y,rw,rh)):continue
+        if not (0<=x<x+rw<=w and 0<=y<y+rh<=h):continue
+        if not (.18<=rw*rh/(w*h)<=.35):continue
+        candidates.append(i)
+    if not candidates:return data,None
+    i=ids.index(hero) if ids.index(hero) in candidates else candidates[-1]
+    beats=[dict(b) for b in data["beats"]]
+    beats[i]["framing"]="detail"
+    beats[i]["pace"]="readable"
+    amended=fit_duration({**data,"beats":beats},ids,hero)
+    return amended,{"action_id":ids[i],"reason":"small-verified-local-result","requested_duration":data["duration_seconds"],"compiled_duration":amended["duration_seconds"]}
