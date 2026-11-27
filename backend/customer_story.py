@@ -131,8 +131,13 @@ def validated_selection(raw,catalog):
     actions=[known[i] for i in ids]
     if len(actions)==2 and not (evidence_first_enabled() and editorial_direction_enabled()):
         return None
-    if sum(a["kind"]=="option" for a in actions)<1:
-        return None # local preview navigation alone is not a long product story
+    if not any(a["kind"]=="option" for a in actions):
+        # Independent named in-product views can demonstrate real analytical
+        # workflows. Unbound tabs and cycling one navigation group cannot.
+        if (not evidence_first_enabled() or not all(a["kind"]=="tab" and
+                a.get("control")=="named-product-tab" and a.get("group") for a in actions)
+                or len({a["group"] for a in actions})!=len(actions)):
+            return None
     # Distinct source IDs do not guarantee distinct product capabilities.
     # If independent confirmed groups exist, the selected workflow must use
     # more than a single menu's cosmetic variations. With one genuine group,
@@ -336,8 +341,8 @@ def resolve_public_product_entry(url,out,conv,creative):
         # already a functional surface; do not send the director into its nav.
         if urlsplit(url).path not in ("","/") and evidence_first_enabled():
             from backend.customer_combobox import opener,active_panel
-            if opener(page) and active_panel(page):
-                receipt["retained_reason"]="Observed local customizer and product panel"
+            if (opener(page) and active_panel(page)) or len({a["group"] for a in product_tab_catalog(page)})>=2:
+                receipt["retained_reason"]="Observed local customizer or independent product views"
                 save(out/'entry-route.json',receipt)
                 return url
         if not candidates:
@@ -368,7 +373,7 @@ def tabs(page):
             if(r.width<8||r.height<8||r.x<0||r.y<0||r.right>innerWidth||r.bottom>innerHeight)return false;
             const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
             return hit&&e.contains(hit)&&!e.form&&!e.closest('form,[data-private],[data-secret],[data-sensitive],a')
-                &&!!e.closest('[role=tablist]')&&e.getAttribute('aria-disabled')!=='true';
+                &&!!e.closest('[role=tablist]')&&!e.closest('[inert],nav,[role=navigation]')&&e.getAttribute('aria-disabled')!=='true';
         }"""):continue
         label=" ".join(loc.inner_text().split())
         if safe_label(label):
@@ -381,6 +386,45 @@ def tab(page,label):
     matches=[x for l,x in tabs(page) if l==label]
     require(len(matches)==1,"Observed preview tab is no longer unique and inactive")
     return matches[0]
+
+def tab_group_identity(loc):
+    return loc.evaluate(r"""e=>{
+        const g=e.closest('[role=tablist]');if(!g||g.closest('nav,[role=navigation],form,[inert],[data-private],[data-secret],[data-sensitive]'))return null;
+        const all=[...g.querySelectorAll('[role=tab]')].filter(t=>t.closest('[role=tablist]')===g);
+        const selected=all.filter(t=>t.getAttribute('aria-selected')==='true');
+        const label=g.getAttribute('aria-label')||((g.getAttribute('aria-labelledby')||'').split(/\s+/).map(id=>document.getElementById(id)).filter(Boolean).map(n=>n.innerText).join(' '));
+        const ids=all.map(t=>t.getAttribute('aria-controls'));
+        if(!label.trim()||selected.length!==1||ids.some(x=>!x)||new Set(ids).size!==ids.length)return null;
+        if(all.some(t=>t.closest('form,a[href],[data-private],[data-secret],[data-sensitive],[inert]')))return null;
+        if(g.closest('a[href]'))return null;
+        return {label:label.trim().replace(/\s+/g,' '),before:selected[0].getAttribute('aria-controls'),after:e.getAttribute('aria-controls')};
+    }""")
+
+def product_tab_catalog(page):
+    """Discover independent local product views, not navigation or model selectors."""
+    observed=panels(page);rows=[]
+    for label,loc in tabs(page):
+        identity=tab_group_identity(loc)
+        if not identity or not safe_label(identity["label"]):continue
+        # Avoid duplicate labels on different tablists, even with distinct IDs.
+        group="View: "+identity["label"]
+        active=[r for r in observed if r["id"]==identity["before"]]
+        if len(active)!=1:continue
+        r=active[0]
+        if r["width"]*r["height"]<W*H*.04:continue
+        rows.append((group,label,identity["before"],identity["after"],r))
+    result=[]
+    # Two named groups must preserve separate visible result surfaces;
+    # nested or overlapping groups do not constitute independent views.
+    for group,label,before,after,r in rows:
+        peers=[q for q in rows if q[0]==group]
+        if len({q[2] for q in peers})!=1:continue
+        if any(q[0]!=group and (q[2]==before or q[3]==after or
+                min(r["x"]+r["width"],q[4]["x"]+q[4]["width"])>max(r["x"],q[4]["x"]) and
+                min(r["y"]+r["height"],q[4]["y"]+q[4]["height"])>max(r["y"],q[4]["y"]))
+               for q in rows):continue
+        result.append({"id":f"vtab{len(result)}","kind":"tab","control":"named-product-tab","group":group,"label":label})
+    return result[:24]
 
 def panel(page):
     if os.getenv("SAUCE_NATIVE_X11_POINTER")=="1" and os.getenv("SAUCE_CURIOUS_ANALYTICS")=="1":
@@ -412,6 +456,9 @@ def panel(page):
 def tab_result_pair(page,action):
     """Bind an inactive observed tab to its currently selected sibling's panel."""
     loc=tab(page,action["label"])
+    if action.get("control")=="named-product-tab":
+        group=tab_group_identity(loc)
+        require(group and safe_label(group["label"]) and "View: "+group["label"]==action["group"],"Observed product view group changed")
     identity=loc.evaluate("""e=>{
         const group=e.closest('[role=tablist]');
         if(!group)return null;
@@ -551,7 +598,11 @@ def apply(page,url,action,picker,click):
         require(label in [q["label"] for q in discover(page)],"Applied option label not observed")
         return label
     loc=tab(page,label);controlled=loc.get_attribute("aria-controls")
+    if action.get("control")=="named-product-tab":
+        group=tab_group_identity(loc)
+        require(group and safe_label(group["label"]) and "View: "+group["label"]==action["group"],"Observed product view group changed")
     click(loc,label)
+    assert_local(page,url)
     selected=page.get_by_role("tab",name=label,exact=True)
     require(selected.count()==1 and selected.get_attribute("aria-selected")=="true"
             and selected.get_attribute("aria-controls")==controlled,"Tab not selected")
@@ -602,30 +653,35 @@ def explore(url,out,progress,*,request=None,brief=""):
         else:
             pickers=analytical or discover(p)
             if not pickers:
-                save(out/"discovery.json",{"picker_count":0,"tab_count":len(tabs(p))})
-                raise StoryRejected("No supported local product picker")
-            menu=[{"id":f"k{i}","label":v["label"]} for i,v in enumerate(pickers)]
-            if len(menu)>1:
-                picker_task=" Choose the observed local picker most relevant to the product's core capability, or null. No guessed action. Return JSON {id}. "
-                if getattr(conv,"provider_name",None)=="Claude":
-                    picker_task=(" Pick one observed control for Sauce to inspect. This is a discovery hypothesis. "
-                                 "Use the screenshot layout and adjacent labels to distinguish core product controls "
-                                 "from example controls inside a preview. A button label may name the current value "
-                                 "instead of the control's purpose. Sauce will open the picker and verify outcomes "
-                                 "before you make a film decision. Return {id: one listed ID, or null if none is plausible}. ")
-                raw=conv.ask(creative+picker_task+json.dumps(menu),
-                             media=(media(opening),),json_mode=True,phase="story-picker",stop_on_rate_limit=True,
-                             **claude_schema(conv,id=observed_id_schema(menu)))
-                selected=parse(raw).get("id")
-                row=next((x for x in menu if x["id"]==selected),None)
-                require(row is not None,"No supported model-selected picker")
-            else:row=menu[0]
-            picker=row["label"]
-            scope=open_picker(p,url,picker);options=option_items(p,scope,picker);picker_image=shot(p);dismiss_picker(p,scope)
-            catalog=[{"id":f"a{i}","kind":"option","label":q["label"]} for i,q in enumerate(options)]
-            catalog.extend({"id":f"t{i}","kind":"tab","label":l} for i,(l,_) in enumerate(tabs(p)))
-            save(out/"discovery.json",{"picker":picker,"catalog":catalog,"title":title})
-            require(len(catalog)>=MIN_ACTIONS and bool(options),"Not enough supported meaningful actions")
+                view_catalog=product_tab_catalog(p) if evidence_first_enabled() else []
+                if len({a["group"] for a in view_catalog})<2:
+                    save(out/"discovery.json",{"picker_count":0,"tab_count":len(tabs(p)),"independent_product_views":len({a["group"] for a in view_catalog})})
+                    raise StoryRejected("No supported local product picker or independent product views")
+                picker=None;catalog=view_catalog;picker_image=opening
+                save(out/"discovery.json",{"picker":None,"catalog":catalog,"title":title,"kind":"named-product-views"})
+            else:
+                menu=[{"id":f"k{i}","label":v["label"]} for i,v in enumerate(pickers)]
+                if len(menu)>1:
+                    picker_task=" Choose the observed local picker most relevant to the product's core capability, or null. No guessed action. Return JSON {id}. "
+                    if getattr(conv,"provider_name",None)=="Claude":
+                        picker_task=(" Pick one observed control for Sauce to inspect. This is a discovery hypothesis. "
+                                     "Use the screenshot layout and adjacent labels to distinguish core product controls "
+                                     "from example controls inside a preview. A button label may name the current value "
+                                     "instead of the control's purpose. Sauce will open the picker and verify outcomes "
+                                     "before you make a film decision. Return {id: one listed ID, or null if none is plausible}. ")
+                    raw=conv.ask(creative+picker_task+json.dumps(menu),
+                                 media=(media(opening),),json_mode=True,phase="story-picker",stop_on_rate_limit=True,
+                                 **claude_schema(conv,id=observed_id_schema(menu)))
+                    selected=parse(raw).get("id")
+                    row=next((x for x in menu if x["id"]==selected),None)
+                    require(row is not None,"No supported model-selected picker")
+                else:row=menu[0]
+                picker=row["label"]
+                scope=open_picker(p,url,picker);options=option_items(p,scope,picker);picker_image=shot(p);dismiss_picker(p,scope)
+                catalog=[{"id":f"a{i}","kind":"option","label":q["label"]} for i,q in enumerate(options)]
+                catalog.extend({"id":f"t{i}","kind":"tab","label":l} for i,(l,_) in enumerate(tabs(p)))
+                save(out/"discovery.json",{"picker":picker,"catalog":catalog,"title":title})
+                require(len(catalog)>=MIN_ACTIONS and bool(options),"Not enough supported meaningful actions")
         progress("directing")
         if evidence_first_enabled():
             raw=None
@@ -699,7 +755,7 @@ def compare_outcomes(catalog,metadata,opening,out,conv,creative):
     # Paired screenshots are in the same order as the admitted catalog.
     image_order=[{"action_id":a["id"],"label":a["label"],"kind":a["kind"],
                   "before_image":2*i+1,"after_image":2*i+2} for i,a in enumerate(witnessed)]
-    raw=conv.ask(creative+" You now have actual independent before/after image pairs for each verified option below, in order. Images are numbered from 1; exact mapping: "+json.dumps(image_order)+". Direct a connected workflow using only 2-4 of these witnessed IDs. Work backwards from a single witnessed buyer-relevant payoff. A two-action story is permitted only for distinct capabilities that together prove a complete buyer benefit; never pad a story to three actions. Every selected action must teach something different; later actions must preserve, explain or complete the hero, not discard it for a marketing view. Avoid redundant theme cycling. The images show independent tests, not an already verified sequence; Sauce will replay the entire sequence. Abstain if these do not support a compelling demo. JSON {ids:[...],story:'...',hero_action_id:'one selected ID'}. Choose exactly one hero action whose verified result most clearly demonstrates buyer value; make the remaining actions support that payoff. If abstaining, use empty ids and an empty hero_action_id. Observed outcomes: "+json.dumps([r for r in records if r["status"]=="verified"])+" Catalog: "+json.dumps(witnessed),
+    raw=conv.ask(creative+" You now have actual independent before/after image pairs for each verified product action below, in order. Images are numbered from 1; exact mapping: "+json.dumps(image_order)+". Direct a connected workflow using only 2-4 of these witnessed IDs. Work backwards from a single witnessed buyer-relevant payoff. A two-action story is permitted only for distinct capabilities that together prove a complete buyer benefit; never pad a story to three actions. Every selected action must teach something different; later actions must preserve, explain or complete the hero, not discard it for a marketing view. Avoid redundant theme cycling or a navigation tour. Independent product views must explain complementary evidence about one useful task, not merely show different tabs. The images show independent tests, not an already verified sequence; Sauce will replay the entire sequence. Abstain if these do not support a compelling demo. JSON {ids:[...],story:'...',hero_action_id:'one selected ID'}. Choose exactly one hero action whose verified result most clearly demonstrates buyer value; make the remaining actions support that payoff. If abstaining, use empty ids and an empty hero_action_id. Observed outcomes: "+json.dumps([r for r in records if r["status"]=="verified"])+" Catalog: "+json.dumps(witnessed),
                  media=tuple(images),json_mode=True,phase="story-from-outcomes",stop_on_rate_limit=True,response_schema=story_response_schema(witnessed))
     return require_provider_reply(raw,conv),witnessed
 
