@@ -163,7 +163,7 @@ def validated_selection(raw,catalog):
     # keep honest variation eligible rather than inventing other controls.
     groups=lambda rows:{a.get("group") or a["kind"] for a in rows}
     sample_comparison=all(a.get("control")=="sample-choice" and a.get("source_context")=="explicit sample-data comparison" for a in actions) and len({a.get("key") for a in actions})==1
-    if (len(actions)==2 or len(groups(catalog))>=2) and len(groups(actions))<2 and not sample_comparison:
+    if (len(actions)==2 or len(groups(catalog))>=2) and len(groups(actions))<2 and not (sample_comparison or (all(a.get("control")=="observed-workspace" and a.get("source_context")=="browser-local preview comparison" for a in actions) and len({a.get("workspace") for a in actions})==1)):
         return None
     return {"actions":actions,"story":reason,"hero_action_id":hero}
 
@@ -385,6 +385,13 @@ def resolve_public_product_entry(url,out,conv,creative):
         candidates=observed_product_entry_links(page,url,robots)
         receipt={'submitted_url':url,'entry_candidates':candidates,
                  'chosen_url':url,'model_selected':False}
+        if evidence_first_enabled():
+            from backend.customer_observed_workspace import scan as workspace_scan
+            local_rows=workspace_scan(page)
+            if any(sum(r['workspace']==k for r in local_rows)>=MIN_ACTIONS for k in {r['workspace'] for r in local_rows}):
+                receipt["retained_reason"]="Observed browser-local interactive workspace and preview"
+                save(out/'entry-route.json',receipt)
+                return url
         # A deep public route with a witnessed product drawer and preview is
         # already a functional surface; do not send the director into its nav.
         if urlsplit(url).path not in ("","/") and evidence_first_enabled():
@@ -535,6 +542,9 @@ def tab_result_pair(page,action):
     return {**rows[0],"tab_result_id":identity["after"],"tab_label":action["label"]}
 
 def action_panel(page,action):
+    if action.get("control")=="observed-workspace":
+        from backend.customer_observed_workspace import result_region
+        return result_region(page,action["key"])
     if action.get("control")=="semantic-capability":
         from backend.customer_semantic_capabilities import result_region
         return result_region(page,action["key"])
@@ -554,6 +564,9 @@ def action_panel(page,action):
     return tab_result_pair(page,action) if action["kind"]=="tab" else panel(page)
 
 def result_panel(page,old):
+    if "workspace_key" in old:
+        from backend.customer_observed_workspace import result_region
+        return result_region(page,old["workspace_key"])
     if "semantic_key" in old:
         from backend.customer_semantic_capabilities import result_region
         return result_region(page,old["semantic_key"])
@@ -592,7 +605,7 @@ def verify(page,url,before,old,snapshot,*,allow_localized=False,proof_metrics=No
     from backend.agentmail_auth import test_session_active,check_test_surface
     assert_local(page,url)
     if test_session_active():check_test_surface(page)
-    new=result_panel(page,old);box=intersection(old,new,minimum_fraction=.04 if "tab_result_id" in old else (.07 if "sample_choice_key" in old else .18))
+    new=result_panel(page,old);box=intersection(old,new,minimum_fraction=.04 if "tab_result_id" in old else (.09 if "workspace_key" in old else (.07 if "sample_choice_key" in old else .18)))
     x,y,w,h=(round(box[k]) for k in ("x","y","width","height"))
     weak=None
     for _ in range(3):
@@ -644,6 +657,9 @@ def exact_observed_option(scope,label):
 
 def apply(page,url,action,picker,click):
     label=action["label"]
+    if action.get("control")=="observed-workspace":
+        from backend.customer_observed_workspace import apply as apply_workspace
+        apply_workspace(page,url,action,click);return picker
     if action.get("control")=="semantic-capability":
         from backend.customer_semantic_capabilities import apply as apply_capability
         apply_capability(page,url,action,click);return picker
@@ -768,6 +784,14 @@ def explore(url,out,progress,*,request=None,brief=""):
                 capabilities=capability_catalog(p)
                 if len({a["group"] for a in capabilities})>=MIN_ACTIONS:
                     radio_catalog=capabilities
+        if len(radio_catalog)<MIN_ACTIONS and not analytical and setup is None and evidence_first_enabled():
+            from backend.agentmail_auth import test_session_active
+            if not test_session_active():
+                from backend.customer_observed_workspace import prepare as prepare_workspace,catalog as workspace_catalog
+                setup=prepare_workspace(p,url)
+                if setup:
+                    opening=shot(p);(out/"opening.png").write_bytes(opening)
+                    radio_catalog=workspace_catalog(p,setup)
         if len(radio_catalog)>=MIN_ACTIONS:
             picker=None;catalog=radio_catalog;picker_image=opening
             save(out/"discovery.json",{"picker":picker,"catalog":catalog,"title":title,"kind":setup["kind"] if setup else ("semantic-capabilities" if all(a.get("control")=="semantic-capability" for a in catalog) else "radio-menus")})
@@ -817,7 +841,9 @@ def explore(url,out,progress,*,request=None,brief=""):
 
 def replay_setup(page,plan):
     if plan.get("setup"):
-        if plan["setup"].get("kind")=="sample-choices":
+        if plan["setup"].get("kind")=="observed-workspace":
+            from backend.customer_observed_workspace import prepare
+        elif plan["setup"].get("kind")=="sample-choices":
             from backend.customer_sample_choices import prepare
         elif plan["setup"].get("kind")=="local-demo-views":
             from backend.customer_local_views import prepare
@@ -969,7 +995,7 @@ def compare_outcomes(catalog,metadata,opening,out,conv,creative):
     # Paired screenshots are in the same order as the admitted catalog.
     image_order=[{"action_id":a["id"],"label":a["label"],"kind":a["kind"],
                   "before_image":2*i+1,"after_image":2*i+2} for i,a in enumerate(witnessed)]
-    raw=conv.ask(creative+" You now have actual independent before/after image pairs for each verified product action below, in order. Images are numbered from 1; exact mapping: "+json.dumps(image_order)+". Direct a connected workflow using only 2-4 of these witnessed IDs. Work backwards from a single witnessed buyer-relevant payoff. A two-action story is permitted only for distinct capabilities that together prove a complete buyer benefit; never pad a story to three actions. Every selected action must teach something different; later actions must preserve, explain or complete the hero, not discard it for a marketing view. Avoid redundant theme cycling or a navigation tour. Independent product views must explain complementary evidence about one useful task, not merely show different tabs. A candidate with requires must appear immediately after its listed verified prerequisite; its images were acquired only after that prerequisite. Other images show independent tests. Sauce will replay the entire sequence. Abstain if these do not support a compelling demo. JSON {ids:[...],story:'...',hero_action_id:'one selected ID'}. Choose exactly one hero action whose verified result most clearly demonstrates buyer value; make the remaining actions support that payoff. If abstaining, use empty ids and an empty hero_action_id. Observed outcomes: "+json.dumps([r for r in records if r["status"]=="verified"])+" Catalog: "+json.dumps(witnessed),
+    raw=conv.ask(creative+" You now have actual independent before/after image pairs for each verified product action below, in order. Images are numbered from 1; exact mapping: "+json.dumps(image_order)+". Direct a connected workflow using only 2-4 of these witnessed IDs. Work backwards from a single witnessed buyer-relevant payoff. A two-action story must prove a complete buyer benefit; explicitly labelled browser-local preview comparisons may show meaningful different representations of the same data, not independent capabilities; never pad a story to three actions. Every selected action must teach something different; later actions must preserve, explain or complete the hero, not discard it for a marketing view. Avoid redundant theme cycling or a navigation tour. Independent product views must explain complementary evidence about one useful task, not merely show different tabs. A candidate with requires must appear immediately after its listed verified prerequisite; its images were acquired only after that prerequisite. Other images show independent tests. Sauce will replay the entire sequence. Abstain if these do not support a compelling demo. JSON {ids:[...],story:'...',hero_action_id:'one selected ID'}. Choose exactly one hero action whose verified result most clearly demonstrates buyer value; make the remaining actions support that payoff. If abstaining, use empty ids and an empty hero_action_id. Observed outcomes: "+json.dumps([r for r in records if r["status"]=="verified"])+" Catalog: "+json.dumps(witnessed),
                  media=tuple(images),json_mode=True,phase="story-from-outcomes",stop_on_rate_limit=True,response_schema=story_response_schema(witnessed))
     return require_provider_reply(raw,conv),witnessed
 
@@ -1116,7 +1142,10 @@ def first_action_anchor(page,plan):
     """
     first=plan["actions"][0]
     loc=None
-    if first.get("control")=="semantic-capability":
+    if first.get("control")=="observed-workspace":
+        from backend.customer_observed_workspace import locate
+        loc=locate(page,first)
+    elif first.get("control")=="semantic-capability":
         from backend.customer_semantic_capabilities import locate
         loc=locate(page,first)
     elif first.get("control")=="sample-choice":
