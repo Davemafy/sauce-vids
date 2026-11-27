@@ -87,3 +87,50 @@ def test_actual_low_delta_is_distinguished_from_unstable_source(monkeypatch):
     with pytest.raises(s.StoryRejected,match="did not settle") as error:
         s.verify(p,"https://example.com/",before,box,lambda p:next(images))
     assert not isinstance(error.value,s.WeakVisualOutcome)
+
+
+def test_prepared_browser_retries_only_pre_action_setup(monkeypatch):
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    opened=[];closed=[]
+    @contextmanager
+    def browser(url,display=None):
+        p=SimpleNamespace(url=url,number=len(opened))
+        opened.append(p.number)
+        try:yield p
+        finally:closed.append(p.number)
+    monkeypatch.setattr(s,"browser",browser)
+    setup=Mock(side_effect=[s.PublicSetupUnavailable("not ready"),None])
+    monkeypatch.setattr(s,"replay_setup",setup)
+    with s.prepared_browser({"url":"https://example.com/demo"},display=":42") as p:
+        assert p.number==1 and closed==[0]
+    assert opened==closed==[0,1]
+    assert setup.call_count==2
+
+
+@pytest.mark.parametrize("failure",[s.StoryRejected("Authentication barrier"),ValueError("Sensitive drawer")])
+def test_prepared_browser_does_not_retry_other_failures(monkeypatch,failure):
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    @contextmanager
+    def browser(url,display=None):yield SimpleNamespace(url=url)
+    monkeypatch.setattr(s,"browser",browser)
+    setup=Mock(side_effect=failure)
+    monkeypatch.setattr(s,"replay_setup",setup)
+    with pytest.raises(type(failure),match=str(failure)):
+        with s.prepared_browser({"url":"https://example.com/demo"}):pass
+    setup.assert_called_once()
+
+
+def test_prepared_browser_never_retries_recorded_action(monkeypatch):
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    @contextmanager
+    def browser(url,display=None):yield SimpleNamespace(url=url)
+    monkeypatch.setattr(s,"browser",browser)
+    setup=Mock()
+    monkeypatch.setattr(s,"replay_setup",setup)
+    with pytest.raises(s.PublicSetupUnavailable):
+        with s.prepared_browser({"url":"https://example.com/demo"}):
+            raise s.PublicSetupUnavailable("after yield")
+    setup.assert_called_once()

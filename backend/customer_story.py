@@ -764,6 +764,23 @@ def replay_setup(page,plan):
             raise PublicSetupUnavailable("Public product setup not reproduced")
         require(actual==plan["setup"],"Public product setup identity changed")
 
+@contextmanager
+def prepared_browser(plan, *, display=None):
+    """Retry only an unavailable public setup, before any recorded action."""
+    with ExitStack() as session:
+        for attempt in range(2):
+            p=session.enter_context(browser(plan["url"],display=display) if display else browser(plan["url"]))
+            require(p.url==plan["url"],"Unexpected replay route")
+            try:
+                replay_setup(p,plan)
+            except PublicSetupUnavailable:
+                session.close()
+                if attempt:raise
+                continue
+            yield p
+            return
+
+
 def compare_outcomes(catalog,metadata,opening,out,conv,creative):
     """Witness actual individual outcomes before selecting a narrative."""
     from backend.story_outcome_evidence import diverse_candidates,balance_hypotheses,require_provider_reply
@@ -894,9 +911,7 @@ def compare_outcomes(catalog,metadata,opening,out,conv,creative):
 def probe_story(plan,out):
     """Probe a complete candidate in a fresh guarded browser, never a dirty prefix."""
     proofs=[];images=[]
-    with browser(plan["url"]) as p:
-        require(p.url==plan["url"],"Unexpected replay route")
-        replay_setup(p,plan)
+    with prepared_browser(plan) as p:
         current=plan["picker"]
         for i,action in enumerate(plan["actions"]):
             before=shot(p);p.wait_for_timeout(350);steady=shot(p)
@@ -1092,8 +1107,8 @@ def capture(url,plan,proofs,out):
     require(len(proofs)!=2 or "editorial" in plan,"Compact film needs verified editorial direction")
     duration=plan["editorial"]["duration_seconds"] if "editorial" in plan else SECONDS
     save(out/"capture-schedule.json",{"requestedActionStarts":starts,"durationSeconds":duration,"editorialDirected":"editorial" in plan})
-    with native_display(out) as display, browser(url,display=display) as p, ExitStack() as stack:
-        replay_setup(p,plan)
+    require(url==plan["url"],"Capture route differs from verified plan")
+    with native_display(out) as display, prepared_browser(plan,display=display) as p, ExitStack() as stack:
         aperture_regions=[]
         local_setup=plan.get("setup",{}).get("kind")=="local-demo-views"
         def observe_aperture():
