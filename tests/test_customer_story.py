@@ -47,7 +47,7 @@ if __name__=="__main__":unittest.main()
 def test_creative_brief_preserves_bounded_customer_preferences():
     from backend.customer_story import director_brief,StoryRejected
     import pytest
-    assert "world-class motion design studio" in director_brief()
+    assert "earns its runtime" in director_brief()
     assert "focus on visual payoff" in director_brief("focus on visual payoff")
     with pytest.raises(StoryRejected):director_brief("a"*2001)
 

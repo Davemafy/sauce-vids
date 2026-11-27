@@ -84,7 +84,8 @@ def test_claude_client_brief_does_not_force_thirty_seconds():
     brief=director_brief("Emphasize the result",provider="claude")
     assert "earns its runtime" in brief and "Emphasize the result" in brief
     assert "30-second" not in brief
-    assert "30-second" in director_brief()
+    assert director_brief(provider="gemini")==director_brief(provider="claude")
+    assert "30-second" not in director_brief()
 
 def test_v2_director_prioritizes_witnessed_end_state_over_cosmetic_motion():
     assert claude.PROMPT_VERSION == "motion-director-v2"

@@ -149,3 +149,49 @@ def test_structured_story_rate_limit_is_not_retried(tmp_path,monkeypatch):
     conv=Conversation(tmp_path/"conv",request=request)
     assert conv.ask("Observed IDs",json_mode=True,phase="story-plan",response_schema={"type":"OBJECT"},stop_on_rate_limit=True) is None
     assert conv.calls==1 and not delays
+
+def test_gemini_customer_wire_matches_shared_direction_and_numeric_duration(monkeypatch,tmp_path):
+    import io
+    from backend import curious_showcase as gemini
+    from backend.claude_customer_director import system_prompt,PROMPT_VERSION
+    from scripts.customer_editorial import schema,validate
+    monkeypatch.setenv("GEMINI_API_KEY","fixture")
+    monkeypatch.setenv("SAUCE_DIRECTOR_MODEL","gemini-3.1-flash-lite")
+    ids=["x","y"]
+    reply={"accept":True,"reason":"Witnessed result","backdrop":"muted","duration_seconds":13,
+           "beats":[{"action_id":x,"framing":"wide","pace":"readable","purpose":"Observed change"} for x in ids]}
+    original=schema(ids)
+    calls=[]
+    def transport(req,timeout):
+        payload=json.loads(req.data)
+        calls.append(payload)
+        assert payload["system_instruction"]["parts"][0]["text"]==system_prompt("story-editorial")
+        cfg=payload["generationConfig"]
+        assert "responseSchema" not in cfg
+        wire=cfg["responseJsonSchema"]
+        assert wire["type"]=="object"
+        assert wire["properties"]["duration_seconds"]=={"type":"integer","enum":[13,16,18,20]}
+        assert wire["properties"]["beats"]["items"]["properties"]["action_id"]["enum"]==ids
+        return io.BytesIO(json.dumps({"candidates":[{"content":{"parts":[{"text":json.dumps(reply)}]},"finishReason":"STOP"}],
+          "usageMetadata":{"totalTokenCount":500}}).encode())
+    monkeypatch.setattr(gemini,"urlopen",transport)
+    conv=gemini.Conversation(tmp_path)
+    result=json.loads(conv.ask("Observed fixture",phase="story-editorial",json_mode=True,response_schema=original))
+    assert validate({k:result[k] for k in ("backdrop","duration_seconds","beats")},ids,"y")["duration_seconds"]==13
+    assert conv.calls==1
+    assert conv.data["attempts"][0]["creative_prompt_version"]==PROMPT_VERSION
+    assert conv.data["attempts"][0]["creative_prompt_sha256"]==hashlib.sha256(system_prompt("story-editorial").encode()).hexdigest()
+    assert original==schema(ids) # non-mutating transport conversion
+
+
+def test_gemini_legacy_showcase_wire_is_unchanged(monkeypatch,tmp_path):
+    import io
+    from backend import curious_showcase as gemini
+    monkeypatch.setenv("GEMINI_API_KEY","fixture")
+    def transport(req,timeout):
+        payload=json.loads(req.data)
+        assert "system_instruction" not in payload
+        assert "responseJsonSchema" not in payload["generationConfig"]
+        return io.BytesIO(b'{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}')
+    monkeypatch.setattr(gemini,"urlopen",transport)
+    assert gemini.Conversation(tmp_path).ask("fixture",phase="explore")=="ok"

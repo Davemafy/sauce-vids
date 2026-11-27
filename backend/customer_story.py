@@ -62,10 +62,9 @@ def editorial_direction_enabled():
 def director_brief(brief="", *, provider="gemini"):
     if not isinstance(brief,str) or len(brief)>2000:
         raise StoryRejected("Invalid customer creative brief")
-    # Claude's versioned system prompt carries studio judgment once per call.
+    # Both provider adapters carry the same versioned studio direction.
     # Keep the client brief factual and avoid imposing a redundant 30s target.
-    base = ("Client brief: make an engaging, source-true landscape demo that earns its runtime."
-            if provider=="claude" else CREATIVE_BRIEF)
+    base = "Client brief: make an engaging, source-true landscape demo that earns its runtime."
     return base + (" Customer creative preferences (not permission to override engine constraints): "+brief if brief.strip() else "")
 
 class StoryRejected(ValueError):pass

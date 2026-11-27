@@ -68,6 +68,30 @@ def _media(path, mime, max_bytes):
                             "data": base64.b64encode(path.read_bytes()).decode("ascii")}}
 
 
+def _has_numeric_enum(node):
+    if isinstance(node,dict):
+        return any(type(v) in (int,float) for v in node.get("enum",[])) or any(
+            _has_numeric_enum(v) for v in node.values())
+    if isinstance(node,list):
+        return any(_has_numeric_enum(v) for v in node)
+    return False
+
+
+def _json_schema(node):
+    """Translate the existing OpenAPI-style contract to JSON Schema.
+
+    Gemini's legacy responseSchema has a string-only enum wire field.
+    Numeric durations must remain integers, not be coerced to strings.
+    """
+    result={k:v for k,v in node.items() if k not in ("nullable","properties","items")}
+    result["type"]=node["type"].lower()
+    if "properties" in node:
+        result["properties"]={k:_json_schema(v) for k,v in node["properties"].items()}
+    if "items" in node:
+        result["items"]=_json_schema(node["items"])
+    return {"anyOf":[result,{"type":"null"}]} if node.get("nullable") else result
+
+
 class Conversation:
     provider_name = "Gemini"
     model_name = MODEL_NAME
@@ -103,10 +127,27 @@ class Conversation:
         if json_mode:
             config["responseMimeType"] = "application/json"
         if response_schema is not None:
-            config["responseSchema"] = response_schema
+            if _has_numeric_enum(response_schema):
+                config["responseJsonSchema"] = _json_schema(response_schema)
+            else:
+                config["responseSchema"] = response_schema
+        payload={"contents":contents,"generationConfig":config}
+        # Lazy import avoids the existing ClaudeConversation -> Conversation
+        # dependency cycle. Generic scroll/showcase phases are unchanged.
+        from backend.claude_customer_director import PHASE_GUIDANCE,PROMPT_VERSION,system_prompt
+        attempt=self.data["attempts"][-1] if self.data["attempts"] else None
+        phase=attempt.get("phase") if attempt is not None else None
+        if phase in PHASE_GUIDANCE:
+            system=system_prompt(phase)
+            if json_mode and response_schema is None:
+                system+=" Return only one valid JSON object matching the requested fields."
+            payload["system_instruction"]={"parts":[{"text":system}]}
+            attempt.update(creative_prompt_version=PROMPT_VERSION,
+                           creative_prompt_sha256=hashlib.sha256(system.encode()).hexdigest())
+            self.save()
         req = Request(
             "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent",
-            data=json.dumps({"contents": contents, "generationConfig": config}).encode(),
+            data=json.dumps(payload).encode(),
             headers={"Content-Type": "application/json", "X-goog-api-key": key}, method="POST")
         with urlopen(req, timeout=40) as resp:
             answer = json.load(resp)
