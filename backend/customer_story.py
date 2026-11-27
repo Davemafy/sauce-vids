@@ -158,7 +158,8 @@ def validated_selection(raw,catalog):
     # more than a single menu's cosmetic variations. With one genuine group,
     # keep honest variation eligible rather than inventing other controls.
     groups=lambda rows:{a.get("group") or a["kind"] for a in rows}
-    if (len(actions)==2 or len(groups(catalog))>=2) and len(groups(actions))<2:
+    sample_comparison=all(a.get("control")=="sample-choice" and a.get("source_context")=="explicit sample-data comparison" for a in actions) and len({a.get("key") for a in actions})==1
+    if (len(actions)==2 or len(groups(catalog))>=2) and len(groups(actions))<2 and not sample_comparison:
         return None
     return {"actions":actions,"story":reason,"hero_action_id":hero}
 
@@ -512,6 +513,9 @@ def tab_result_pair(page,action):
     return {**rows[0],"tab_result_id":identity["after"],"tab_label":action["label"]}
 
 def action_panel(page,action):
+    if action.get("control")=="sample-choice":
+        from backend.customer_sample_choices import result_region
+        r=result_region(page,action["key"]);require(r is not None,"Sample result lost");return r
     if action.get("control")=="local-demo-view":
         from backend.customer_local_views import result_region
         result=result_region(page,action["region"])
@@ -525,6 +529,9 @@ def action_panel(page,action):
     return tab_result_pair(page,action) if action["kind"]=="tab" else panel(page)
 
 def result_panel(page,old):
+    if "sample_choice_key" in old:
+        from backend.customer_sample_choices import result_region
+        r=result_region(page,old["sample_choice_key"]);require(r is not None,"Sample result lost");return r
     if "local_view_region" in old:
         from backend.customer_local_views import result_region
         result=result_region(page,old["local_view_region"])
@@ -557,7 +564,7 @@ def verify(page,url,before,old,snapshot,*,allow_localized=False,proof_metrics=No
     from backend.agentmail_auth import test_session_active,check_test_surface
     assert_local(page,url)
     if test_session_active():check_test_surface(page)
-    new=result_panel(page,old);box=intersection(old,new,minimum_fraction=.04 if "tab_result_id" in old else .18)
+    new=result_panel(page,old);box=intersection(old,new,minimum_fraction=.04 if "tab_result_id" in old else (.07 if "sample_choice_key" in old else .18))
     x,y,w,h=(round(box[k]) for k in ("x","y","width","height"))
     weak=None
     for _ in range(3):
@@ -609,6 +616,9 @@ def exact_observed_option(scope,label):
 
 def apply(page,url,action,picker,click):
     label=action["label"]
+    if action.get("control")=="sample-choice":
+        from backend.customer_sample_choices import apply as apply_sample
+        apply_sample(page,url,action,click);return picker
     if action.get("control")=="local-demo-view":
         from backend.customer_local_views import apply as apply_local_view
         apply_local_view(page,url,action,click)
@@ -711,6 +721,15 @@ def explore(url,out,progress,*,request=None,brief=""):
                 opening=shot(p);(out/"opening.png").write_bytes(opening)
                 radio_catalog=local_catalog(p,setup)
                 require(len(radio_catalog)>=MIN_ACTIONS,"No supported local demo choices")
+        if len(radio_catalog)<MIN_ACTIONS and not analytical and setup is None and evidence_first_enabled():
+            from backend.agentmail_auth import test_session_active
+            if not test_session_active():
+                from backend.customer_sample_choices import prepare as prepare_sample,catalog as sample_catalog
+                setup=prepare_sample(p,url)
+                if setup:
+                    opening=shot(p);(out/"opening.png").write_bytes(opening)
+                    radio_catalog=sample_catalog(p,setup)
+                    require(len(radio_catalog)>=MIN_ACTIONS,"Not enough safe sample comparisons")
         if len(radio_catalog)>=MIN_ACTIONS:
             picker=None;catalog=radio_catalog;picker_image=opening
             save(out/"discovery.json",{"picker":picker,"catalog":catalog,"title":title,"kind":setup["kind"] if setup else "radio-menus"})
@@ -760,7 +779,9 @@ def explore(url,out,progress,*,request=None,brief=""):
 
 def replay_setup(page,plan):
     if plan.get("setup"):
-        if plan["setup"].get("kind")=="local-demo-views":
+        if plan["setup"].get("kind")=="sample-choices":
+            from backend.customer_sample_choices import prepare
+        elif plan["setup"].get("kind")=="local-demo-views":
             from backend.customer_local_views import prepare
         else:
             from backend.customer_combobox import prepare
@@ -975,7 +996,7 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
             kwargs={}
             if directed_edit:
                 task+=(" You are directing the edit, not operating a QA recorder. What single memorable outcome does the sequence prove? "
-                       "If the actions merely cycle equivalent values, reject unless the contrast itself clearly demonstrates the core product value. "
+                       "If the actions merely cycle equivalent values, reject unless the contrast itself clearly demonstrates the core product value. Explicit sample-data comparisons must be described as sample demonstrations, never real customer operations. "
                        "For an accepted workflow, assign each selected action in exact order a distinct editorial purpose (max 240 chars), "
                        "framing wide (locked context), accent (small whole-window push), or detail (source-fit close-up; up to two independently chosen detail beats; the hero may remain wide), "
                        "and pace quick, readable, or linger (relative source hold allocation, not timestamps). "
@@ -1057,7 +1078,10 @@ def first_action_anchor(page,plan):
     """
     first=plan["actions"][0]
     loc=None
-    if first.get("control")=="local-demo-view":
+    if first.get("control")=="sample-choice":
+        from backend.customer_sample_choices import locate
+        loc=locate(page,first)
+    elif first.get("control")=="local-demo-view":
         from backend.customer_local_views import locate
         loc=locate(page,first)
     elif first.get("control")=="presentation-combobox":
