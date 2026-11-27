@@ -116,3 +116,20 @@ def test_discovery_does_not_require_picker_for_independent_views(page,tmp_path,m
     result=s.explore(url,tmp_path/"job",lambda _:None,request=Mock())
     assert len(result)==2
     assert json.loads((tmp_path/"job"/"discovery.json").read_text())["kind"]=="named-product-views"
+
+
+
+def test_icon_only_accessible_view_names_are_replayable(page):
+    page.locator('[aria-controls="traffic1"]').evaluate("e=>{e.innerText='';e.setAttribute('aria-label','Campaigns');e.style.minWidth='60px'}")
+    page.locator('[aria-controls="devices1"]').evaluate("e=>{const n=document.createElement('span');n.id='device-label';n.hidden=true;n.textContent='Devices';document.body.append(n);e.innerText='';e.setAttribute('aria-labelledby',n.id);e.style.minWidth='60px'}")
+    rows=s.product_tab_catalog(page)
+    assert [a["label"] for a in rows]==["Campaigns","Devices"]
+    for a in rows:
+        old=s.action_panel(page,a);before=s.shot(page)
+        s.apply(page,"https://example.com/demo",a,None,lambda loc,_:loc.click())
+        assert s.verify(page,"https://example.com/demo",before,old,s.shot)[2]>.9
+
+
+def test_accessible_name_cannot_disguise_unsafe_tab(page):
+    page.locator('[aria-controls="traffic1"]').evaluate("e=>e.setAttribute('aria-label','Delete account')")
+    assert [a["label"] for a in s.product_tab_catalog(page)]==["Devices"]

@@ -413,8 +413,19 @@ def tabs(page):
             return hit&&e.contains(hit)&&!e.form&&!e.closest('form,[data-private],[data-secret],[data-sensitive],a')
                 &&!!e.closest('[role=tablist]')&&!e.closest('[inert],nav,[role=navigation]')&&e.getAttribute('aria-disabled')!=='true';
         }"""):continue
-        label=" ".join(loc.inner_text().split())
+        # The accessible name, not the icon or incidental child text, is
+        # the replay identity. Require the browser's actual role/name lookup
+        # to agree before admitting a tab (including icon-only views).
+        label=loc.evaluate(r"""e=>{
+            const refs=(e.getAttribute('aria-labelledby')||'').split(/\s+/)
+                .map(id=>document.getElementById(id)).filter(Boolean);
+            const name=refs.length?refs.map(n=>n.textContent).join(' '):
+                (e.getAttribute('aria-label')||e.innerText||'');
+            return name.trim().replace(/\s+/g,' ');
+        }""")
         if safe_label(label):
+            named=page.get_by_role("tab",name=label,exact=True)
+            if named.count()!=1 or loc.and_(named).count()!=1:continue
             handle=loc.element_handle(timeout=1500)
             if handle is not None and handle.get_attribute("aria-selected")=="false":
                 rows.append((label,handle))
