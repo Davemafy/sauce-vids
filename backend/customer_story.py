@@ -341,7 +341,8 @@ def resolve_public_product_entry(url,out,conv,creative):
         # already a functional surface; do not send the director into its nav.
         if urlsplit(url).path not in ("","/") and evidence_first_enabled():
             from backend.customer_combobox import opener,active_panel
-            if (opener(page) and active_panel(page)) or len({a["group"] for a in product_tab_catalog(page)})>=2:
+            from backend.customer_local_views import candidate as local_view_candidate
+            if (opener(page) and active_panel(page)) or len({a["group"] for a in product_tab_catalog(page)})>=2 or local_view_candidate(page):
                 receipt["retained_reason"]="Observed local customizer or independent product views"
                 save(out/'entry-route.json',receipt)
                 return url
@@ -475,6 +476,11 @@ def tab_result_pair(page,action):
     return {**rows[0],"tab_result_id":identity["after"],"tab_label":action["label"]}
 
 def action_panel(page,action):
+    if action.get("control")=="local-demo-view":
+        from backend.customer_local_views import result_region
+        result=result_region(page,action["region"])
+        require(result is not None,"Local demo result not visible")
+        return result
     if action.get("control")=="presentation-combobox":
         from backend.customer_combobox import result_region
         result=result_region(page)
@@ -483,6 +489,11 @@ def action_panel(page,action):
     return tab_result_pair(page,action) if action["kind"]=="tab" else panel(page)
 
 def result_panel(page,old):
+    if "local_view_region" in old:
+        from backend.customer_local_views import result_region
+        result=result_region(page,old["local_view_region"])
+        require(result is not None,"Local demo result identity lost")
+        return result
     if "combo_result_id" in old:
         from backend.customer_combobox import result_region
         new=result_region(page)
@@ -556,6 +567,10 @@ def exact_observed_option(scope,label):
 
 def apply(page,url,action,picker,click):
     label=action["label"]
+    if action.get("control")=="local-demo-view":
+        from backend.customer_local_views import apply as apply_local_view
+        apply_local_view(page,url,action,click)
+        return picker
     if action.get("control")=="presentation-combobox":
         from backend.customer_combobox import apply as apply_combo
         apply_combo(page,url,action,click)
@@ -647,9 +662,16 @@ def explore(url,out,progress,*,request=None,brief=""):
                 opening=shot(p);(out/"opening.png").write_bytes(opening)
                 radio_catalog=combo_catalog(p,url)
                 require(len(radio_catalog)>=MIN_ACTIONS,"No supported presentation combobox choices")
+        if len(radio_catalog)<MIN_ACTIONS and not analytical and setup is None and evidence_first_enabled():
+            from backend.customer_local_views import prepare as prepare_local,catalog as local_catalog
+            setup=prepare_local(p,url)
+            if setup:
+                opening=shot(p);(out/"opening.png").write_bytes(opening)
+                radio_catalog=local_catalog(p,setup)
+                require(len(radio_catalog)>=MIN_ACTIONS,"No supported local demo choices")
         if len(radio_catalog)>=MIN_ACTIONS:
             picker=None;catalog=radio_catalog;picker_image=opening
-            save(out/"discovery.json",{"picker":picker,"catalog":catalog,"title":title,"kind":"radio-menus"})
+            save(out/"discovery.json",{"picker":picker,"catalog":catalog,"title":title,"kind":setup["kind"] if setup else "radio-menus"})
         else:
             pickers=analytical or discover(p)
             if not pickers:
@@ -696,7 +718,10 @@ def explore(url,out,progress,*,request=None,brief=""):
 
 def replay_setup(page,plan):
     if plan.get("setup"):
-        from backend.customer_combobox import prepare
+        if plan["setup"].get("kind")=="local-demo-views":
+            from backend.customer_local_views import prepare
+        else:
+            from backend.customer_combobox import prepare
         require(prepare(page,plan["url"],plan["setup"])==plan["setup"],"Public product setup not reproduced")
 
 def compare_outcomes(catalog,metadata,opening,out,conv,creative):
@@ -896,7 +921,10 @@ def first_action_anchor(page,plan):
     """
     first=plan["actions"][0]
     loc=None
-    if first.get("control")=="presentation-combobox":
+    if first.get("control")=="local-demo-view":
+        from backend.customer_local_views import locate
+        loc=locate(page,first)
+    elif first.get("control")=="presentation-combobox":
         from backend.customer_combobox import handle
         loc=handle(page,first["group"])
     elif first.get("control")=="visible-radio":
