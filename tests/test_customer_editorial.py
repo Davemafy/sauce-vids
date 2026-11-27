@@ -228,9 +228,9 @@ def test_supporting_detail_compiles_short_model_request_into_native_budget():
     with pytest.raises(ValueError,match="detail travel"):
         editorial.validate(a,ids,"a0")
     compiled=editorial.fit_duration(a,ids,"a0")
-    assert a["duration_seconds"]==12 and compiled["duration_seconds"]==13
+    assert a["duration_seconds"]==12 and compiled["duration_seconds"]==16
     starts=editorial.schedule(compiled,ids,"a0")
-    assert compiled["duration_seconds"]-starts[-1]>=7.2-1e-6
+    assert compiled["duration_seconds"]-starts[-1]>=9.7-1e-6
     assert compiled["beats"]==a["beats"]
 
 def test_nonfinal_detail_earns_time_even_with_quick_pace():

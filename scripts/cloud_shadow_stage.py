@@ -224,20 +224,29 @@ def render_cloud_stage(stage, source, t):
             # Smoothly follow the source-bound hero camera envelope.
             strength=stage.hero_backdrop_strength(t) if hasattr(stage,"hero_backdrop_strength") else 0.
             tone=getattr(stage,"backdrop_tone","cobalt")
-            saturation,darkness={"cobalt":(0.,0.),"muted":(.55,.18),"graphite":(.94,.36)}[tone]
-            if strength>0 or saturation>0:
-                gray=cv2.cvtColor(sky,cv2.COLOR_BGR2GRAY)[:,:,None]
-                mix=1-(1-saturation)*(1-.24*strength)
-                sky=(sky*(1-mix)+gray*mix)*(1-darkness)
-                # A quieter product-first grade for the alternate tones:
-                # reduce cloud contrast without affecting source pixels.
-                # Keep the owner's exact cobalt plate and hero envelope.
-                if tone=="muted":
-                    sky=sky*.52+np.float32([145,139,133])*.48
-                elif tone=="graphite":
-                    sky=sky*.30+np.float32([68,65,63])*.70
-                sky*=1-.16*strength
-            board=np.uint8(np.clip(sky+movement,0,255))
+            if tone=="paper":
+                # A clean neutral studio with a real moving window shadow.
+                # Never subtract the old blue sky from a different background.
+                if stage.stage_preset!="cloud_window_clearface_v1":
+                    raise ValueError("Paper requires clearface optics")
+                from cloud_window_clearface_stage import shadow_transmission
+                shadow=1.-shadow_transmission(stage.source_size,stage.output_size)
+                shadow=cv2.warpAffine(shadow,view,(ow,oh),flags=cv2.INTER_LINEAR,
+                                     borderMode=cv2.BORDER_CONSTANT,borderValue=0)
+                # Fixed light-gray plate; only the contact shadow follows the camera.
+                paper=np.array([212.,213.,215.],dtype=np.float32)
+                board=np.uint8(np.clip(paper*(1.-shadow[:,:,None]),0,255))
+            else:
+                saturation,darkness={"cobalt":(0.,0.),"muted":(.55,.18),"graphite":(.94,.36)}[tone]
+                if strength>0 or saturation>0:
+                    gray=cv2.cvtColor(sky,cv2.COLOR_BGR2GRAY)[:,:,None]
+                    mix=1-(1-saturation)*(1-.24*strength)
+                    sky=(sky*(1-mix)+gray*mix)*(1-darkness)
+                    # Preserve concurrent quieter alternate cloud grades.
+                    if tone=="muted":sky=sky*.52+np.float32([145,139,133])*.48
+                    elif tone=="graphite":sky=sky*.30+np.float32([68,65,63])*.70
+                    sky*=1-.16*strength
+                board=np.uint8(np.clip(sky+movement,0,255))
         else:
             # Keep previous cloud presets' rendering behaviour identical.
             board=cv2.warpAffine(board,view,(ow,oh),flags=cv2.INTER_CUBIC,

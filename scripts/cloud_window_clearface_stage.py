@@ -24,18 +24,23 @@ def card_mask(source_size,output_size):
 
 
 @lru_cache(maxsize=4)
-def physical_plate(source_size, output_size):
-    """Only the elevation/contact shadow beneath the full-size display."""
-    ow, oh = output_size
-    sky = sky_background(output_size).astype(np.float32)
-    mask = card_mask(source_size, output_size)
-    low = cv2.resize(mask, (max(2, ow//4), max(2, oh//4)), interpolation=cv2.INTER_AREA)
-    for sigma, offset, strength in ((16., 5, .25), (4., 2, .19)):
-        a = cv2.GaussianBlur(low, (0, 0), sigma)
-        shifted = np.zeros_like(a)
-        shifted[offset:] = a[:-offset]
-        sky *= 1. - strength * cv2.resize(shifted, (ow, oh))[:,:,None].astype(np.float32)/255.
-    return np.rint(sky).astype(np.uint8)
+def shadow_transmission(source_size, output_size):
+    """Neutral multiplicative contact shadow, independent of backdrop pixels."""
+    ow,oh=output_size
+    mask=card_mask(source_size,output_size)
+    low=cv2.resize(mask,(max(2,ow//4),max(2,oh//4)),interpolation=cv2.INTER_AREA)
+    trans=np.ones((oh,ow),dtype=np.float32)
+    for sigma,offset,strength in ((16.,5,.25),(4.,2,.19)):
+        a=cv2.GaussianBlur(low,(0,0),sigma)
+        shifted=np.zeros_like(a);shifted[offset:]=a[:-offset]
+        trans*=1.-strength*cv2.resize(shifted,(ow,oh)).astype(np.float32)/255.
+    return trans
+
+@lru_cache(maxsize=4)
+def physical_plate(source_size,output_size):
+    """Original cloud treatment, retaining the physical contact shadow."""
+    sky=sky_background(output_size).astype(np.float32)
+    return np.rint(sky*shadow_transmission(source_size,output_size)[:,:,None]).astype(np.uint8)
 
 @lru_cache(maxsize=4)
 def optical_field(source_size, output_size):

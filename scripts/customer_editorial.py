@@ -1,7 +1,7 @@
 """Bounded semantic editorial choices; actual source clocks and geometry win."""
 FRAMINGS=("wide","accent","detail")
 PACES=("quick","readable","linger")
-TONES=("cobalt","muted","graphite")
+TONES=("cobalt","muted","graphite","paper")
 WEIGHTS={"quick":1,"readable":2,"linger":3}
 DURATIONS=(22,26,30)
 COMPACT_DURATIONS=(12,13,16,18,20)
@@ -31,6 +31,9 @@ def fit_duration(data,ids,hero):
     """Compile the requested duration as a lower bound, never retime footage."""
     validate(data,ids,hero,check_budget=False)
     for d in durations(len(ids)):
+        # The 13s detail allowance is for independently measured fast local
+        # workflows only; generic model requests need the conservative slot.
+        if len(ids)==2 and d==13 and data["beats"][-1]["framing"]=="detail":continue
         if d>=data["duration_seconds"] and d+1e-8>=.8+sum(slot_budgets(data["beats"],d)):
             return validate({**data,"duration_seconds":d},ids,hero)
     raise ValueError("Detail beats exceed supported native capture duration")

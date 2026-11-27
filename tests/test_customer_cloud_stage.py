@@ -153,7 +153,7 @@ def test_alternate_stage_grades_quiet_background_without_touching_product():
     graphite=render("graphite")
     # At fully opaque aperture pixels the grade has no influence on the UI.
     inside=(slice(y0+30,y1-30),slice(x0+30,x1-30))
-    for image in (muted,graphite,render("graphite",.9)):
+    for image in (muted,graphite,render("graphite",.9),render("paper")):
         np.testing.assert_array_equal(image[inside],cobalt[inside])
     # Check the exact cobalt corners where the contact shadow is absent.
     sky=sky_background(size)
@@ -161,3 +161,9 @@ def test_alternate_stage_grades_quiet_background_without_touching_product():
     # Outer strips are outside the opaque product; compare luma contrast.
     strip=lambda im:cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)[:10].std()
     assert strip(graphite)<strip(muted)<strip(cobalt)
+    paper=render("paper")
+    assert strip(paper)<strip(cobalt)
+    # Shadow may vary in luminance, but cannot introduce colored cloud texture.
+    outside=paper[:10].astype(np.int16)
+    assert np.max(outside.max(axis=2)-outside.min(axis=2))<=3
+    np.testing.assert_array_equal(paper[0,0],np.array([212,213,215],np.uint8))

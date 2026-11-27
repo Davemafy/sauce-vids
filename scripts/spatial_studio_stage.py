@@ -492,7 +492,7 @@ def load_studio_stage(data,manifest,source_path,source_size,output_size,duration
                                        stage_preset not in ("cloud_shadow_v1","cloud_glass_v1","cloud_window_sky_v1","cloud_window_fullglass_v1","cloud_window_volume_v1","cloud_window_clearface_v1","cloud_luminous_display_v1"))):
         raise ValueError("Physical window push needs cloud stage and verified spring camera")
     tone=motion.get("backdropTone","cobalt")
-    if tone not in ("cobalt","muted","graphite") or ("backdropTone" in motion and
+    if tone not in ("cobalt","muted","graphite","paper") or ("backdropTone" in motion and
             (not immersive or profile!="cinematic" or stage_preset!="cloud_window_clearface_v1")):
         raise ValueError("Unsupported source-preserving backdrop tone")
     shutter=_number(motion.get("shutter",0.),"studioStage.motion.shutter",0,.75)

@@ -6,7 +6,7 @@ from scripts import customer_editorial as ed
 from backend.customer_story_review import review_sample_times
 
 WEIGHTS={'comprehension':20,'composition':20,'motion_proxy':20,'narrative':15,'originality':15,'publishability':10}
-LENSES=('clarity and buyer payoff','decisive composition and emphasis','rhythm and narrative contrast')
+LENSES=('clarity and buyer payoff; consider the quiet paper studio backdrop when UI is dense','decisive composition and emphasis; use a backdrop that separates the product from its environment','rhythm and narrative contrast; avoid decorative motion or a busy environment')
 
 def score_rows(raw,labels):
     data=json.loads(raw);rows=data['scores']
@@ -60,7 +60,7 @@ def compete(source,manifest,plan,directory,run,*,factory=None):
         d=directory/f'director-{index+1}';d.mkdir(mode=0o700)
         c=factory(d/'model');row={'id':str(index+1),'status':'started'};state['candidates'].append(row);persist()
         try:
-            raw=c.ask('Independently direct this actual recorded workflow with emphasis on '+lens+'. Use the exact unchanged action order and duration; no edits to source time or actions. Select a distinct useful framing and backdrop: expressive cobalt, quiet blue-gray muted, or restrained dark graphite. Make the actual product the visual hero, not the decorative backdrop. Never add a gratuitous slow camera move to disguise dead time. Keep each purpose under 120 characters; the existing verified action purposes are retained. Return accept, reason, backdrop, duration_seconds, beats. Evidence: '+json.dumps(packet),media=tuple(attachments),json_mode=True,phase='story-editorial',stop_on_rate_limit=True,response_schema=ed.schema(ids),max_attempts=1)
+            raw=c.ask('Independently direct this actual recorded workflow with emphasis on '+lens+'. Use the exact unchanged action order and duration; no edits to source time or actions. Select a distinct useful framing and backdrop: expressive cobalt, quiet blue-gray muted, restrained dark graphite, or quiet neutral paper without cloud texture. Make the actual product the visual hero, not the decorative backdrop. Never add a gratuitous slow camera move to disguise dead time. Keep each purpose under 120 characters; the existing verified action purposes are retained. Return accept, reason, backdrop, duration_seconds, beats. Evidence: '+json.dumps(packet),media=tuple(attachments),json_mode=True,phase='story-editorial',stop_on_rate_limit=True,response_schema=ed.schema(ids),max_attempts=1)
             v=json.loads(raw)
             save(d/'raw-verdict.json',v)
             intent=fixed_source_intent(v,baseline,ids,hero)
