@@ -127,3 +127,37 @@ def test_wide_real_result_caps_detail_zoom_and_stays_visible():
     assert z*(r['x']+r['width'])+a[0,2]<=1920+.01
     assert z*r['y']+a[1,2]>=-.01
     assert z*(r['y']+r['height'])+a[1,2]<=1080+.01
+
+
+def test_alternate_stage_grades_quiet_background_without_touching_product():
+    from types import SimpleNamespace
+    import cv2
+    from scripts.cloud_shadow_stage import render_cloud_stage
+    from cloud_window_clearface_stage import window_geometry
+    from cloud_window_sky_stage import sky_background
+    size=(640,360)
+    x0,y0,x1,y1,_=window_geometry(size,size)
+    q=np.float32([[x0,y0],[x1,y0],[x1,y1],[x0,y1]])
+    M=np.float32([[1,0,0],[0,1,0]])
+    yy,xx=np.indices((360,640))
+    source=np.stack([(xx%256),(yy%256),((xx+yy)%256)],axis=-1).astype(np.uint8)
+    def render(tone,strength=0.):
+        stage=SimpleNamespace(source_size=size,output_size=size,
+            stage_preset="cloud_window_clearface_v1",immersive=True,
+            view_transform=lambda t:M,quad=lambda t:q,
+            shutter_times=lambda t:None,hero_backdrop_strength=lambda t:strength,
+            backdrop_tone=tone)
+        return render_cloud_stage(stage,source,0.)
+    cobalt=render("cobalt")
+    muted=render("muted")
+    graphite=render("graphite")
+    # At fully opaque aperture pixels the grade has no influence on the UI.
+    inside=(slice(y0+30,y1-30),slice(x0+30,x1-30))
+    for image in (muted,graphite,render("graphite",.9)):
+        np.testing.assert_array_equal(image[inside],cobalt[inside])
+    # Check the exact cobalt corners where the contact shadow is absent.
+    sky=sky_background(size)
+    np.testing.assert_array_equal(cobalt[0,0],sky[0,0])
+    # Outer strips are outside the opaque product; compare luma contrast.
+    strip=lambda im:cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)[:10].std()
+    assert strip(graphite)<strip(muted)<strip(cobalt)

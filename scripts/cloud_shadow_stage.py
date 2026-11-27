@@ -228,7 +228,15 @@ def render_cloud_stage(stage, source, t):
             if strength>0 or saturation>0:
                 gray=cv2.cvtColor(sky,cv2.COLOR_BGR2GRAY)[:,:,None]
                 mix=1-(1-saturation)*(1-.24*strength)
-                sky=(sky*(1-mix)+gray*mix)*(1-darkness)*(1-.16*strength)
+                sky=(sky*(1-mix)+gray*mix)*(1-darkness)
+                # A quieter product-first grade for the alternate tones:
+                # reduce cloud contrast without affecting source pixels.
+                # Keep the owner's exact cobalt plate and hero envelope.
+                if tone=="muted":
+                    sky=sky*.52+np.float32([145,139,133])*.48
+                elif tone=="graphite":
+                    sky=sky*.30+np.float32([68,65,63])*.70
+                sky*=1-.16*strength
             board=np.uint8(np.clip(sky+movement,0,255))
         else:
             # Keep previous cloud presets' rendering behaviour identical.
