@@ -146,7 +146,7 @@ def measured_schedule(data,actions,hero,proofs):
     beats=data['beats'];latencies=[]
     for a,p in zip(actions,proofs):
         # A picker or menu requires opener and choice, versus a single view click.
-        double=a.get('control')=='presentation-combobox' or (a['kind']=='option' and a.get('control') not in ('local-demo-view','visible-radio'))
+        double=a.get('control')=='presentation-combobox' or (a['kind']=='option' and a.get('control') not in ('local-demo-view','visible-radio','semantic-capability','sample-choice'))
         latencies.append(p['probe_seconds']+(1.10 if double else .65))
     floors=[v+(.9 if i<len(ids)-1 else 2.15) for i,v in enumerate(latencies)]
     for d in durations(len(ids)):

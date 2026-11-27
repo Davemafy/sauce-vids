@@ -513,6 +513,9 @@ def tab_result_pair(page,action):
     return {**rows[0],"tab_result_id":identity["after"],"tab_label":action["label"]}
 
 def action_panel(page,action):
+    if action.get("control")=="semantic-capability":
+        from backend.customer_semantic_capabilities import result_region
+        return result_region(page,action["key"])
     if action.get("control")=="sample-choice":
         from backend.customer_sample_choices import result_region
         r=result_region(page,action["key"]);require(r is not None,"Sample result lost");return r
@@ -529,6 +532,9 @@ def action_panel(page,action):
     return tab_result_pair(page,action) if action["kind"]=="tab" else panel(page)
 
 def result_panel(page,old):
+    if "semantic_key" in old:
+        from backend.customer_semantic_capabilities import result_region
+        return result_region(page,old["semantic_key"])
     if "sample_choice_key" in old:
         from backend.customer_sample_choices import result_region
         r=result_region(page,old["sample_choice_key"]);require(r is not None,"Sample result lost");return r
@@ -616,6 +622,9 @@ def exact_observed_option(scope,label):
 
 def apply(page,url,action,picker,click):
     label=action["label"]
+    if action.get("control")=="semantic-capability":
+        from backend.customer_semantic_capabilities import apply as apply_capability
+        apply_capability(page,url,action,click);return picker
     if action.get("control")=="sample-choice":
         from backend.customer_sample_choices import apply as apply_sample
         apply_sample(page,url,action,click);return picker
@@ -730,9 +739,16 @@ def explore(url,out,progress,*,request=None,brief=""):
                     opening=shot(p);(out/"opening.png").write_bytes(opening)
                     radio_catalog=sample_catalog(p,setup)
                     require(len(radio_catalog)>=MIN_ACTIONS,"Not enough safe sample comparisons")
+        if len(radio_catalog)<MIN_ACTIONS and not analytical and setup is None and evidence_first_enabled():
+            from backend.agentmail_auth import test_session_active
+            if not test_session_active():
+                from backend.customer_semantic_capabilities import catalog as capability_catalog
+                capabilities=capability_catalog(p)
+                if len({a["group"] for a in capabilities})>=MIN_ACTIONS:
+                    radio_catalog=capabilities
         if len(radio_catalog)>=MIN_ACTIONS:
             picker=None;catalog=radio_catalog;picker_image=opening
-            save(out/"discovery.json",{"picker":picker,"catalog":catalog,"title":title,"kind":setup["kind"] if setup else "radio-menus"})
+            save(out/"discovery.json",{"picker":picker,"catalog":catalog,"title":title,"kind":setup["kind"] if setup else ("semantic-capabilities" if all(a.get("control")=="semantic-capability" for a in catalog) else "radio-menus")})
         else:
             pickers=analytical or discover(p)
             if not pickers:
@@ -996,7 +1012,7 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
             kwargs={}
             if directed_edit:
                 task+=(" You are directing the edit, not operating a QA recorder. What single memorable outcome does the sequence prove? "
-                       "If the actions merely cycle equivalent values, reject unless the contrast itself clearly demonstrates the core product value. Explicit sample-data comparisons must be described as sample demonstrations, never real customer operations. "
+                       "For semantic sort actions, describe actual reordering as sorting, not a different product capability or data mutation. If the actions merely cycle equivalent values, reject unless the contrast itself clearly demonstrates the core product value. Explicit sample-data comparisons must be described as sample demonstrations, never real customer operations. "
                        "For an accepted workflow, assign each selected action in exact order a distinct editorial purpose (max 240 chars), "
                        "framing wide (locked context), accent (small whole-window push), or detail (source-fit close-up; up to two independently chosen detail beats; the hero may remain wide), "
                        "and pace quick, readable, or linger (relative source hold allocation, not timestamps). "
@@ -1078,7 +1094,10 @@ def first_action_anchor(page,plan):
     """
     first=plan["actions"][0]
     loc=None
-    if first.get("control")=="sample-choice":
+    if first.get("control")=="semantic-capability":
+        from backend.customer_semantic_capabilities import locate
+        loc=locate(page,first)
+    elif first.get("control")=="sample-choice":
         from backend.customer_sample_choices import locate
         loc=locate(page,first)
     elif first.get("control")=="local-demo-view":
