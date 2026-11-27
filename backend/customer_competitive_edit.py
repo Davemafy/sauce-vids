@@ -39,7 +39,7 @@ def contrast_candidate(intent,prior,ids,hero):
     # This is a deterministic proposed alternative, not a model decision.
     # The source compiler must still fit the entire result and pointer;
     # insufficient time/geometry can downgrade it or fail validation.
-    alternative={**intent,"beats":[{**b,"framing":"detail"} if b["action_id"]==hero else dict(b) for b in intent["beats"]]}
+    alternative={**intent,"beats":[{**b,"framing":("accent" if ed.outcome_duration(len(ids),intent["duration_seconds"]) else "detail")} if b["action_id"]==hero else dict(b) for b in intent["beats"]]}
     return ed.validate(alternative,ids,hero)
 
 
@@ -71,7 +71,7 @@ def compete(source,manifest,plan,directory,run,*,factory=None):
         d=directory/f'director-{index+1}';d.mkdir(mode=0o700)
         c=factory(d/'model');row={'id':str(index+1),'status':'started'};state['candidates'].append(row);persist()
         try:
-            raw=c.ask('Independently direct this actual recorded workflow with emphasis on '+lens+'. Use the exact unchanged action order and duration; no edits to source time or actions. Select a distinct useful framing and backdrop: expressive cobalt, quiet blue-gray muted, restrained dark graphite, or quiet neutral paper without cloud texture. Make the actual product the visual hero, not the decorative backdrop. Never add a gratuitous slow camera move to disguise dead time. Keep each purpose under 120 characters; the existing verified action purposes are retained. Return accept, reason, backdrop, duration_seconds, beats. Evidence: '+json.dumps(packet),media=tuple(attachments),json_mode=True,phase='story-editorial',stop_on_rate_limit=True,response_schema=ed.schema(ids),max_attempts=1)
+            raw=c.ask('Independently direct this actual recorded workflow with emphasis on '+lens+'. Use the exact unchanged action order and duration; no edits to source time or actions. Select a distinct useful framing and backdrop: expressive cobalt, quiet blue-gray muted, restrained dark graphite, or quiet neutral paper without cloud texture. Make the actual product the visual hero, not the decorative backdrop. Never add a gratuitous slow camera move to disguise dead time. Keep each purpose under 120 characters; the existing verified action purposes are retained. Return accept, reason, backdrop, duration_seconds, beats. Evidence: '+json.dumps(packet),media=tuple(attachments),json_mode=True,phase='story-editorial',stop_on_rate_limit=True,response_schema=ed.schema(ids,fixed_duration=duration),max_attempts=1)
             v=json.loads(raw)
             save(d/'raw-verdict.json',v)
             intent=fixed_source_intent(v,baseline,ids,hero)

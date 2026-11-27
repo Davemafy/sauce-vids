@@ -283,6 +283,21 @@ def test_measured_combobox_latency_preserves_native_reading_time():
     assert editorial.measured_schedule(amended,actions,'b',proofs)[:2]==(amended,starts)
     assert receipt['probe_seconds']==[3.811481,4.07615]
     fast=[{'id':i,'probe_seconds':1.2} for i in ids]
-    assert editorial.measured_schedule(a,actions,'b',fast)[0]==a
+    assert editorial.measured_schedule(a,actions,'b',fast)[0]['duration_seconds']==9
     with pytest.raises(ValueError,match='timing budget'):
         editorial.measured_schedule(a,actions,'b',[{'id':i,'probe_seconds':12.} for i in ids])
+
+
+def test_outcome_clock_replaces_fixed_slots_on_actual_fastchart_trace():
+    ids=['a','b','c'];actions=[{'id':i,'kind':'option','control':'observed-workspace'} for i in ids]
+    a={'backdrop':'graphite','duration_seconds':18,'beats':[{'action_id':i,'framing':framing,'pace':pace,'purpose':'Verified'} for i,framing,pace in zip(ids,['wide','accent','accent'],['quick','readable','linger'])]}
+    proofs=[{'id':i,'probe_seconds':t} for i,t in zip(ids,[1.157463,1.141491,1.120569])]
+    b,starts,r=editorial.measured_schedule(a,actions,'c',proofs)
+    assert b['duration_seconds']==11 and r['reason']=='outcome-driven-native-clock'
+    assert starts==pytest.approx([.8,3.507463,6.198954])
+    assert editorial.measured_schedule(b,actions,'c',proofs)[:2]==(b,starts)
+    assert editorial.schema(ids,fixed_duration=11)['properties']['duration_seconds']['enum']==[11]
+    with pytest.raises(ValueError):editorial.measured_schedule(b,actions,'c',[])
+    with pytest.raises(ValueError):editorial.measured_schedule(b,actions,'c',[{'id':i,'probe_seconds':3.} for i in ids])
+    detail={**a,'beats':[dict(x) for x in a['beats']]};detail['beats'][-1]['framing']='detail';detail=editorial.fit_duration(detail,ids,'c')
+    assert editorial.measured_schedule(detail,actions,'c',proofs)[0]['duration_seconds']>=22

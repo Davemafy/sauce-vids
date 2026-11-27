@@ -7,8 +7,18 @@ DURATIONS=(22,26,30)
 COMPACT_DURATIONS=(12,13,16,18,20)
 THREE_ACTION_DURATIONS=(18,22,26,30)
 
-def durations(count):
+# Native short cuts are admitted only from measured connected proof, not a
+# model's arbitrary runtime request. Keep legacy detail budgets intact.
+OUTCOME_DURATIONS={2:(8,9,10),3:(10,11,14,16),4:(13,16,19)}
+def legacy_durations(count):
     return COMPACT_DURATIONS if count==2 else THREE_ACTION_DURATIONS if count==3 else DURATIONS
+
+def durations(count):
+    return tuple(sorted(set(legacy_durations(count))|set(OUTCOME_DURATIONS.get(count,()))))
+
+def outcome_duration(count,duration):
+    return duration in OUTCOME_DURATIONS.get(count,())
+
 
 def final_slot(count,duration):
     """Short edits retain a measured action/proof budget and real reading time.
@@ -19,18 +29,22 @@ def final_slot(count,duration):
     return 6.2 if (count,duration)==(2,12) else (7.2 if (count,duration) in ((2,13),(3,18)) else 9.2)
 
 def minimum_duration(count,duration):
+    if outcome_duration(count,duration):return .8+2.5*(count-1)+4.0
     return .8+5*(count-1)+final_slot(count,duration)
 
 def slot_budgets(beats,duration):
     """Reserve native proof + context + camera travel + readable detail."""
     count=len(beats)
+    if outcome_duration(count,duration):
+        if any(b["framing"]=="detail" for b in beats):return [30.]*count
+        return [2.5]*(count-1)+[4.]
     return [9.0 if b["framing"]=="detail" else 5.0 for b in beats[:-1]] + [
         (7.2 if (count,duration)==(2,13) else max(9.7,final_slot(count,duration))) if beats[-1]["framing"]=="detail" else final_slot(count,duration)]
 
 def fit_duration(data,ids,hero):
     """Compile the requested duration as a lower bound, never retime footage."""
     validate(data,ids,hero,check_budget=False)
-    for d in durations(len(ids)):
+    for d in legacy_durations(len(ids)):
         # The 13s detail allowance is for independently measured fast local
         # workflows only; generic model requests need the conservative slot.
         if len(ids)==2 and d==13 and data["beats"][-1]["framing"]=="detail":continue
@@ -38,11 +52,11 @@ def fit_duration(data,ids,hero):
             return validate({**data,"duration_seconds":d},ids,hero)
     raise ValueError("Detail beats exceed supported native capture duration")
 
-def schema(ids):
+def schema(ids,fixed_duration=None):
     return {"type":"OBJECT","required":["accept","reason","backdrop","duration_seconds","beats"],
             "properties":{"accept":{"type":"BOOLEAN"},"reason":{"type":"STRING"},
             "backdrop":{"type":"STRING","enum":list(TONES)},
-            "duration_seconds":{"type":"INTEGER","enum":[d for d in durations(len(ids)) if d>=minimum_duration(len(ids),d)]},
+            "duration_seconds":{"type":"INTEGER","enum":([fixed_duration] if fixed_duration is not None else [d for d in legacy_durations(len(ids)) if d>=minimum_duration(len(ids),d)])},
             "beats":{"type":"ARRAY","items":{"type":"OBJECT",
              "required":["action_id","framing","pace","purpose"],
              "properties":{"action_id":{"type":"STRING","enum":list(ids)},
@@ -142,6 +156,7 @@ def measured_schedule(data,actions,hero,proofs):
     ids=[a['id'] for a in actions]
     validate(data,ids,hero)
     if len(proofs)!=len(ids) or any(p.get('id')!=i or type(p.get('probe_seconds')) not in (float,int) or not math.isfinite(p['probe_seconds']) or p['probe_seconds']<=0 for i,p in zip(ids,proofs)):
+        if outcome_duration(len(ids),data["duration_seconds"]):raise ValueError("Compact capture requires connected timing proof")
         return data,schedule(data,ids,hero),None
     beats=data['beats'];latencies=[]
     for a,p in zip(actions,proofs):
@@ -149,7 +164,25 @@ def measured_schedule(data,actions,hero,proofs):
         double=a.get('control')=='presentation-combobox' or (a['kind']=='option' and a.get('control') not in ('local-demo-view','visible-radio','semantic-capability','sample-choice','observed-workspace'))
         latencies.append(p['probe_seconds']+(1.10 if double else .65))
     floors=[v+(.9 if i<len(ids)-1 else 2.15) for i,v in enumerate(latencies)]
-    for d in durations(len(ids)):
+    # A fast observed workflow should not inherit the model's duration floor.
+    # Direct and multi-step controls share measured native overhead. Never
+    # compact slow probes, detail shots, or an unverified source clock.
+    if all(p['probe_seconds']<=2.0 for p in proofs) and not any(b['framing']=='detail' for b in beats):
+        for d in OUTCOME_DURATIONS.get(len(ids),()):
+            if d>data['duration_seconds']:continue
+            candidate={**data,'duration_seconds':d}
+            try:validate(candidate,ids,hero)
+            except ValueError:continue
+            budgets=[max(x,y) for x,y in zip(slot_budgets(beats,d),floors)]
+            extra=d-.8-sum(budgets)
+            if extra< -1e-7:continue
+            # Keep intervening reading time bounded; put fractional rounding
+            # slack in the closing result rather than slowing each action.
+            starts=[.8]
+            for budget in budgets[:-1]:starts.append(round(starts[-1]+budget,6))
+            return candidate,starts,{'reason':'outcome-driven-native-clock','probe_seconds':[p['probe_seconds'] for p in proofs],'native_estimate_seconds':[round(v,4) for v in latencies],'slot_floors_seconds':[round(v,4) for v in budgets],'requested_duration':data['duration_seconds'],'duration':d,'action_starts':starts}
+    if outcome_duration(len(ids),data['duration_seconds']):raise ValueError('Compact timing no longer supported by connected proof')
+    for d in legacy_durations(len(ids)):
         if d<data['duration_seconds']:continue
         candidate={**data,'duration_seconds':d}
         try:validate(candidate,ids,hero)
