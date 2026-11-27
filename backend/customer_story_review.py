@@ -9,15 +9,32 @@ from pathlib import Path
 from backend.curious_showcase import Conversation,_media
 from backend.interactive_editorial import response
 
+def review_sample_times(duration, manifest):
+    """Bounded whole-film coverage plus actual contact/result neighborhoods."""
+    if not math.isfinite(duration) or duration <= 0:
+        raise ValueError("Invalid review duration")
+    last=max(0.,duration-.10)
+    def clamp(t):
+        return round(max(0.,min(last,t)),3)
+    times={0.,clamp(last),clamp(.5),clamp(1.),clamp(2.)}
+    for event in manifest.get("events",[]):
+        start=float(event["start"]);result=float(event["t"])
+        if not all(math.isfinite(t) for t in (start,result)):
+            raise ValueError("Invalid event time")
+        times.update(clamp(t) for t in (start-.2,start,result-.15,result,result+.4,result+1.2))
+    if len(times)>40:raise ValueError("Oversized frame evidence")
+    # Fill the largest uncovered interval first. Never discard evidence of
+    # actual contact or confirmation to fit a uniform sampling budget.
+    while len(times)<40:
+        ordered=sorted(times)
+        gap,left,right=max(((b-a,a,b) for a,b in zip(ordered,ordered[1:])),default=(0,0,0))
+        if gap<=1.25:break
+        times.add(clamp((left+right)/2))
+    return sorted(times)
+
 def sampled_encoded_evidence(film,duration,manifest):
     """Ordered, timestamped real master frames; no claim of video/audio review."""
-    times={0.,max(0.,duration-.10)}
-    times.update(float(t) for t in range(2,math.ceil(duration),2) if t<duration)
-    for e in manifest.get("events",[]):
-        times.update(max(0.,min(duration-.10,float(e[k])+d))
-                     for k,d in (("start",0.),("t",0.),("t",.8)))
-    times=sorted(set(round(t,3) for t in times))
-    if len(times)>40:raise ValueError("Oversized frame evidence")
+    times=review_sample_times(duration,manifest)
     cap=cv2.VideoCapture(str(film))
     media=[]
     try:
@@ -67,7 +84,7 @@ def review(film,qa,source,manifest,plan,directory,*,conversation=None):
     try:
         if sampled:
             attachments,times=sampled_encoded_evidence(film,float(qa["duration"]),json.loads(manifest.read_text()))
-            result.update(review_mode="timestamped-master-frames",review_frame_times=times)
+            result.update(review_mode="timestamped-master-frames",review_frame_times=times,review_sampling="contact-result-coverage-v2")
         else:
             # Full duration, no cuts or time scaling. Keep the original master
             # untouched; derivative exists solely to fit inline model limits.
@@ -85,7 +102,7 @@ def review(film,qa,source,manifest,plan,directory,*,conversation=None):
             result['review_duration']=float(v['format']['duration'])
             attachments=(_media(view,'video/mp4',12*1024*1024),)
             result['review_mode']='full-duration-video-proxy'
-        prompt=("You are the creative director of a world-class motion studio. Watch the entire attached actual encoded product film, not the planned story. The master is native 60fps; this full-duration review proxy is 30fps. Do not infer source frame rate from the proxy. Would a cold viewer understand the value, stay interested and want to try the product? Be demanding. Identify timestamped visible evidence of weak pacing, tiny UI, disappearing content, camera, pointer and actual product payoff. Distinguish a bad story from capture or rendering defects. Say what to change in the next capture using specific observed moments; do not ask for invented UI, pointer data or unsupported camera effects. A pacing, contrast or focal-size warning alone does not imply a broken film; keep a usable film for owner assessment even if it is not studio-grade. Reject actual misleading, unreadable or materially weak films. Return JSON with decision (keep or reject) and observations (string with timestamps). Keep means only retain for human review, never approval. Independent encoded QA: "+json.dumps(qa['findings'])[:2000]+". Planned story, not evidence of what occurred: "+str(plan.get('story',''))[:1200]+". Selected hero action ID (intent only): "+str(plan.get("hero_action_id",""))[:80])
+        prompt=("You are the creative director of a world-class motion studio. Watch the entire attached actual encoded product film, not the planned story. The master is native 60fps; this full-duration review proxy is 30fps. Do not infer source frame rate from the proxy. Would a cold viewer understand the value, stay interested and want to try the product? Be demanding. Identify timestamped visible evidence of weak pacing, tiny UI, disappearing content, camera, pointer and actual product payoff. Distinguish a bad story from capture or rendering defects. Say what to change in the next capture using specific observed moments; do not ask for invented UI, pointer data or unsupported camera effects. Judge the film as a flagship launch asset, not a tutorial or a technical pass. Reject when the sampled evidence shows materially weak product payoff, repetitive composition or unreadable UI, even if the recording is technically valid. Do not reject solely because a numerical warning exists. Explain the first meaningful change, the strongest visible result, and whether each later beat earns its screen time. Separate observed defects from unverified continuous motion or audio. Recommend one specific editorial change grounded in the visible product outcome; do not prescribe zooms merely to add motion. Return JSON with decision (keep or reject) and observations (string with timestamps). Keep means only retain for human review, never approval. Independent encoded QA: "+json.dumps(qa['findings'])[:2000]+". Planned story, not evidence of what occurred: "+str(plan.get('story',''))[:1200]+". Selected hero action ID (intent only): "+str(plan.get("hero_action_id",""))[:80])
         kwargs={}
         if sampled:
             prompt=prompt.replace("Watch the entire attached actual encoded product film, not the planned story. The master is native 60fps; this full-duration review proxy is 30fps. Do not infer source frame rate from the proxy.",

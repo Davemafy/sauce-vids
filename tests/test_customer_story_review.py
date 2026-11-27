@@ -66,3 +66,19 @@ def test_claude_review_uses_timestamped_master_frames(tmp_path,monkeypatch):
     assert kwargs['response_schema']['properties']['decision']['enum']==['keep','reject']
     assert all(x['inline_data']['mime_type']=='image/jpeg' for x in kwargs['media'] if 'inline_data' in x)
     assert not (tmp_path/'review'/'review.mp4').exists()
+
+
+def test_review_sampling_preserves_contact_and_result_with_bounded_coverage():
+    events=[{'start':s,'t':s+2.8} for s in (1.,8.,15.,22.)]
+    times=r.review_sample_times(30.,{'events':events})
+    assert len(times)<=40 and times==sorted(set(times))
+    assert times[0]==0 and times[-1]==29.9
+    for e in events:
+        for t in (e['start']-.2,e['start'],e['t']-.15,e['t'],e['t']+.4,e['t']+1.2):
+            assert round(t,3) in times
+    assert max(b-a for a,b in zip(times,times[1:]))<=2
+
+
+def test_review_sampling_rejects_nonfinite_evidence():
+    with pytest.raises(ValueError):r.review_sample_times(13.,{'events':[{'start':float('nan'),'t':2}]})
+    with pytest.raises(ValueError):r.review_sample_times(float('inf'),{})
