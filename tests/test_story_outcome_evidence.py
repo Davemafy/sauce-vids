@@ -111,6 +111,8 @@ def test_unverified_local_radio_isolated_only_in_disposable_probe(tmp_path,monke
     monkeypatch.setattr(s,"arr",lambda b:np.zeros((8,8,3),np.uint8))
     monkeypatch.setattr(s,"media",lambda b:b)
     monkeypatch.setattr(s,"action_panel",lambda *a:{"x":0,"y":0,"width":8,"height":8})
+    # This replay fixture has no real DOM; optional component discovery is tested separately.
+    monkeypatch.setattr(s,"observed_components",lambda *a:[])
     guard=Mock()
     monkeypatch.setattr(s,"assert_local",guard)
     def apply(*args):
