@@ -128,3 +128,37 @@ def compact_fast_local(data,actions,hero,proofs):
     if target>=data['duration_seconds']:return data,None
     result=validate({**data,'duration_seconds':target},ids,hero)
     return result,{'reason':'measured-fast-local-workflow','previous_duration':data['duration_seconds'],'duration':target,'probe_seconds':[p['probe_seconds'] for p in proofs]}
+
+
+def measured_schedule(data,actions,hero,proofs):
+    """Allocate native action time from the connected, independently replayed proof.
+
+    DOM-click probe time includes verification and component measurement. Native
+    recording adds pointer approach and screen/geometry overhead. Keep the
+    existing minimum framing slots, a readable gap and a two-second final hold.
+    Never shorten requested duration here or retime captured footage.
+    """
+    import math
+    ids=[a['id'] for a in actions]
+    validate(data,ids,hero)
+    if len(proofs)!=len(ids) or any(p.get('id')!=i or type(p.get('probe_seconds')) not in (float,int) or not math.isfinite(p['probe_seconds']) or p['probe_seconds']<=0 for i,p in zip(ids,proofs)):
+        return data,schedule(data,ids,hero),None
+    beats=data['beats'];latencies=[]
+    for a,p in zip(actions,proofs):
+        # A picker or menu requires opener and choice, versus a single view click.
+        double=a.get('control')=='presentation-combobox' or (a['kind']=='option' and a.get('control') not in ('local-demo-view','visible-radio'))
+        latencies.append(p['probe_seconds']+(1.10 if double else .65))
+    floors=[v+(.9 if i<len(ids)-1 else 2.15) for i,v in enumerate(latencies)]
+    for d in durations(len(ids)):
+        if d<data['duration_seconds']:continue
+        candidate={**data,'duration_seconds':d}
+        try:validate(candidate,ids,hero)
+        except ValueError:continue
+        budgets=[max(x,y) for x,y in zip(slot_budgets(beats,d),floors)]
+        extra=d-.8-sum(budgets)
+        if extra< -1e-7:continue
+        weights=[WEIGHTS[b['pace']] for b in beats];starts=[.8]
+        for budget,weight in zip(budgets[:-1],weights[:-1]):
+            starts.append(round(starts[-1]+budget+max(0.,extra)*weight/sum(weights),6))
+        return candidate,starts,{'reason':'measured-connected-probe-latency','probe_seconds':[p['probe_seconds'] for p in proofs],'native_estimate_seconds':[round(v,4) for v in latencies],'slot_floors_seconds':[round(v,4) for v in budgets],'requested_duration':data['duration_seconds'],'duration':d,'action_starts':starts}
+    raise ValueError('Measured workflow exceeds supported native timing budget')

@@ -994,6 +994,8 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
                     if readability:save(trial/"readability-adjustment.json",readability)
                     plan["editorial"],pacing=customer_editorial.compact_fast_local(plan["editorial"],plan["actions"],plan["hero_action_id"],proofs)
                     if pacing:save(trial/"pacing-adjustment.json",pacing)
+                    plan["editorial"],_,measured=customer_editorial.measured_schedule(plan["editorial"],plan["actions"],plan["hero_action_id"],proofs)
+                    if measured:save(trial/"measured-schedule.json",measured)
                 except (ValueError,TypeError) as exc:
                     raise StoryRejected("Invalid model-authored editorial direction") from exc
                 plan["director_provider"]="claude" if is_claude else "gemini"
@@ -1102,8 +1104,11 @@ def action_start(index,count):
 def capture(url,plan,proofs,out):
     out.mkdir(mode=0o700,parents=True,exist_ok=False)
     native=lambda r:{k:round(r[k]*D,4) for k in ("x","y","width","height")}
-    starts=(customer_editorial.schedule(plan["editorial"],[a["id"] for a in plan["actions"]],plan["hero_action_id"])
-            if "editorial" in plan else [action_start(i,len(proofs)) for i in range(len(proofs))])
+    if "editorial" in plan:
+        compiled,starts,measured=customer_editorial.measured_schedule(plan["editorial"],plan["actions"],plan["hero_action_id"],proofs)
+        require(compiled==plan["editorial"],"Native timing budget differs from admitted plan")
+        if measured:save(out/"measured-schedule.json",measured)
+    else:starts=[action_start(i,len(proofs)) for i in range(len(proofs))]
     require(len(proofs)!=2 or "editorial" in plan,"Compact film needs verified editorial direction")
     duration=plan["editorial"]["duration_seconds"] if "editorial" in plan else SECONDS
     save(out/"capture-schedule.json",{"requestedActionStarts":starts,"durationSeconds":duration,"editorialDirected":"editorial" in plan})

@@ -270,3 +270,19 @@ def test_fast_local_pacing_shortens_only_witnessed_fast_workflows():
     assert short['duration_seconds']==13
     proofs[0]['probe_seconds']=2.5
     assert editorial.compact_fast_local(a,actions,'a',proofs)==(a,None)
+
+
+def test_measured_combobox_latency_preserves_native_reading_time():
+    ids=['a','b'];actions=[{'id':i,'kind':'option','control':'presentation-combobox'} for i in ids]
+    a={'backdrop':'muted','duration_seconds':12,'beats':[{'action_id':i,'framing':'wide','pace':pace,'purpose':'Verified'} for i,pace in zip(ids,['readable','linger'])]}
+    proofs=[{'id':'a','probe_seconds':3.811481},{'id':'b','probe_seconds':4.07615}]
+    amended,starts,receipt=editorial.measured_schedule(a,actions,'b',proofs)
+    assert amended['duration_seconds']==16 and a['duration_seconds']==12
+    assert starts[0]==.8 and starts[1]-starts[0]>=3.811481+1.10+.9-1e-6
+    assert amended['duration_seconds']-starts[1]>=4.07615+1.10+2.15-1e-6
+    assert editorial.measured_schedule(amended,actions,'b',proofs)[:2]==(amended,starts)
+    assert receipt['probe_seconds']==[3.811481,4.07615]
+    fast=[{'id':i,'probe_seconds':1.2} for i in ids]
+    assert editorial.measured_schedule(a,actions,'b',fast)[0]==a
+    with pytest.raises(ValueError,match='timing budget'):
+        editorial.measured_schedule(a,actions,'b',[{'id':i,'probe_seconds':12.} for i in ids])
