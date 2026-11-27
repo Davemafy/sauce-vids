@@ -148,7 +148,7 @@ def direction(video:Path,manifest:Path,hero_event_index=None,editorial_intent=No
                 while candidate>=HERO_MIN_ZOOM:
                     seconds=hero_motion_budget(candidate,transform(candidate),base,(1920,1080))
                     # A close-up earns at least 1s of settled reading time.
-                    if 2*seconds+1.05<=limit-after_visible(detail_begin):
+                    if 2*seconds+max(hold,1.05)<=limit-after_visible(detail_begin):
                         begin=after_visible(detail_begin)
                         zoom=candidate;travel=seconds;hold=max(hold,1.05)
                         peak=after_visible(begin+seconds);detail_indices.append(i)

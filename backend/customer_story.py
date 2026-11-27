@@ -729,9 +729,9 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
                 task+=(" You are directing the edit, not operating a QA recorder. What single memorable outcome does the sequence prove? "
                        "If the actions merely cycle equivalent values, reject unless the contrast itself clearly demonstrates the core product value. "
                        "For an accepted workflow, assign each selected action in exact order a distinct editorial purpose (max 240 chars), "
-                       "framing wide (locked context), accent (small whole-window push), or detail (source-fit close-up; up to two detail beats, including the selected hero), "
+                       "framing wide (locked context), accent (small whole-window push), or detail (source-fit close-up; up to two independently chosen detail beats; the hero may remain wide), "
                        "and pace quick, readable, or linger (relative source hold allocation, not timestamps). "
-                       "Choose the shortest supported duration_seconds that earns its runtime (13/16/18/20 for two actions, 18/22/26/30 for three, 26/30 for four, as restricted by the schema). The shortest cut is preferable for simple visible transformations; do not add silent holds to make a longer film. "
+                       "Choose the shortest supported duration_seconds that earns its runtime (13/16/18/20 for two actions, 18/22/26/30 for three, 26/30 for four, as restricted by the schema). The shortest cut is preferable for simple visible transformations; detail needs a 9s nonfinal or 9.7s final slot. Sauce will extend the requested duration to the shortest supported duration that fits the selected framing, never speed up source footage. For four actions use at most one nonfinal detail, optionally a final detail. Do not add silent holds to make a longer film. "
                        "Use wide deliberately to avoid a push on every click; reserve attention for the actual payoff. "
                        "Choose backdrop cobalt (bright cloud), muted (subdued blue-gray cloud), or graphite (dark desaturated cloud). "
                        "Choose for the product's actual palette, not a generic aesthetic. Sauce validates the true action, result, cursor, and source timing; "
@@ -745,7 +745,7 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
             require(verdict.get("accept") is True,"Editorial story not admitted")
             if directed_edit:
                 try:
-                    plan["editorial"]=customer_editorial.validate(
+                    plan["editorial"]=customer_editorial.fit_duration(
                         {"backdrop":verdict.get("backdrop"),"duration_seconds":verdict.get("duration_seconds"),"beats":verdict.get("beats")},ids,plan["hero_action_id"])
                 except (ValueError,TypeError) as exc:
                     raise StoryRejected("Invalid model-authored editorial direction") from exc

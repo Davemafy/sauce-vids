@@ -68,3 +68,39 @@ def test_component_detail_preserves_initial_complete_result(tmp_path,monkeypatch
     bad=json.loads(json.dumps(plan["studioStage"]))
     next(k for k in bad["camera"] if k["viewScale"]>1.075)["startAt"]=events[1]["t"]
     with pytest.raises(ValueError):load_studio_stage(bad,m,source,(3840,2160),(1920,1080),30.,60)
+
+def test_wide_hero_and_supporting_component_get_native_time(tmp_path,monkeypatch):
+    """Regression fixture uses Nov 27 measured geometry/latency, not real footage."""
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/"scripts"))
+    from source_event_director import direction
+    from spatial_studio_stage import load_studio_stage
+    from customer_craft_contract import verify_plan
+    from scripts.customer_editorial import fit_duration,schedule
+    ids=["hero","support"]
+    requested={"backdrop":"muted","duration_seconds":13,"beats":[
+        {"action_id":"hero","framing":"wide","pace":"quick","purpose":"Establish complete result"},
+        {"action_id":"support","framing":"detail","pace":"readable","purpose":"Read actual changed chart"}]}
+    compiled=fit_duration(requested,ids,"hero")
+    assert compiled["duration_seconds"]==16
+    starts=schedule(compiled,ids,"hero")
+    proof={"schema":"sauce-decoded-component-v1","changedFraction":.06799,"retainedFraction":1.,"settledDifference":0.}
+    broad=rect(544,140,3248,1972)
+    events=[{"kind":"click","start":t+2.2,"end":t+2.3,"t":t+3.93,"evidence":"fixture",
+        "targetRect":rect(850,600,100,60),"resultRect":broad} for t in starts]
+    events[1].update(componentRect=rect(632,228,748,1220),componentProof=proof)
+    duration=compiled["duration_seconds"]
+    m={"cursorless":True,"duration":float(duration),"events":events,
+       "pointer_samples":[{"t":i*.1,"x":900,"y":630} for i in range(duration*10)]}
+    source=tmp_path/"source.mp4";source.write_bytes(b"fixture")
+    manifest=tmp_path/"manifest.json";manifest.write_text(json.dumps(m))
+    packet={"actualCapture":{"durationSeconds":float(duration),"resolution":[3840,2160],"nativeFps":60,
+        "pointerProvenance":{"recordedPointerTrackAvailable":True}}}
+    with patch("film_director_capabilities.build_contract",return_value=packet):
+        plan=direction(source,manifest,0,{"ids":ids,"hero":"hero","editorial":compiled})
+    stage=load_studio_stage(plan["studioStage"],m,source,(3840,2160),(1920,1080),float(duration),60)
+    ptr=np.asarray([[p["t"],p["x"],p["y"]] for p in m["pointer_samples"]])
+    metrics=verify_plan(plan,m,stage,ptr,60,duration*60)
+    assert metrics["detailEventIndices"]==[1] and metrics["heroDetailFrames"]>0
+    assert metrics["minimumResultVisible"]==metrics["heroMinimumResultVisible"]==1.
+    assert max(k.view_scale for k in stage.camera)>=1.2
+    assert stage.detail_shots[0][1]>=events[1]["t"]+.6-1e-7

@@ -192,7 +192,7 @@ def test_shortest_native_story_preserves_real_action_time_and_reading_hold(tmp_p
     a=intent()
     a["duration_seconds"]=duration
     a["beats"]=a["beats"][:count]
-    a["beats"][-1]["framing"]="detail"
+    a["beats"][-1]["framing"]="accent"
     starts=editorial.schedule(a,ids,ids[-1])
     assert starts==[.8+5*i for i in range(count)]
     assert duration-starts[-1]==pytest.approx(7.2)
@@ -218,3 +218,26 @@ def test_shortest_native_story_preserves_real_action_time_and_reading_hold(tmp_p
     assert editorial.schema(ids)["properties"]["duration_seconds"]["enum"][0]==duration
     with pytest.raises(ValueError):
         editorial.validate({**a,"duration_seconds":duration-1},ids,ids[-1])
+
+
+def test_supporting_detail_compiles_short_model_request_into_native_budget():
+    ids=IDS[:2]
+    a=intent();a["duration_seconds"]=13;a["beats"]=a["beats"][:2]
+    a["beats"][1]["framing"]="detail"
+    with pytest.raises(ValueError,match="detail travel"):
+        editorial.validate(a,ids,"a0")
+    compiled=editorial.fit_duration(a,ids,"a0")
+    assert a["duration_seconds"]==13 and compiled["duration_seconds"]==16
+    starts=editorial.schedule(compiled,ids,"a0")
+    assert compiled["duration_seconds"]-starts[-1]>=9.7-1e-6
+    assert compiled["beats"]==a["beats"]
+
+def test_nonfinal_detail_earns_time_even_with_quick_pace():
+    a=intent();a["duration_seconds"]=18
+    a["beats"][0]["framing"]="detail"
+    a["beats"][2]["framing"]="wide"
+    compiled=editorial.fit_duration(a,IDS,"a1")
+    assert compiled["duration_seconds"]==26
+    starts=editorial.schedule(compiled,IDS,"a1")
+    assert starts[1]-starts[0]>=9.
+    assert starts[2]-starts[1]>=5.

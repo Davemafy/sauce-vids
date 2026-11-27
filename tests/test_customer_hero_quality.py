@@ -87,7 +87,7 @@ def _hero_manifest(result, pointer=(1300,750), duration=30.):
             "pointer_samples":[{"t":i*.1,"x":pointer[0],"y":pointer[1]} for i in range(300)]}
 
 @pytest.mark.parametrize("rect,pointer,expected",[
-    ({"x":1000,"y":500,"width":1400,"height":800},(1300,750),1.62),
+    ({"x":1000,"y":500,"width":1400,"height":800},(1300,750),1.595),
     ({"x":560,"y":392,"width":3202,"height":851},(1100,650),1.289),
     ({"x":0,"y":0,"width":3840,"height":2160},(1100,650),1.065),
     ({"x":40,"y":1100,"width":1050,"height":700},(500,1400),None),
