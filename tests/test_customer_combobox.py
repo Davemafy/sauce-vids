@@ -67,3 +67,16 @@ def test_setup_reproduced_not_invented(monkeypatch):
     monkeypatch.setattr(c,"prepare",lambda *args:None)
     with pytest.raises(story.StoryRejected,match="not reproduced"):
         story.replay_setup(None,{"setup":setup,"url":"https://example.com/editor"})
+
+def test_direct_product_not_redirected_to_marketing_navigation(page,tmp_path,monkeypatch):
+    from contextlib import contextmanager
+    from unittest.mock import Mock
+    url="https://example.com/editor"
+    @contextmanager
+    def browser(*args,**kwargs):
+        yield page,None
+    monkeypatch.setattr(story,"browser",browser)
+    monkeypatch.setattr(story,"observed_product_entry_links",lambda *args:[{"id":"r0","label":"Templates","url":"https://example.com/templates"}])
+    conv=Mock()
+    assert story.resolve_public_product_entry(url,tmp_path,conv,"brief")==url
+    conv.ask.assert_not_called()

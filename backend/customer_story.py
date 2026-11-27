@@ -332,6 +332,14 @@ def resolve_public_product_entry(url,out,conv,creative):
         candidates=observed_product_entry_links(page,url,robots)
         receipt={'submitted_url':url,'entry_candidates':candidates,
                  'chosen_url':url,'model_selected':False}
+        # A deep public route with a witnessed product drawer and preview is
+        # already a functional surface; do not send the director into its nav.
+        if urlsplit(url).path not in ("","/") and evidence_first_enabled():
+            from backend.customer_combobox import opener,active_panel
+            if opener(page) and active_panel(page):
+                receipt["retained_reason"]="Observed local customizer and product panel"
+                save(out/'entry-route.json',receipt)
+                return url
         if not candidates:
             save(out/'entry-route.json',receipt)
             return url
