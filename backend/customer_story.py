@@ -70,6 +70,10 @@ def director_brief(brief="", *, provider="gemini"):
 
 class StoryRejected(ValueError):pass
 
+class PublicSetupUnavailable(StoryRejected):
+    """Observed public setup absent in a fresh disposable browser."""
+
+
 class LocalRadioOutcomeUnverified(StoryRejected):
     """A guarded local menu was dismissed, but the new value lacks DOM proof."""
 
@@ -722,7 +726,11 @@ def replay_setup(page,plan):
             from backend.customer_local_views import prepare
         else:
             from backend.customer_combobox import prepare
-        require(prepare(page,plan["url"],plan["setup"])==plan["setup"],"Public product setup not reproduced")
+        actual=prepare(page,plan["url"],plan["setup"])
+        if actual is None:
+            assert_local(page,plan["url"])
+            raise PublicSetupUnavailable("Public product setup not reproduced")
+        require(actual==plan["setup"],"Public product setup identity changed")
 
 def compare_outcomes(catalog,metadata,opening,out,conv,creative):
     """Witness actual individual outcomes before selecting a narrative."""
@@ -741,11 +749,39 @@ def compare_outcomes(catalog,metadata,opening,out,conv,creative):
     trial=out/"outcomes";trial.mkdir(mode=0o700)
     save(trial/"sample.json",sample)
     witnessed=[];images=[];records=[]
-    for action in sample:
+    def probes():
+        yield from sample
+        # A weak first batch can justify more observation, not looser proof.
+        # Spend at most four extra independent probes, favoring capabilities
+        # that have not yet produced a verified outcome.
+        group=lambda a:a.get("group") or a["kind"]
+        seen={group(a) for a in witnessed}
+        if len(witnessed)>=MIN_ACTIONS and (len(seen)>=2 or len({group(a) for a in catalog})<2):return
+        tried={a["id"] for a in sample}
+        unused=[a for a in catalog if a["id"] not in tried]
+        extra=diverse_candidates([a for a in unused if group(a) not in seen],4)
+        if not extra:extra=diverse_candidates(unused,4)
+        if extra:save(trial/"extra-sample.json",extra)
+        yield from extra
+    for action in probes():
+        if len(witnessed)>=8:break
         d=trial/action["id"];d.mkdir(mode=0o700)
-        with browser(metadata["url"]) as p:
-            require(p.url==metadata["url"],"Unexpected investigation route")
-            replay_setup(p,metadata)
+        with ExitStack() as session:
+            p=None
+            for attempt in range(2):
+                fresh=session.enter_context(browser(metadata["url"]))
+                require(fresh.url==metadata["url"],"Unexpected investigation route")
+                try:
+                    replay_setup(fresh,metadata)
+                except PublicSetupUnavailable:
+                    session.close()
+                    continue
+                p=fresh
+                break
+            if p is None:
+                records.append({"id":action["id"],"status":"setup-unavailable","attempts":2})
+                save(trial/"comparison.json",records)
+                continue
             before=shot(p);p.wait_for_timeout(350);steady=shot(p)
             require(image_change(arr(before),arr(steady))<=.025,"Unsettled starting state")
             old=action_panel(p,action)

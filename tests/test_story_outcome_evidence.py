@@ -160,3 +160,35 @@ def test_radio_failure_is_typed_only_after_locality_check(monkeypatch):
     guard.side_effect=ValueError("Action left local public state or hit authentication")
     with pytest.raises(ValueError,match="authentication"):
         s.apply(p,"https://example.com/",action,None,Mock())
+
+
+def test_setup_absence_retries_and_expands_weak_exploration(tmp_path,monkeypatch):
+    import json
+    from contextlib import contextmanager
+    from unittest.mock import Mock
+    import backend.customer_story as s
+    rows=[{"id":f"a{i}","kind":"option","label":str(i),"group":str(i%3)} for i in range(15)]
+    opened=[]
+    @contextmanager
+    def browser(url):
+        p=Mock();p.url=url;opened.append(p);yield p
+    monkeypatch.setattr(s,"browser",browser)
+    def setup(*args):
+        if len(opened)<=2:raise s.PublicSetupUnavailable("absent")
+    monkeypatch.setattr(s,"replay_setup",setup)
+    monkeypatch.setattr(s,"shot",lambda p:b"source")
+    monkeypatch.setattr(s,"arr",lambda b:np.zeros((8,8,3),np.uint8))
+    monkeypatch.setattr(s,"media",lambda b:b)
+    monkeypatch.setattr(s,"action_panel",lambda *a:{"x":0,"y":0,"width":8,"height":8})
+    monkeypatch.setattr(s,"apply",lambda *a:None)
+    def verify(*a,**kw):
+        if len(opened)<10:raise s.WeakVisualOutcome(.001,b"weak")
+        return b"changed",{"x":0,"y":0,"width":8,"height":8},.2,1
+    monkeypatch.setattr(s,"verify",verify)
+    conv=Mock();conv.calls=2;conv.ask.return_value="{}"
+    _,allowed=s.compare_outcomes(rows,{"url":"https://example.com/","picker":None},b"opening",tmp_path,conv,"brief")
+    records=json.loads((tmp_path/"outcomes/comparison.json").read_text())
+    assert len(opened)==13 and len(records)==12 and len(allowed)==4
+    assert records[0]["status"]=="setup-unavailable" and records[0]["attempts"]==2
+    assert len(json.loads((tmp_path/"outcomes/extra-sample.json").read_text()))==4
+    assert len(conv.ask.call_args.kwargs["media"])==8

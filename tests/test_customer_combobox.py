@@ -65,7 +65,8 @@ def test_arbitrary_opener_and_unobserved_value_fail_closed(page):
 def test_setup_reproduced_not_invented(monkeypatch):
     setup={"kind":"presentation-combobox-drawer","opener":"Theme customizer"}
     monkeypatch.setattr(c,"prepare",lambda *args:None)
-    with pytest.raises(story.StoryRejected,match="not reproduced"):
+    monkeypatch.setattr(story,"assert_local",lambda *args:None)
+    with pytest.raises(story.PublicSetupUnavailable,match="not reproduced"):
         story.replay_setup(None,{"setup":setup,"url":"https://example.com/editor"})
 
 def test_direct_product_not_redirected_to_marketing_navigation(page,tmp_path,monkeypatch):
