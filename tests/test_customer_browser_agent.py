@@ -163,3 +163,25 @@ def test_agent_uses_existing_semantic_executor_in_observation_loop(page,tmp_path
     assert len(r['actions'])==2 and all(a['control']=='semantic-capability' for a in r['actions'])
     assert r['actions'][1]['requires']==r['actions'][0]['id']
     assert all(x['delta']>.8 for x in r['proofs'])
+
+
+def test_sample_step_advertises_only_ready_action_and_binds_observed_region(page,tmp_path):
+    page.set_content('''<style>body{margin:0}ol{display:flex;gap:30px;height:50px;list-style:none}button{padding:12px}article{width:1200px;height:650px;background:#ddd}</style><div style="height:540px">Intro</div><div><ol><li><button type=button aria-current=step>Choose sample</button></li><li><button type=button>Inspect schema</button></li><li><button type=button>Use the app</button></li></ol><article>Sample table</article><p>The demo runs in your browser with sample data. Nothing is saved or sent.</p></div><script>document.querySelectorAll('button').forEach((b,i)=>b.onclick=()=>{document.querySelectorAll('button').forEach(n=>n.removeAttribute('aria-current'));b.setAttribute('aria-current','step');let r=document.querySelector('article');r.style.background=i===1?'#225588':'#773355';r.textContent=b.textContent})</script>''')
+    @contextmanager
+    def browser(url,include_robots=False):yield page,Robots()
+    class Model:
+        calls=0
+        def ask(self,prompt,**kw):
+            self.calls+=1
+            obs=json.loads(prompt.split(' Current public DOM observation: ',1)[1])
+            if self.calls==1:
+                row=next(x for x in obs['elements'] if x['name']=='Inspect schema')
+                assert row['allowed'] is None and row['blocked_reason']=='sample_result_outside_verified_view'
+                return json.dumps({'operation':'scroll_down','distance':360})
+            if self.calls==4:return json.dumps({'operation':'finish'})
+            row=next(x for x in obs['elements'] if x['name']==['Inspect schema','Use the app'][self.calls-2])
+            assert row['allowed']=='click' and row['result_region']
+            return json.dumps({'operation':'click','target':row['id'],'region':'invented'})
+    r=agent.run(page.url,tmp_path/'scout',Model(),browser,story.shot,story.media,story.verify)
+    assert len(r['actions'])==2 and r['actions'][1]['requires']==r['actions'][0]['id']
+    assert r['steps'][0]['status']=='scrolled'
