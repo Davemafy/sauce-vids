@@ -179,10 +179,32 @@ def run(url,out,conv,browser,shot,media,verify):
     from pathlib import Path
     from playwright.sync_api import TimeoutError as BrowserTimeout
     out=Path(out);out.mkdir(mode=0o700,parents=True,exist_ok=True)
-    steps=[];visited=set();actions=[];images=[];records=[];current=url;clean_start=True;opening=None;setup=None
+    steps=[];visited=set();actions=[];images=[];records=[];current=url;clean_start=True;opening=None;setup=None;recovered=False
     def save():
         (out/'graph.json').write_text(json.dumps({'submitted_url':url,'chosen_url':current,'steps':steps,'actions':actions,'proofs':records,'calls':conv.calls,'setup':setup},indent=2)+'\n')
     with ExitStack() as contexts:
+        def recover_initial_weak_result():
+            # Abandon an unsuccessful public local branch. Never retry the
+            # interaction; independently reopen the already admitted route.
+            # A verified prefix, auth/route failure, or changed original
+            # state is not recoverable by this narrow restart.
+            nonlocal p,robots,clean_start,recovered
+            if recovered or actions or not clean_start or visible_authentication_barrier(p):
+                return False
+            assert_local(p,current)
+            _,_,_,safe=observation(p,robots)
+            if not safe:return False
+            recovered=True
+            contexts.close()
+            p,robots=contexts.enter_context(browser(current,include_robots=True))
+            assert_local(p,current)
+            if setup:
+                from backend.customer_story import replay_setup
+                replay_setup(p,{'url':current,'setup':setup})
+            _,_,_,safe=observation(p,robots)
+            if not safe or image_change(arr(opening),arr(shot(p)))>.025:
+                raise StoryRejected('Recovered browser did not reproduce original opening')
+            return True
         p,robots=contexts.enter_context(browser(url,include_robots=True));current=p.url;visited.add(current)
         opening=shot(p)
         save()
@@ -241,7 +263,14 @@ def run(url,out,conv,browser,shot,media,verify):
                     records.append({'id':a['id'],'delta':delta,'result':box,'before_sha256':hashlib.sha256(steady).hexdigest(),'after_sha256':hashlib.sha256(after).hexdigest()})
                     images.extend([media(steady),media(after)])
                     entry.update(status='verified-local-result',delta=delta)
-                except (WeakVisualOutcome,StoryRejected,ValueError,BrowserTimeout) as exc:
+                except WeakVisualOutcome as exc:
+                    if recover_initial_weak_result():
+                        entry.update(status='weak-result-recovered',error=type(exc).__name__)
+                    else:
+                        clean_start=False;entry.update(status='unverified-or-blocked',error=type(exc).__name__)
+                    if visible_authentication_barrier(p):steps.append(entry);save();break
+                    assert_local(p,current)
+                except (StoryRejected,ValueError,BrowserTimeout) as exc:
                     clean_start=False;entry.update(status='unverified-or-blocked',error=type(exc).__name__)
                     if visible_authentication_barrier(p):steps.append(entry);save();break
                     assert_local(p,current)
@@ -289,7 +318,14 @@ def run(url,out,conv,browser,shot,media,verify):
                             if actions:a['requires']=actions[-1]['id']
                             actions.append(a);records.append({'id':a['id'],'delta':delta,'result':box,'before_sha256':hashlib.sha256(steady).hexdigest(),'after_sha256':hashlib.sha256(after).hexdigest()});images.extend([media(steady),media(after)]);entry.update(status='verified-local-result',delta=delta)
                         else:clean_start=False;entry['status']='observed-not-film-proof'
-                    except (WeakVisualOutcome,StoryRejected,ValueError,BrowserTimeout) as exc:
+                    except WeakVisualOutcome as exc:
+                        if recover_initial_weak_result():
+                            entry.update(status='weak-result-recovered',error=type(exc).__name__)
+                        else:
+                            clean_start=False;entry.update(status='unverified-or-blocked',error=type(exc).__name__)
+                        if visible_authentication_barrier(p):steps.append(entry);save();break
+                        assert_local(p,current)
+                    except (StoryRejected,ValueError,BrowserTimeout) as exc:
                         clean_start=False;entry.update(status='unverified-or-blocked',error=type(exc).__name__)
                         if visible_authentication_barrier(p):steps.append(entry);save();break
                         assert_local(p,current)

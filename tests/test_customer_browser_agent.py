@@ -185,3 +185,29 @@ def test_sample_step_advertises_only_ready_action_and_binds_observed_region(page
     r=agent.run(page.url,tmp_path/'scout',Model(),browser,story.shot,story.media,story.verify)
     assert len(r['actions'])==2 and r['actions'][1]['requires']==r['actions'][0]['id']
     assert r['steps'][0]['status']=='scrolled'
+
+
+def test_weak_initial_result_recovers_fresh_without_repeating_click(tmp_path):
+    visits=[]
+    html=HTML.replace("<header>",'<header><button type=button>Show summary</button>')
+    @contextmanager
+    def browser(url,include_robots=False):
+        with sync_playwright() as pw:
+            b=pw.chromium.launch(executable_path=CHROME,headless=True,args=['--no-sandbox'])
+            p=b.new_page(viewport={'width':story.W,'height':story.H})
+            p.route('**/*',lambda r:r.fulfill(status=200,content_type='text/html',body=html))
+            p.goto(url);visits.append(url)
+            try:yield p,Robots()
+            finally:b.close()
+    class Model:
+        calls=0
+        def ask(self,prompt,**kw):
+            obs=json.loads(prompt.split(' Current public DOM observation: ',1)[1]);self.calls+=1
+            if self.calls>3:return json.dumps({'operation':'finish'})
+            label=['Show summary','Show trends','View breakdown'][self.calls-1]
+            return json.dumps({'operation':'click','target':next(r['id'] for r in obs['elements'] if r['name']==label),'region':obs['result_regions'][0]['id']})
+    r=agent.run('https://example.com/',tmp_path/'scout',Model(),browser,story.shot,story.media,story.verify)
+    assert visits==['https://example.com/']*2
+    assert [s['status'] for s in r['steps']]==['weak-result-recovered','verified-local-result','verified-local-result','finished']
+    assert [a['label'] for a in r['actions']]==['Show trends','View breakdown']
+    assert r['actions'][1]['requires']==r['actions'][0]['id']
