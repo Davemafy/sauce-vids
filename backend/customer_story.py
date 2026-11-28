@@ -163,7 +163,8 @@ def validated_selection(raw,catalog):
     # keep honest variation eligible rather than inventing other controls.
     groups=lambda rows:{a.get("group") or a["kind"] for a in rows}
     sample_comparison=all(a.get("control")=="sample-choice" and a.get("source_context")=="explicit sample-data comparison" for a in actions) and len({a.get("key") for a in actions})==1
-    if (len(actions)==2 or len(groups(catalog))>=2) and len(groups(actions))<2 and not (sample_comparison or (all(a.get("control")=="observed-workspace" and a.get("source_context")=="browser-local preview comparison" for a in actions) and len({a.get("workspace") for a in actions})==1)):
+    agent_chain=all(a.get("control")=="browser-agent" for a in actions) and all(a.get("requires")==actions[i-1]["id"] for i,a in enumerate(actions) if i)
+    if (len(actions)==2 or len(groups(catalog))>=2) and len(groups(actions))<2 and not (agent_chain or sample_comparison or (all(a.get("control")=="observed-workspace" and a.get("source_context")=="browser-local preview comparison" for a in actions) and len({a.get("workspace") for a in actions})==1)):
         return None
     return {"actions":actions,"story":reason,"hero_action_id":hero}
 
@@ -542,6 +543,9 @@ def tab_result_pair(page,action):
     return {**rows[0],"tab_result_id":identity["after"],"tab_label":action["label"]}
 
 def action_panel(page,action):
+    if action.get("control")=="browser-agent":
+        from backend.customer_browser_agent import region
+        return region(page,action["region_key"])
     if action.get("control")=="observed-workspace":
         from backend.customer_observed_workspace import result_region
         return result_region(page,action["key"])
@@ -564,6 +568,9 @@ def action_panel(page,action):
     return tab_result_pair(page,action) if action["kind"]=="tab" else panel(page)
 
 def result_panel(page,old):
+    if "agent_region_key" in old:
+        from backend.customer_browser_agent import region
+        return region(page,old["agent_region_key"])
     if "workspace_key" in old:
         from backend.customer_observed_workspace import result_region
         return result_region(page,old["workspace_key"])
@@ -657,6 +664,9 @@ def exact_observed_option(scope,label):
 
 def apply(page,url,action,picker,click):
     label=action["label"]
+    if action.get("control")=="browser-agent":
+        from backend.customer_browser_agent import apply as apply_agent
+        apply_agent(page,url,action,click);return picker
     if action.get("control")=="observed-workspace":
         from backend.customer_observed_workspace import apply as apply_workspace
         apply_workspace(page,url,action,click);return picker
@@ -738,7 +748,35 @@ def explore(url,out,progress,*,request=None,brief=""):
     else:
         raise ValueError("Unknown customer director provider")
     submitted_url=url
-    url=resolve_public_product_entry(url,out,conv,creative)
+    scout_calls=0
+    from backend.agentmail_auth import session_for,test_session_active
+    if (os.getenv("SAUCE_GEMINI_EXPLORER")=="1" and provider=="claude" and request is None
+            and not test_session_active() and session_for(url) is None):
+        from backend.customer_browser_agent import run as explore_browser
+        from backend.story_outcome_evidence import require_provider_reply
+        if not os.getenv("GEMINI_API_KEY"):
+            raise StoryRejected("Gemini public explorer configured but credential unavailable")
+        scout=Conversation(out/"explorer"/"model")
+        graph=explore_browser(url,out/"explorer",scout,browser,shot,media,verify)
+        scout_calls=graph["calls"];url=graph["url"]
+        save(out/"entry-route.json",{"submitted_url":submitted_url,"chosen_url":url,"explorer_provider":"Gemini","model_calls":scout_calls,"steps":graph["steps"]})
+        if len(graph["actions"])>=MIN_ACTIONS:
+            progress("directing")
+            witnessed=graph["actions"]
+            # Only connected, independently verified browser actions reach Claude.
+            # No free-tier explorer receives authenticated customer content.
+            raw=conv.ask(creative+" Direct a meaningful connected product workflow from the following actual before/after pairs in action order. "
+                         "Use only witnessed IDs; honor each prerequisite immediately before its dependent action. "
+                         "Do not market a navigation tour or invent a capability. Abstain if the evidence lacks buyer value. "
+                         "Return JSON {ids:[...],story:'...',hero_action_id:'...'} with 2-4 actions or empty IDs to abstain. "
+                         +json.dumps(witnessed)+" Proofs: "+json.dumps(graph["proofs"]),
+                         media=tuple(graph["images"]),json_mode=True,phase="story-from-outcomes",stop_on_rate_limit=True,response_schema=story_response_schema(witnessed))
+            with browser(url) as fresh:title=fresh.title()[:140]
+            metadata={"picker":None,"title":title,"url":url,"submitted_url":submitted_url}
+            plan,calls,proofs=investigate_story(require_provider_reply(raw,conv),witnessed,metadata,graph["opening"],out,conv,creative)
+            return plan,calls+scout_calls,proofs
+    else:
+        url=resolve_public_product_entry(url,out,conv,creative)
     # A landing page cannot be silently replaced by a guessed deep route.
     # Its selected destination is reopened independently with all guards.
     with browser(url) as p:
@@ -837,7 +875,8 @@ def explore(url,out,progress,*,request=None,brief=""):
     if setup:metadata["setup"]=setup
     if evidence_first_enabled():
         raw,catalog=compare_outcomes(catalog,metadata,opening,out,conv,creative)
-    return investigate_story(raw,catalog,metadata,opening,out,conv,creative)
+    plan,calls,proofs=investigate_story(raw,catalog,metadata,opening,out,conv,creative)
+    return plan,calls+scout_calls,proofs
 
 def replay_setup(page,plan):
     if plan.get("setup"):
@@ -1168,7 +1207,10 @@ def first_action_anchor(page,plan):
     """
     first=plan["actions"][0]
     loc=None
-    if first.get("control")=="observed-workspace":
+    if first.get("control")=="browser-agent":
+        from backend.customer_browser_agent import locate
+        loc=locate(page,first)
+    elif first.get("control")=="observed-workspace":
         from backend.customer_observed_workspace import locate
         loc=locate(page,first)
     elif first.get("control")=="semantic-capability":
