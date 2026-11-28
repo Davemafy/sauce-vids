@@ -1,5 +1,10 @@
 # Sauce — living handoff for new agents and new chats
 
+## 2026-11-28 — Recovered existing AgentMail service credential
+
+Owner confirmed prior provisioning and declined duplicate setup. Recovered the documented root-only AgentMail environment file (0600), confirmed expected variable by name only; the active service did not load it. No key value read into chat, copied to GitHub, or replaced. With no active jobs observed, installed reversible systemd EnvironmentFile drop-in 98-agentmail-env.conf referencing the existing protected file and restarted the private service, PID 1591291. Health now reports ready, agentmail_configured=true, Gemini director/explorer and encoded review retained; before restart agentmail_configured=false. No new external AgentMail call, account creation, app grant, authenticated workflow or film in this pass; current provider scope not revalidated. Existing inbox verified through connected AgentMail integration, not VM runtime. Shared inbox routing and real authorized external trials remain outstanding. Prior denied mailbox allocation is not retried. No renderer or application code changes.
+
+
 ## 2026-11-28 — Owner-approved authentication on the private URL job API
 
 - [df873e0](https://github.com/Davemafy/sauce-vids/commit/df873e0bd59aa8a28c328e4ce778c00e889b2f98) and [86bcc64](https://github.com/Davemafy/sauce-vids/commit/86bcc64183f72544e03ca17758280fd71c74c9e7) add authorized URL jobs. Submit normal `POST /v1/jobs` with product `url` and a one-time `accessGrant` reference. The worker resolves the grant from its private `SAUCE_AUTH_APPROVAL_DIR`, enters an authenticating stage and passes a scoped Playwright state to the existing Gemini product director, replay, native capture and renderer. Authenticated editorial scheduling has a 15s floor and the existing 30s ceiling. Public jobs keep existing boundaries. No renderer change or public release.
