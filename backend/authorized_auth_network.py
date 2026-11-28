@@ -162,10 +162,14 @@ def provision(approval,mail,conversation):
                 except (AuthUnavailable,Error):
                     pass
                 else:
-                    return context.storage_state()
+                    state=context.storage_state()
+                    approval.check()
+                    identity.save(state)
+                    return state
             page.goto(approval.signup_url,wait_until="domcontentloaded",timeout=16000)
             state=run(page,approval,mail,conversation,network,identity=identity)
             if identity:
+                approval.check()
                 identity.save(state)
             return state
         except AuthUnavailable:

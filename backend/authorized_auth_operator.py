@@ -25,12 +25,15 @@ OBSERVE = r"""elements => elements.flatMap((e,i) => {
             [{id:'o'+k,label:o.textContent.trim().slice(0,100)}]).slice(0,30):[]}];
 }).slice(0,90)"""
 MAIL_SIGNAL = re.compile(r"\b(?:otp|one.time (?:code|password)|verification code|security code|check (?:your )?(?:e.?mail|inbox)|verify (?:your )?e.?mail|confirm (?:your )?e.?mail|magic link|send (?:a |the )?code)\b",re.I)
-AUTH_FEEDBACK = re.compile(r"\b(?:incorrect|invalid|wrong|failed|error|already (?:exists|registered|in use)|not found|required|must|too (?:short|long)|check (?:your )?(?:e.?mail|inbox)|verification code|magic link|try again|sent (?:a |the )?code)\b",re.I)
+AUTH_FEEDBACK = re.compile(r"\b(?:expired|incorrect|invalid|wrong|failed|error|already (?:exists|registered|in use)|not found|required|must|too (?:short|long)|check (?:your )?(?:e.?mail|inbox)|verification code|magic link|try again|sent (?:a |the )?code)\b",re.I)
 
 def feedback(page,sensitive):
     # Observe only short, visible authentication feedback, never field values or the entire page.
     rows=page.locator("p,span,div,[role=alert],[role=status],[aria-live]").evaluate_all(r"""elements=>elements.filter(e=>e.checkVisibility() && (!e.children.length || e.matches('[role=alert],[role=status],[aria-live]')) && !e.closest('[data-private],[data-secret],[data-sensitive]')).map(e=>(e.innerText||'').trim()).filter(t=>t.length>2 && t.length<=160).slice(0,200)""")
     return list(dict.fromkeys(masked(t,sensitive) for t in rows if AUTH_FEEDBACK.search(t)))[:8]
+
+RESEND = re.compile(r"\b(?:resend|send (?:a |the )?(?:new|another) code|request (?:a |another|new) code)\b",re.I)
+CODE_ERROR = re.compile(r"\b(?:expired|incorrect|invalid|wrong)\b",re.I)
 
 PHASES = ("login","registration","verification","onboarding","blocked","product")
 ROLES = ("email","password","code","first_name","last_name","name","workspace")
@@ -90,6 +93,7 @@ def run(page, approval, mail, conversation, network, *, identity=None):
     history = []
     clicked = set()
     mail_requested = False
+    submitted_code = False
     for _ in range(14):
         approval.check()
         network.follow_redirects()
@@ -116,6 +120,13 @@ def run(page, approval, mail, conversation, network, *, identity=None):
         screen=[masked(h.inner_text(timeout=1500)[:160],sensitive) for h in headings.all()[:8]]
         screen=list(dict.fromkeys(screen+feedback(page,sensitive)))
         mail_evidence=mail_requested or any(MAIL_SIGNAL.search(h) for h in screen) or any(field_allows(pair[0],"code") for pair in controls.values())
+        if submitted_code and any(CODE_ERROR.search(h) for h in screen):
+            code=None
+            magic_link=None
+            mail_requested=False
+            submitted_code=False
+            # Do not fetch the old message again. A new witnessed send is required.
+            network.since=None
         mail_pending=bool(network.since and mail_evidence and not code and not magic_link)
         if any(DENY.search(h) for h in screen if re.search(r"captcha|authenticator|backup code|credit card",h,re.I)):
             raise AuthUnavailable("CAPTCHA, MFA or payment requires customer action")
@@ -126,6 +137,7 @@ def run(page, approval, mail, conversation, network, *, identity=None):
                 "only when mail_pending is true. An ordinary password login does not establish email verification. "
                 "Read observed errors; if credentials are rejected, choose observed registration rather than polling mail. "
                 "Fields marked filled already contain a value. Replan from the changed page, not repeated identical actions. "
+                "If a verification code expired or was rejected, use an observed resend control and request a fresh code. "
                 "Then fill the verification field with the code role before clicking Verify. Never submit an empty "
                 "verification field. Use open_product after signing in and finishing onboarding. Stop for external identity, CAPTCHA, "
                 "separate MFA, payment, consent or real customer information. Use empty strings for unused fields. "
@@ -178,7 +190,8 @@ def run(page, approval, mail, conversation, network, *, identity=None):
                 loc.select_option(index=int(option[1:]),timeout=2500)
             elif operation=="click" and row["tag"] not in ("input","select"):
                 otp_controls=[key for key,pair in controls.items() if field_allows(pair[0],"code")]
-                if row["tag"]!="a" and otp_controls:
+                resend=bool(otp_controls and RESEND.search(row["label"]))
+                if row["tag"]!="a" and otp_controls and not resend:
                     if (not code or len(otp_controls)!=1 or
                             page.locator(CONTROLS).nth(int(otp_controls[0][1:])).input_value()!=code):
                         history.append("verification blocked: retrieve the email and fill its code first")
@@ -202,7 +215,12 @@ def run(page, approval, mail, conversation, network, *, identity=None):
                     writes_before=network.writes
                     network.click(loc,row["tag"]!="a",bindings)
                     if network.writes>writes_before:
-                        mail_requested=bool(MAIL_SIGNAL.search(row["label"]) and (network.last_write_status or 0)<400)
+                        if resend:
+                            code=magic_link=None
+                            submitted_code=False
+                        elif otp_controls and code:
+                            submitted_code=True
+                        mail_requested=bool((resend or MAIL_SIGNAL.search(row["label"])) and (network.last_write_status or 0)<400)
                 except Error:
                     history.append("control interaction failed; reobserving")
                     continue

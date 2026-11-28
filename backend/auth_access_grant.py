@@ -1,4 +1,6 @@
 """Owner-installed, job-bound access grants. The API receives a reference."""
+from dataclasses import dataclass, field
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -64,3 +66,49 @@ def load_session(approval):
         return {"cookies": cookies, "origins": origins}
     except (OSError, TypeError, ValueError, AttributeError, KeyError):
         raise AuthUnavailable("Transferred state must match the approved HTTPS application") from None
+
+
+@dataclass(frozen=True)
+class ScopedApproval(Approval):
+    """New owner-issued scope; a legacy job grant is never upgraded implicitly."""
+    scope_id: str = ""
+    scope_digest: str = field(default="", repr=False)
+
+    def check(self):
+        super().check()
+        try:
+            record = read_private(directory() / f"{self.scope_id}.scope.json", 16384)
+            if _scope_digest(record) != self.scope_digest:
+                raise AuthUnavailable("Reusable access scope changed or revoked")
+        except (OSError, TypeError, ValueError):
+            raise AuthUnavailable("Reusable access scope unavailable or revoked") from None
+        return self
+
+
+def _scope_digest(record):
+    return sha256(json.dumps(record, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def load_scope(scope_id, url, job_id):
+    """Only an explicitly provisioned new scope can authorize a new job.
+
+    The same private scope must remain present and unchanged on each check.
+    Deleting it revokes future operations. Never fall back to a legacy grant.
+    """
+    if not all(isinstance(x, str) and re.fullmatch("[a-f0-9]{24}", x)
+               for x in (scope_id, job_id)) or scope_id == job_id:
+        raise AuthUnavailable("Invalid distinct scope and execution identities")
+    try:
+        path = directory() / f"{scope_id}.scope.json"
+        record = read_private(path, 16384)
+        if not isinstance(record, dict) or record.get("scope_id") != scope_id or record.get("version") != 1:
+            raise AuthUnavailable("Invalid reusable access scope")
+        if record.get("purpose") != "authorized-demo-auth" or record.get("approval", {}).get("mode") != "discover":
+            raise AuthUnavailable("Scope must explicitly authorize adaptive demo authentication")
+        details = record["approval"]
+        if any(k in details for k in ("job_id", "scope_id", "scope_digest")) or details.get("product_url") != url:
+            raise AuthUnavailable("Scope does not authorize this application")
+        return ScopedApproval(**details, job_id=job_id, scope_id=scope_id,
+                              scope_digest=_scope_digest(record)).check()
+    except (OSError, TypeError, ValueError, KeyError, AttributeError):
+        raise AuthUnavailable("Reusable access scope unavailable or malformed") from None

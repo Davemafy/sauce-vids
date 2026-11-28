@@ -51,9 +51,12 @@ def worker(job_id):
         job=JOBS[job_id]
         access=nullcontext()
         if job.get("authorized_access"):
-            from backend.auth_access_grant import load,load_session
+            from backend.auth_access_grant import load,load_scope,load_session
             stage("authenticating")
-            approval=load(job_id,job["url"])
+            approval=(load_scope(job["access_scope"],job["url"],job_id)
+                      if job.get("access_scope") else load(job_id,job["url"]))
+            if job.get("access_scope") and approval.scope_digest != job.get("access_scope_digest"):
+                raise AuthUnavailable("Access scope changed after admission")
             if approval.mode=="session":
                 state=load_session(approval)
             else:
@@ -263,6 +266,17 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(brief,str) or len(brief)>240 or audio not in ("auto","clean","narrated"):
                 return self.send_json(422,{"error":"Invalid brief or audio preference"})
             access_grant=body.get("accessGrant")
+            access_scope=body.get("accessScope")
+            if access_scope is not None and access_grant is not None:
+                return self.send_json(422,{"error":"Choose exactly one access reference"})
+            if access_scope is not None:
+                from backend.auth_access_grant import load_scope
+                if intent!="product_demo":
+                    return self.send_json(422,{"error":"Authorized access requires product demo intent"})
+                try:
+                    scope_approval=load_scope(access_scope,url,secrets.token_hex(12))
+                except AuthUnavailable:
+                    return self.send_json(422,{"error":"Authorized access scope unavailable for this URL"})
             if access_grant is not None:
                 from backend.auth_access_grant import load
                 if intent!="product_demo":
@@ -281,7 +295,8 @@ class Handler(BaseHTTPRequestHandler):
                 job_id=access_grant or secrets.token_hex(12)
                 JOBS[job_id]={"id":job_id,"url":url,"brief":brief,"audio":audio,
                               "cursor_pack":cursor_pack,"intent":intent,"stage":"queued",
-                              "authorized_access":access_grant is not None,
+                              "authorized_access":access_grant is not None or access_scope is not None,
+                              **({"access_scope":access_scope,"access_scope_digest":scope_approval.scope_digest} if access_scope is not None else {}),
                               "status":"queued","created_at":time.time(),
                               "updated_at":time.time(),"stage_started_at":time.time()}
                 save(job_id)

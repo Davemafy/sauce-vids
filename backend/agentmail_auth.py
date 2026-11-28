@@ -115,8 +115,8 @@ class AgentMail:
     def identity(self,approval):
         approval.check()
         inbox=os.getenv("AGENTMAIL_INBOX_ID")
-        if inbox is None and approval.mode=="register":
-            return self.create(approval)
+        if inbox is None:
+            raise AuthUnavailable("Configure the existing Sauce demo inbox; allocation is disabled")
         if not isinstance(inbox,str) or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",inbox):
             raise AuthUnavailable("Configure the existing Sauce demo inbox")
         return inbox
@@ -140,7 +140,7 @@ class Links(HTMLParser):
         if tag=="a":
             self.urls.extend(v for k,v in attrs if k=="href" and isinstance(v,str))
 
-VERIFY_SUBJECT=re.compile(r"\b(verif(?:y|ication)|confirm|one.time|otp|security code|activation|sign.in code)\b",re.I)
+VERIFY_SUBJECT=re.compile(r"\b(verif(?:y|ication)|confirm|one.time|otp|security code|activation|sign.in code|magic link|sign.in link|log.in link)\b",re.I)
 CODE=re.compile(r"\b(?:verification|confirmation|security|one.time|sign.in|activation|otp)\s+(?:code|password|pin)(?:\s+is)?\s*[:\s-]+([0-9]{4,8})\b",re.I)
 
 def matches_verification_envelope(message,inbox,approval,since):
