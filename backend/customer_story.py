@@ -233,10 +233,21 @@ def clear_welcome(page,url):
             and dialog.locator('form,input,textarea,select,a[href],[data-private],[data-secret],[data-sensitive]').count()==0,
             "Opening dialog needs user decision")
     buttons=dialog.locator('button:visible')
-    require(buttons.count()==1,"Ambiguous opening dialog")
-    btn=buttons.first
-    require(" ".join(btn.inner_text().split()).lower() in ("get started","continue","close","dismiss","skip","got it"),
-            "Unsupported opening dialog action")
+    if buttons.count()==1:
+        btn=buttons.first
+        require(" ".join(btn.inner_text().split()).lower() in ("get started","continue","close","dismiss","skip","got it"),
+                "Unsupported opening dialog action")
+    else:
+        # A tutorial with an explicit optional skip is not a consent choice.
+        # Only admit a unique skip and ordinary tour navigation companions.
+        labels=[" ".join((b.get_attribute("aria-label") or b.inner_text()).split()).lower() for b in buttons.all()]
+        require(2<=len(labels)<=4 and re.search(r"\btour\b",text,re.I)
+                and re.search(r"\b(?:skip (?:it|the tour|this tour) at any time|optional tour|tour is optional)\b",text,re.I)
+                and labels.count("skip tour")==1
+                and all(x in ("skip tour","close tour","next","back","previous") for x in labels),
+                "Ambiguous opening dialog")
+        btn=buttons.nth(labels.index("skip tour"))
+        require(btn.is_enabled() and btn.evaluate("e=>!e.form && e.getAttribute('aria-disabled')!=='true' && !e.closest('[inert]')"),"Optional tour skip unavailable")
     btn.click(timeout=3500)
     dialog.wait_for(state="hidden",timeout=3500)
     assert_local(page,url)

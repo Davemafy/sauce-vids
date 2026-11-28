@@ -126,3 +126,22 @@ def test_inspection_scroll_before_actions_is_replayable_opening(page,tmp_path):
         before=story.shot(page);old=story.action_panel(page,a)
         story.apply(page,page.url,a,None,lambda h,l:h.click())
         assert story.verify(page,page.url,before,old,story.shot)[2]>.8
+
+
+def test_public_local_stepper_without_named_result_or_site_selectors(page,tmp_path):
+    page.set_content('''<style>body{margin:0}ol{display:flex;gap:30px;height:50px;list-style:none}button{padding:12px}article{width:1200px;height:650px;background:#ddd}</style><div><ol><li><button type=button aria-current=step>Choose sample</button></li><li><button type=button>Inspect schema</button></li><li><button type=button>Use the app</button></li></ol><article>Sample table</article><p>The demo runs in your browser with sample data. Nothing is saved or sent.</p></div><script>document.querySelectorAll('button').forEach((b,i)=>b.onclick=()=>{document.querySelectorAll('button').forEach(n=>n.removeAttribute('aria-current'));b.setAttribute('aria-current','step');let r=document.querySelector('article');r.style.background=i===1?'#225588':'#773355';r.textContent=b.textContent})</script>''')
+    @contextmanager
+    def browser(url,include_robots=False):yield page,Robots()
+    class Model:
+        calls=0
+        def ask(self,prompt,**kw):
+            self.calls+=1;obs=json.loads(prompt.split(' Current public DOM observation: ',1)[1])
+            if self.calls>2:return json.dumps({'operation':'finish'})
+            row=next(x for x in obs['elements'] if x['name']==['Inspect schema','Use the app'][self.calls-1]);assert row['allowed']=='click'
+            return json.dumps({'operation':'click','target':row['id'],'region':row['result_region']})
+    r=agent.run(page.url,tmp_path/'scout',Model(),browser,story.shot,story.media,story.verify)
+    assert len(r['actions'])==2 and all(a['stepper'] for a in r['actions'])
+    assert r['actions'][1]['requires']==r['actions'][0]['id']
+    page.locator('p').evaluate("e=>e.textContent='Cloud project with external storage'")
+    obs,_,_,_=agent.observation(page,Robots())
+    assert all(r['allowed'] is None for r in obs['elements'] if r['role']=='button')
