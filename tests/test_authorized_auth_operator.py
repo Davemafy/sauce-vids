@@ -65,7 +65,12 @@ def test_real_chromium_registration_code_onboarding_and_session(monkeypatch):
             self.end_headers()
             self.wfile.write((body or "").encode())
         def do_POST(self):
-            received.append((self.path,parse_qs(self.rfile.read(int(self.headers["Content-Length"])).decode())))
+            fields=parse_qs(self.rfile.read(int(self.headers["Content-Length"])).decode())
+            received.append((self.path,fields))
+            required={"/register": "contact","/verify":"otp","/setup":"team"}[self.path]
+            if not fields.get(required) or self.path=="/verify" and fields["otp"]!=[otp]:
+                self.send_error(400)
+                return
             landing={"/register":"/check","/verify":"/onboard","/setup":"/app"}[self.path]
             self.send_response(303)
             self.send_header("Location",landing)
@@ -83,6 +88,7 @@ def test_real_chromium_registration_code_onboarding_and_session(monkeypatch):
         steps=iter((
             ("click","login","New profile",""),("fill","registration","Work email","email"),
             ("fill","registration","password","password"),("click","registration","Get started",""),
+            ("click","verification","Validate",""),
             ("verify_email","verification",None,""),("fill","verification","Verification code","code"),
             ("click","verification","Validate",""),("fill","onboarding","Workspace title","workspace"),
             ("click","onboarding","Continue",""),

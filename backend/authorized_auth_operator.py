@@ -102,7 +102,8 @@ def run(page, approval, mail, conversation, network):
                 "Identify login, registration, email verification, onboarding, signed-in product or blockers. "
                 "Use only current control IDs. For registration or ordinary onboarding fill fields using roles "
                 +", ".join(ROLES)+". Select only listed option IDs. Call verify_email after submitting verification, "
-                "and open_product after signing in and finishing onboarding. Stop for external identity, CAPTCHA, "
+                "then fill the verification field with the code role before clicking Verify. Never submit an empty "
+                "verification field. Use open_product after signing in and finishing onboarding. Stop for external identity, CAPTCHA, "
                 "separate MFA, payment, consent or real customer information. Use empty strings for unused fields. "
                 +json.dumps({"controls":[v[1] for v in controls.values()],"history":history[-6:],"screen":screen,
                              "mail_pending":bool(network.since and not code and not magic_link),"code_ready":bool(code)}))
@@ -146,6 +147,12 @@ def run(page, approval, mail, conversation, network):
             elif operation=="select" and row["tag"]=="select" and any(o["id"]==option for o in controls[target][1]["options"]):
                 loc.select_option(index=int(option[1:]),timeout=2500)
             elif operation=="click" and row["tag"] not in ("input","select"):
+                otp_controls=[key for key,pair in controls.items() if field_allows(pair[0],"code")]
+                if row["tag"]!="a" and otp_controls:
+                    if (not code or len(otp_controls)!=1 or
+                            page.locator(CONTROLS).nth(int(otp_controls[0][1:])).input_value()!=code):
+                        history.append("verification blocked: retrieve the email and fill its code first")
+                        continue
                 attempt=(page.url,row["tag"],row["label"],row["href"])
                 if attempt in clicked:
                     history.append("submission already attempted")
