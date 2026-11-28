@@ -124,3 +124,38 @@ def test_real_chromium_registration_code_onboarding_and_session(monkeypatch,tmp_
     finally:
         http.shutdown()
         http.server_close()
+
+
+def test_failed_password_login_replans_before_mail(monkeypatch,tmp_path):
+    monkeypatch.setattr(auth,"checked_url",lambda url:url)
+    monkeypatch.setattr(network,"checked_url",lambda url:url)
+    monkeypatch.setattr(network,"validate_public_url",lambda url:url)
+    monkeypatch.setenv("SAUCE_AUTH_APPROVAL_DIR",str(tmp_path));tmp_path.chmod(0o700)
+    form='<form method="post" action="/login"><input type="email" aria-label="Email" name="email"><input type="password" aria-label="Password" name="password"><button>Sign in</button></form><a href="/join">Sign up</a>'
+    class HTTP(BaseHTTPRequestHandler):
+        def log_message(self,*args):pass
+        def reply(self,status,body):
+            self.send_response(status);self.send_header("Content-Type","text/html");self.end_headers();self.wfile.write(body.encode())
+        def do_GET(self):self.reply(200,form)
+        def do_POST(self):self.reply(401,form+"<p>Invalid email or password</p>")
+    http=ThreadingHTTPServer(("127.0.0.1",0),HTTP);Thread(target=http.serve_forever,daemon=True).start()
+    class Mail:
+        def identity(self,approval):return "fixture@agentmail.to"
+        def messages(self,*args):pytest.fail("Ordinary login rejection must not trigger mailbox polling")
+    class Gemini:
+        i=0
+        def ask(self,prompt,**kw):
+            obs=json.loads(prompt[prompt.index('{"controls"'):]);self.i+=1
+            operation,label,role={1:("fill","Email","email"),2:("fill","Password","password"),3:("click","Sign in",""),4:("verify_email",None,""),5:("stop",None,"")}[self.i]
+            if self.i>=4:
+                assert obs["mail_pending"] is False and obs["last_write_status"]==401
+                assert "Invalid email or password" in obs["screen"]
+            if self.i==5:assert any("No observed email challenge" in v for v in obs["history"])
+            target=next((r["id"] for r in obs["controls"] if r["label"]==label),"")
+            return json.dumps(dict(operation=operation,phase="login",target=target,role=role,option=""))
+    try:
+        a=grant(f"http://127.0.0.1:{http.server_port}",mode="discover",auth_posts=(),navigation_urls=())
+        gemini=Gemini()
+        with pytest.raises(auth.AuthUnavailable,match="customer action"):network.provision(a,Mail(),gemini)
+        assert gemini.i==5
+    finally:http.shutdown();http.server_close()

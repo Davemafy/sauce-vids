@@ -16,6 +16,7 @@ class AuthNetwork:
         self.verification_link=None
         self.since=None
         self.writes=0
+        self.last_write_status=None
         self.armed=False
         self.navigation_armed=False
         self.bindings=()
@@ -74,8 +75,7 @@ class AuthNetwork:
                     return route.abort()
                 self.armed=False
                 self.writes+=1
-                if self.since is None:
-                    self.since=utcnow()
+                self.since=utcnow()
             elif req.method not in ("GET","HEAD"):
                 return route.abort()
             elif navigation and url not in self.routes and url!=self.verification_link:
@@ -85,6 +85,8 @@ class AuthNetwork:
                 self.routes.add(url)
             fetched=route.fetch(max_redirects=0,max_retries=0,timeout=10000)
             try:
+                if req.method=="POST":
+                    self.last_write_status=fetched.status
                 if 300<=fetched.status<400:
                     destination=urljoin(url,fetched.headers.get("location",""))
                     if fetched.status not in (301,302,303) or not navigation or not self.may_visit(destination):
