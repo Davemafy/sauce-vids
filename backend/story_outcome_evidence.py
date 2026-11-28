@@ -92,5 +92,7 @@ def require_provider_reply(raw,conversation):
     status=last.get("http_status")
     provider="Claude" if getattr(conversation,"provider_name",None)=="Claude" else "Gemini"
     if status in (429,503,404) or (provider=="Claude" and status):
-        raise RuntimeError(f"{provider} returned HTTP {status}")
+        category=last.get("provider_error_category")
+        suffix=f" ({category})" if category in {"billing","context_limit","media","model","request_validation","unclassified"} else ""
+        raise RuntimeError(f"{provider} returned HTTP {status}{suffix}")
     raise RuntimeError(f"{provider} did not return evidence-led direction")

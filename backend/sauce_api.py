@@ -88,6 +88,8 @@ def worker(job_id):
                 safe_message="The AI service is at its usage limit. Try again later."
             elif any(f"{provider} returned HTTP 404" in description for provider in ("Gemini","Claude")):
                 safe_message="The configured AI model is unavailable."
+            elif any(f"{provider} returned HTTP 400" in description for provider in ("Gemini","Claude")):
+                safe_message=("The AI provider reports a billing problem." if "(billing)" in description else "The AI provider rejected its request. This is not a website discovery failure.")
             elif last_stage=="inspecting":
                 safe_message="Sauce could not inspect this public website."
             elif last_stage=="capturing":

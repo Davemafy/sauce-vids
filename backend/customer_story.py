@@ -801,6 +801,8 @@ def explore(url,out,progress,*,request=None,brief=""):
         graph=explore_browser(url,out/"explorer",scout,browser,shot,media,verify)
         scout_calls=graph["calls"];url=graph["url"]
         save(out/"entry-route.json",{"submitted_url":submitted_url,"chosen_url":url,"explorer_provider":scout.provider_name,"model_calls":scout_calls,"steps":graph["steps"]})
+        if len(graph["actions"])<MIN_ACTIONS and any(step.get("status")=="provider-unavailable" for step in graph["steps"]):
+            require_provider_reply(None,scout)
         if len(graph["actions"])>=MIN_ACTIONS:
             progress("directing")
             witnessed=graph["actions"]

@@ -4,6 +4,7 @@ import json
 import os
 import re
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 from backend.curious_showcase import Conversation
 
@@ -141,8 +142,32 @@ class ClaudeConversation(Conversation):
         req = Request("https://api.anthropic.com/v1/messages", data=json.dumps(payload).encode(),
                       headers={"x-api-key": key, "anthropic-version": "2023-06-01",
                                "Content-Type": "application/json"}, method="POST")
-        with urlopen(req, timeout=40) as response:
-            answer = json.load(response)
+        try:
+            with urlopen(req, timeout=40) as response:
+                answer = json.load(response)
+        except HTTPError as exc:
+            # Record only a fixed error category, never a raw provider response,
+            # request contents, headers or account data.
+            category = "unclassified"
+            try:
+                body = json.loads(exc.read(16384))
+                error = body.get("error", {})
+                message = str(error.get("message", "")).lower()
+                if any(x in message for x in ("credit balance", "insufficient credits", "billing", "purchase credits")):
+                    category = "billing"
+                elif "context" in message and any(x in message for x in ("length", "limit", "long")):
+                    category = "context_limit"
+                elif any(x in message for x in ("image", "base64", "media type")):
+                    category = "media"
+                elif "model" in message and any(x in message for x in ("not found", "not supported", "invalid", "unavailable")):
+                    category = "model"
+                elif "invalid" in message or "required" in message:
+                    category = "request_validation"
+            except (ValueError, TypeError, AttributeError, OSError):
+                pass
+            if attempt is not None:
+                attempt["provider_error_category"] = category
+            raise
         text = "".join(part["text"] for part in answer["content"] if part["type"] == "text")
         if not text.strip():
             raise ValueError("Empty Claude response")

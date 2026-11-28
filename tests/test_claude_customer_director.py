@@ -94,3 +94,20 @@ def test_v2_director_prioritizes_witnessed_end_state_over_cosmetic_motion():
                  "shortest executable duration", "viewport shrink/white flashes",
                  "final after-image", "Do not infer motion or audio from stills"):
         assert rule in prompt
+
+
+def test_provider_error_category_is_fixed_and_not_raw_body(monkeypatch,tmp_path):
+    from urllib.error import HTTPError
+    from backend.story_outcome_evidence import require_provider_reply
+    import pytest
+    monkeypatch.setenv('ANTHROPIC_API_KEY','fixture')
+    def fail(req,timeout):
+        raise HTTPError(req.full_url,400,'bad request',{},io.BytesIO(json.dumps({'error':{'message':'Credit balance too low; private example detail'}}).encode()))
+    monkeypatch.setattr(claude,'urlopen',fail)
+    c=claude.ClaudeConversation(tmp_path)
+    r=c.ask('Synthetic observation',phase='public-browser-exploration',json_mode=True,max_attempts=1)
+    assert r is None and c.calls==1
+    assert c.data['attempts'][0]['provider_error_category']=='billing'
+    assert 'private example detail' not in json.dumps(c.data)
+    with pytest.raises(RuntimeError,match='Claude returned HTTP 400 \\(billing\\)'):
+        require_provider_reply(r,c)
