@@ -177,7 +177,7 @@ def validated_selection(raw,catalog):
     # keep honest variation eligible rather than inventing other controls.
     groups=lambda rows:{a.get("group") or a["kind"] for a in rows}
     sample_comparison=all(a.get("control")=="sample-choice" and a.get("source_context")=="explicit sample-data comparison" for a in actions) and len({a.get("key") for a in actions})==1
-    agent_chain=all(a.get("control")=="browser-agent" for a in actions) and all(a.get("requires")==actions[i-1]["id"] for i,a in enumerate(actions) if i)
+    agent_chain=all(a.get("control") in ("browser-agent","local-primitive") for a in actions) and all(a.get("requires")==actions[i-1]["id"] for i,a in enumerate(actions) if i)
     if (len(actions)==2 or len(groups(catalog))>=2) and len(groups(actions))<2 and not (agent_chain or sample_comparison or (all(a.get("control")=="observed-workspace" and a.get("source_context")=="browser-local preview comparison" for a in actions) and len({a.get("workspace") for a in actions})==1)):
         return None
     return {"actions":actions,"story":reason,"hero_action_id":hero}
@@ -578,6 +578,9 @@ def tab_result_pair(page,action):
     return {**rows[0],"tab_result_id":identity["after"],"tab_label":action["label"]}
 
 def action_panel(page,action):
+    if action.get("control")=="local-primitive":
+        from backend.customer_local_operator import panel as primitive_panel
+        return primitive_panel(page,action)
     if action.get("control")=="browser-agent":
         from backend.customer_browser_agent import region
         return region(page,action["region_key"])
@@ -644,6 +647,9 @@ def intersection(old,new,*,minimum_fraction=.18):
     return box
 
 def verify(page,url,before,old,snapshot,*,allow_localized=False,proof_metrics=None):
+    if "primitive_target" in old:
+        from backend.customer_local_operator import verify as primitive_verify
+        return primitive_verify(page,url,before,old,snapshot)
     from backend.agentmail_auth import test_session_active,check_test_surface
     assert_local(page,url)
     if test_session_active():check_test_surface(page)
@@ -700,6 +706,9 @@ def exact_observed_option(scope,label):
 
 def apply(page,url,action,picker,click):
     label=action["label"]
+    if action.get("control")=="local-primitive":
+        from backend.customer_local_operator import apply as apply_primitive
+        apply_primitive(page,url,action,click);return picker
     if action.get("control")=="browser-agent":
         from backend.customer_browser_agent import apply as apply_agent
         apply_agent(page,url,action,click);return picker
@@ -795,7 +804,7 @@ def explore(url,out,progress,*,request=None,brief=""):
         if explorer_provider=="gemini":
             if not os.getenv("GEMINI_API_KEY"):
                 raise StoryRejected("Gemini public explorer configured but credential unavailable")
-            scout=Conversation(out/"explorer"/"model")
+            scout=Conversation(out/"explorer"/"model",call_budget=8)
         else:
             scout=ClaudeConversation(out/"explorer"/"model")
         graph=explore_browser(url,out/"explorer",scout,browser,shot,media,verify)
@@ -960,6 +969,11 @@ def prepared_browser(plan, *, display=None):
                 session.close()
                 if attempt:raise
                 continue
+            if any(a.get("control")=="local-primitive" for a in plan["actions"]):
+                from backend.customer_local_operator import admitted,isolate
+                require(admitted(p),"Local sample admission changed before replay")
+                isolate(p)
+                p.wait_for_timeout(350)
             yield p
             return
 
@@ -1260,7 +1274,10 @@ def first_action_anchor(page,plan):
     """
     first=plan["actions"][0]
     loc=None
-    if first.get("control")=="browser-agent":
+    if first.get("control")=="local-primitive":
+        from backend.customer_local_operator import locate
+        loc=locate(page,first)
+    elif first.get("control")=="browser-agent":
         from backend.customer_browser_agent import locate
         loc=locate(page,first)
     elif first.get("control")=="observed-workspace":

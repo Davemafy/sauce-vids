@@ -96,7 +96,8 @@ class Conversation:
     provider_name = "Gemini"
     model_name = MODEL_NAME
 
-    def __init__(self, directory, *, request=None):
+    def __init__(self, directory, *, request=None, call_budget=MAX_CALLS):
+        self.call_budget = call_budget
         self.directory = Path(directory)
         self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.file = self.directory / "conversation.json"
@@ -165,7 +166,7 @@ class Conversation:
         return [preferred] if self.succeeded else list(dict.fromkeys((preferred, fallback)))
 
     def ask(self, prompt, *, media=(), json_mode=False, phase, stop_on_rate_limit=False, response_schema=None, max_attempts=None):
-        limit=MAX_CALLS if max_attempts is None else min(MAX_CALLS,self.calls+max_attempts)
+        limit=self.call_budget if max_attempts is None else min(self.call_budget,self.calls+max_attempts)
         models = self._models()
         contents = [{"role": t["role"], "parts": [{"text": t["text"]}]}
                     for t in self.data["turns"] if phase!="public-browser-exploration"]
