@@ -87,3 +87,51 @@ def test_real_chromium_form_filled_without_submit(approval):
         p.locator('form').evaluate("e=>e.insertAdjacentHTML('beforeend','<input type=checkbox>')")
         with pytest.raises(auth.AuthUnavailable):auth.fill_registration(p,approval,"test@agentmail.to","local-only")
         b.close()
+
+
+def test_capture_checks_authorized_surface_before_and_after_screenshot(approval,monkeypatch):
+    """Synthetic in-memory product fixture; no account, mail or network auth."""
+    from backend import customer_story as story
+    from backend.product_explorer import CHROME
+    from playwright.sync_api import sync_playwright
+    from unittest.mock import Mock
+    with sync_playwright() as pw:
+        b=pw.chromium.launch(executable_path=str(CHROME),headless=True,args=["--no-sandbox"])
+        try:
+            p=b.new_page()
+            p.route("**/*",lambda r:r.fulfill(status=200,content_type="text/html",
+                body="<main><h1>Test workspace</h1><p>Fixture product</p></main>"))
+            p.goto(approval.product_url)
+            raw=story.public_shot
+            spy=Mock(wraps=raw)
+            monkeypatch.setattr(story,"public_shot",spy)
+            with auth.approved_session(approval,{"cookies":[],"origins":[]}):
+                assert story.shot(p).startswith(b"\x89PNG")
+                spy.assert_called_once()
+                p.locator("h1").evaluate("e=>e.textContent='Session expired'")
+                with pytest.raises(auth.AuthUnavailable,match="marker"):
+                    story.shot(p)
+                assert spy.call_count==1
+                p.locator("h1").evaluate("e=>e.textContent='Test workspace'")
+                def changed_during_capture(page):
+                    image=raw(page)
+                    page.locator("main").evaluate("e=>e.insertAdjacentHTML('beforeend','<input type=password>')")
+                    return image
+                monkeypatch.setattr(story,"public_shot",changed_during_capture)
+                with pytest.raises(auth.AuthUnavailable,match="Sensitive"):
+                    story.shot(p)
+            assert auth.session_for(approval.product_url) is None
+        finally:b.close()
+
+
+def test_public_screenshot_does_not_enter_private_session_checks(monkeypatch):
+    from backend import customer_story as story
+    from unittest.mock import Mock
+    page=Mock()
+    capture=Mock(return_value=b"fixture-image")
+    check=Mock()
+    monkeypatch.setattr(story,"public_shot",capture)
+    monkeypatch.setattr(auth,"check_test_surface",check)
+    assert story.shot(page)==b"fixture-image"
+    capture.assert_called_once_with(page)
+    check.assert_not_called()

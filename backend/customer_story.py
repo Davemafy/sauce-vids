@@ -15,7 +15,7 @@ import numpy as np
 from PIL import ImageGrab
 from playwright.sync_api import sync_playwright
 from backend.curious_sequence import (discover,exact,open_picker,dismiss_picker,
-    safe_label,panels,shot,arr,assert_local,OPTIONS,analytic_name,analytic_option,
+    safe_label,panels,shot as public_shot,arr,assert_local,OPTIONS,analytic_name,analytic_option,
     analytic_triggers,option_items,native_analytic_picker,native_analytic_handle,assert_applied_option)
 from backend.curious_showcase import Conversation,MAX_CALLS
 from backend.curious_interactive import parse
@@ -95,6 +95,19 @@ class WeakVisualOutcome(StoryRejected):
         super().__init__("No substantial settled visible product transformation")
         self.delta=delta
         self.after=after
+
+def require_test_surface(page):
+    """Revalidate the existing approved test surface before evidence capture."""
+    from backend.agentmail_auth import test_session_active,check_test_surface
+    if test_session_active():
+        check_test_surface(page)
+
+def shot(page):
+    require_test_surface(page)
+    image=public_shot(page)
+    require_test_surface(page)
+    return image
+
 
 def require(ok,reason):
     if not ok:raise StoryRejected(reason)
@@ -345,6 +358,7 @@ def browser(url,*,display=None,include_robots=False):
                 p.wait_for_timeout(6000)
                 require(p.evaluate("()=>[innerWidth,innerHeight,devicePixelRatio]")==[W,H,D],"Wrong native viewport")
             if visible_authentication_barrier(p):raise ProductAccessRequired("Authenticated product access required")
+            if test_state is not None:check_test_surface(p)
             clear_welcome(p,actual)
             if test_state is not None:check_test_surface(p)
             yield (p,robots) if include_robots else p
@@ -632,6 +646,7 @@ def verify(page,url,before,old,snapshot,*,allow_localized=False,proof_metrics=No
         page.wait_for_timeout(250)
         if test_session_active():check_test_surface(page)
         settled=snapshot(page)
+        if test_session_active():check_test_surface(page)
         assert_local(page,url)
         if image_change(pixels(after),pixels(settled))>.025:continue
         a=pixels(before)[y:y+h,x:x+w];b=pixels(after)[y:y+h,x:x+w]
@@ -1312,7 +1327,9 @@ def capture(url,plan,proofs,out):
         observe_aperture()
         # This is before FFmpeg starts. Never use Playwright screenshots during recording.
         p.mouse.move(W*.25,H*.2);browser_pixels=shot(p);p.wait_for_timeout(1800)
+        require_test_surface(p)
         opening=screen(display)
+        require_test_surface(p)
         require(image_change(arr(browser_pixels),opening)<.035,"Native viewport misaligned")
         # Observe only: the cursor moves toward this real DOM control once
         # the native source clock starts. No screenshots during recording.
@@ -1375,7 +1392,7 @@ def capture(url,plan,proofs,out):
             move(*pos)
             opening_pointer_approach(move,wait,opening_anchor)
             for i,(action,expected) in enumerate(zip(plan["actions"],proofs)):
-                wait(starts[i]);started=now();before=span("before_screen",lambda:screen(display));old=span("before_panel",lambda:action_panel(p,action))
+                wait(starts[i]);require_test_surface(p);started=now();before=span("before_screen",lambda:screen(display));require_test_surface(p);old=span("before_panel",lambda:action_panel(p,action))
                 observe_aperture()
                 components=span("before_components",lambda:observed_components(p,old))
                 current=span("apply_total",lambda:apply(p,url,action,current,click))
@@ -1383,8 +1400,11 @@ def capture(url,plan,proofs,out):
                 try:
                     after,box,delta,t=verify(p,url,before,old,lambda _:screen(display),allow_localized=evidence_first_enabled() and action["kind"]=="option")
                 except StoryRejected as exc:
+                    require_test_surface(p)
+                    rejected=screen(display)
+                    require_test_surface(p)
                     persist_screen(out/f"{i}-rejected-before.png",before)
-                    persist_screen(out/f"{i}-rejected-after.png",screen(display))
+                    persist_screen(out/f"{i}-rejected-after.png",rejected)
                     save(out/"replay-rejection.json",{"index":i,"action_id":action["id"],"reason":str(exc)})
                     raise
                 require(delta>=expected["delta"]*.6,"Replay lost investigated payoff")
@@ -1405,7 +1425,7 @@ def capture(url,plan,proofs,out):
                 events.append(result_event)
                 observe_aperture()
                 pending_proof.append((i,before,after))
-            wait(duration-1);enc.wait(timeout=20);require(enc.returncode==0,"Native recording failed")
+            wait(duration-1);require_test_surface(p);enc.wait(timeout=20);require_test_surface(p);require(enc.returncode==0,"Native recording failed")
         finally:
             if enc.poll() is None:enc.terminate();enc.wait(timeout=10)
             save(out/"native-operation-timing.json",operations)
