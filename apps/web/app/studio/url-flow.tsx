@@ -40,7 +40,7 @@ const titles:Record<string,string>={
 const details:Record<string,string>={
  queued:"Your request was accepted. Waiting for a free capture slot.",
  inspecting:"Reading real page structure, visible controls, and design signals.",
- directing:"One AI call decides whether this product can be filmed faithfully.",
+ directing:"The director evaluates what can be shown faithfully.",
  capturing:"Recording real scrolling, pointer motion, and visible UI changes.",
  rendering:"Encoding the continuous browser recording into your playable film.",
 };
@@ -79,6 +79,18 @@ export function UrlFlowScreen(){
 
  useEffect(()=>{
   let live=true;
+  const suggestedUrl = new URLSearchParams(window.location.search).get("url");
+  if (suggestedUrl && suggestedUrl.length <= 2048) {
+    try {
+      const suggested = new URL(suggestedUrl);
+      if (["https:", "http:"].includes(suggested.protocol) && !suggested.username &&
+          !suggested.password && suggested.hostname.includes(".")) {
+        suggested.search = "";
+        suggested.hash = "";
+        setUrl(suggested.toString());
+      }
+    } catch { /* Ignore malformed deep links. */ }
+  }
   const shared=new URLSearchParams(window.location.search).get("job");
   const previous=shared&&/^[a-f0-9]{24}$/.test(shared)?shared:(sessionStorage.getItem("sauce-url-job")||recentFilmIds()[0]);
   if(previous&&/^[a-f0-9]{24}$/.test(previous)){
@@ -202,7 +214,7 @@ export function UrlFlowScreen(){
     </div>
     <aside className={s.introAside}>Real screens.<br/>Directed motion.<br/>No invented demos.</aside>
    </div>
-   <div className={s.card}>
+   <div className={s.workzone}><div className={s.workLeft}><div className={s.card}>
     <div className={s.cardHead}><strong>Start with a link</strong><span>Private pilot</span></div>
     <form className={s.urlForm} onSubmit={begin}>
      <label htmlFor="source-url">Product website</label>
@@ -241,10 +253,11 @@ export function UrlFlowScreen(){
       <button type="submit" disabled={authBusy||!code.trim()}>{authBusy?"Checking…":"Unlock"}</button>
      </div>
     </form>}
-    {unlocked&&<div className={s.connected}><i aria-hidden="true">✓</i> Private worker connected <span>·</span> One AI direction call per job</div>}
+    {unlocked&&<div className={s.connected}><i aria-hidden="true">✓</i> Private worker connected <span>·</span> Connected to the private render service</div>}
     {authLoading&&<p role="status" className={s.fieldNote}>Checking pilot access…</p>}
    </div>
    {error&&<div className={s.error} role="alert">{error}</div>}
+   </div><div className={s.workRight}>
    {!showProgress&&!jobId&&<div className={s.idle}>
     <div className={s.idleFrames} aria-hidden="true"><span/><span/><span/></div>
     <h2>From a link to a film.</h2>
@@ -309,8 +322,11 @@ export function UrlFlowScreen(){
     {failed&&<><h2>We couldn't complete this cut.</h2><p>{job?.message||"The attempt ended before Sauce produced a verified video. Nothing was published."}</p><div className={s.notice}>Try another accessible public URL. If this site requires sign-in or blocks automated browsers, Sauce cannot capture it anonymously.</div></>}
     <button type="button" className={s.another} onClick={clearJob}>↻ Make another film</button>
    </section>}
+   </div></div>
+   <section id="film-library" aria-label="Film library">
    <FilmLibrary authorized={unlocked} activeId={jobId} refreshKey={(jobId||"")+":"+(job?.stage||"")+":"+(job?.status||"")} onOpen={openSavedFilm}/>
-   <footer className={s.footer}><span>Made with Sauce</span><span>One direction call. Real browser capture. Human-reviewed output.</span></footer>
+   </section>
+   <footer className={s.footer}><span>Made with Sauce</span><span>Real browser capture. Evidence before publication.</span></footer>
   </main>
  </div>;
 }

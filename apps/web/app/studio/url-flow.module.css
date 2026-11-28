@@ -129,3 +129,71 @@
 .filmOptions label{min-width:0}
 .filmOptions input,.filmOptions select{display:block;width:100%;min-width:0;box-sizing:border-box;margin-top:6px;padding:10px 11px;border:1px solid #413733;border-radius:8px;background:#201a18;color:#f4e9e0;font:inherit}
 @media (max-width:540px){.filmOptions{grid-template-columns:1fr;gap:5px}}
+
+/* Premium production desk: form and verification remain the original real job flow. */
+.shell{--bg:#141716;--surface:#1d201e;--stroke:#393e38;--text:#f7f3e8;--warm:#e8af7b}
+.topbar{background:#181b19;padding-inline:clamp(20px,4.5vw,85px);border-bottom-color:#ffffff23}
+.main{max-width:1660px;padding:clamp(35px,4.5vw,68px) clamp(20px,4.5vw,85px) 70px}
+.intro{margin-bottom:36px;align-items:end;border-bottom:1px solid #ffffff25;padding-bottom:28px}
+.intro h1{font-size:clamp(48px,4.8vw,81px);max-width:1100px;font-weight:650;margin:13px 0 11px}
+.intro h1 em{color:#e8b689}
+.introAside{color:#b5c2b1;border-left:1px solid #858d776c}
+.workzone{display:grid;grid-template-columns:minmax(365px,.84fr) minmax(0,1.42fr);gap:18px;align-items:stretch}
+.workLeft,.workRight{min-width:0}
+.workLeft{display:flex;flex-direction:column}
+.card{border-radius:12px;background:#212520;border-color:#50514b;padding:27px;box-shadow:0 16px 45px #0003;flex:1}
+.cardHead>span{background:#403d31;border-color:#817455;color:#e4c58d;font-size:10px;letter-spacing:.06em;font-weight:780}
+.formRow{display:flex;flex-direction:column;gap:12px}
+.formRow input{background:#141915;border-color:#656359;font-size:16px}
+.formRow button{width:100%;justify-content:space-between;background:#efb584;min-height:52px;padding:0 20px}
+.filmOptions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin-top:25px;padding-top:20px;border-top:1px solid #ffffff20}
+.filmOptions label:first-child{grid-column:1/-1}
+.filmOptions input,.filmOptions select{padding:13px 11px;min-height:47px;background:#151915;border-color:#5b594e}
+.fieldNote{font-size:12px;color:#a5aaa1;margin-top:19px}
+.access{align-items:flex-start;flex-direction:column;padding-top:25px;margin-top:30px}
+.access strong{font-size:14px}
+.access p{font-size:12px}
+.accessRow{width:100%;flex:unset}
+.accessRow button{background:#f1b988}
+.connected{border-top:1px solid #ffffff1c;margin-top:30px;padding-top:22px;font-size:12px}
+.workRight .idle,.workRight .production,.workRight .result{margin-top:0;min-height:600px;height:100%;border-color:#56574b;border-radius:12px;background:#1c211d}
+.workRight .idle{background-color:#242a24;background-image:radial-gradient(circle at 50% 48%,#44483b 0%,#252a25 36%,#1b1f1b 75%);padding:45px}
+.workRight .idleFrames{transform:perspective(900px) rotateX(8deg) scale(1.25);margin:0 0 70px}
+.workRight .idle h2{font-size:clamp(31px,3vw,50px);max-width:460px}
+.workRight .idle p{max-width:420px;color:#b8b8a9;font-size:15px}
+.workRight .idleSteps span{font-size:11px;background:#2d322c;color:#d3c7b7}
+.workRight .production{padding:35px;justify-content:space-around}
+.workRight .productionMain{gap:26px}
+.workRight .frames{width:40%}
+.workRight .result{padding:35px}
+.workRight .result h2{margin:25px 0 13px}
+#film-library{scroll-margin-top:40px}
+.shell .outputLinks a{border-radius:6px}
+@media(max-width:1080px){
+ .workzone{grid-template-columns:minmax(315px,.85fr) minmax(0,1.15fr)}
+ .card{padding:21px}
+ .filmOptions{grid-template-columns:1fr;gap:10px}
+ .filmOptions label:first-child{grid-column:auto}
+ .workRight .idle,.workRight .production,.workRight .result{min-height:650px}
+}
+@media(max-width:800px){
+ .intro{align-items:flex-start}
+ .workzone{grid-template-columns:1fr}
+ .workRight .idle,.workRight .production,.workRight .result{min-height:410px}
+ .workRight .idle{padding:50px 20px}
+ .workRight .idleFrames{margin-bottom:35px;transform:perspective(800px) rotateX(8deg)}
+ .filmOptions{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .filmOptions label:first-child{grid-column:1/-1}
+ .access{margin-top:20px}
+}
+@media(max-width:540px){
+ .main{padding:34px 16px 50px}
+ .intro{margin-bottom:22px;padding-bottom:21px}
+ .intro h1{font-size:clamp(42px,11vw,58px)}
+ .card{padding:17px}
+ .filmOptions{grid-template-columns:1fr}
+ .filmOptions label:first-child{grid-column:auto}
+ .workRight .idle,.workRight .production,.workRight .result{min-height:400px}
+ .workRight .production{padding:19px}
+ .workRight .result{padding:20px}
+}
