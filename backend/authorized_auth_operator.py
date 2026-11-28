@@ -72,9 +72,11 @@ def field_allows(row, role):
     return typ=="text" and role in ("first_name","last_name","name","workspace")
 
 
-def run(page, approval, mail, conversation, network):
+def run(page, approval, mail, conversation, network, *, identity=None):
     """The network gate owns approved writes, redirects and secret link admission."""
-    inbox, secret, code, magic_link = None, password(), None, None
+    inbox=identity.inbox if identity else None
+    secret=identity.password if identity else password()
+    code=magic_link=None
     from playwright.sync_api import Error
     history = []
     clicked = set()
@@ -88,11 +90,17 @@ def run(page, approval, mail, conversation, network):
                 pass
             else:
                 state = page.context.storage_state()
-                if network.writes and (state.get("cookies") or state.get("origins")):
+                if (network.writes or identity and identity.state) and (state.get("cookies") or state.get("origins")):
                     return state
         if page.locator(CHALLENGE).count():
             raise AuthUnavailable("CAPTCHA, MFA or payment requires customer action")
         sensitive=(inbox,secret,code,magic_link)
+        links=page.locator("a[href]").evaluate_all(r"""rows=>rows.slice(0,300)
+            .filter(e=>e.checkVisibility() &&
+              /\b(sign[ -]?(in|up)|log[ -]?in|register|create (an )?account|new profile|continue|onboard)\b/i
+                .test(e.getAttribute('aria-label') || e.innerText))
+            .map(e=>e.href)""")
+        network.admit_links(links)
         controls=observed(page,network.routes,sensitive)
         headings=page.locator("h1:visible,h2:visible,[role=status]:visible,[role=alert]:visible")
         screen=[masked(h.inner_text(timeout=1500)[:160],sensitive) for h in headings.all()[:8]]
@@ -136,7 +144,7 @@ def run(page, approval, mail, conversation, network):
             role,option=decision.get("role"),decision.get("option")
             if operation=="fill" and role in ROLES and field_allows(row,role):
                 if role=="email" and inbox is None:
-                    inbox=mail.create(approval)
+                    inbox=mail.identity(approval) if hasattr(mail,"identity") else mail.create(approval)
                 values={"email":inbox,"password":secret,"code":code,"first_name":approval.first_name,
                         "last_name":approval.last_name,"name":approval.first_name+" "+approval.last_name,
                         "workspace":"Sauce Demo"}
@@ -159,7 +167,16 @@ def run(page, approval, mail, conversation, network):
                     continue
                 clicked.add(attempt)
                 try:
-                    network.click(loc,row["tag"]!="a")
+                    bindings=()
+                    if approval.mode=="discover" and row["tag"]!="a":
+                        current_values={page.locator(CONTROLS).nth(int(key[1:])).input_value()
+                            for key,(candidate,_) in controls.items()
+                            if candidate["tag"]=="input" and any(field_allows(candidate,r) for r in ("email","password","code"))}
+                        if code and code in current_values:
+                            bindings=(code,)
+                        elif inbox and inbox in current_values:
+                            bindings=(inbox,secret) if secret in current_values else (inbox,)
+                    network.click(loc,row["tag"]!="a",bindings)
                 except Error:
                     history.append("control interaction failed; reobserving")
                     continue

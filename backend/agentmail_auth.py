@@ -62,14 +62,14 @@ class Approval:
             raise AuthUnavailable("Explicit test-account, terms and test-data authorization required")
         now=utcnow();expiry=stamp(self.expires_at)
         if not now<expiry<=now+timedelta(hours=24):raise AuthUnavailable("Authorization expired or too broad")
-        if self.mode not in ("register","session"):
+        if self.mode not in ("register","discover","session"):
             raise AuthUnavailable("Unsupported access grant mode")
         routes=(self.signup_url,self.product_url,*self.auth_posts,*self.navigation_urls)
         for u in routes:checked_url(u)
         if ((self.mode=="register" and not self.auth_posts) or len(self.auth_posts)>8
                 or len(self.navigation_urls)>16 or any(origin(u)!=origin(self.signup_url) for u in routes)):
             raise AuthUnavailable("Authentication must use explicit same-origin endpoints")
-        if ((self.mode=="register" and not self.sender_domains) or len(self.sender_domains)>4 or
+        if ((self.mode!="session" and not self.sender_domains) or len(self.sender_domains)>4 or
             any(not re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)+",s) for s in self.sender_domains)):
             raise AuthUnavailable("Exact verification sender domains required")
         if any(not re.fullmatch(r"/[A-Za-z0-9/_-]{1,100}",p) or "//" in p or ".." in p for p in self.verification_url_paths):
@@ -112,6 +112,15 @@ class AgentMail:
         if not isinstance(email,str) or email!=ident or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",email):
             raise AuthUnavailable("Invalid dedicated inbox")
         return email
+    def identity(self,approval):
+        approval.check()
+        inbox=os.getenv("AGENTMAIL_INBOX_ID")
+        if inbox is None and approval.mode=="register":
+            return self.create(approval)
+        if not isinstance(inbox,str) or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",inbox):
+            raise AuthUnavailable("Configure the existing Sauce demo inbox")
+        return inbox
+
     def messages(self,inbox,since):
         return self._call("GET","inboxes/"+quote(inbox,safe="")+"/messages",
              params={"limit":20,"after":since.isoformat(),"include_spam":"false",
@@ -131,38 +140,48 @@ class Links(HTMLParser):
         if tag=="a":
             self.urls.extend(v for k,v in attrs if k=="href" and isinstance(v,str))
 
-VERIFY_SUBJECT=re.compile(r"\b(verif(?:y|ication)|confirm|one.time|security code|activation|sign.in code)\b",re.I)
-CODE=re.compile(r"\b(?:verification|confirmation|security|one.time|sign.in|activation)\s+(?:code|password|pin)(?:\s+is)?\s*[:\s-]+([0-9]{4,8})\b",re.I)
+VERIFY_SUBJECT=re.compile(r"\b(verif(?:y|ication)|confirm|one.time|otp|security code|activation|sign.in code)\b",re.I)
+CODE=re.compile(r"\b(?:verification|confirmation|security|one.time|sign.in|activation|otp)\s+(?:code|password|pin)(?:\s+is)?\s*[:\s-]+([0-9]{4,8})\b",re.I)
+
+def matches_verification_envelope(message,inbox,approval,since):
+    """Reject unrelated shared-mailbox messages before fetching a body."""
+    approval.check()
+    if message.get("inbox_id")!=inbox or "received" not in message.get("labels",[]):return False
+    if set(message.get("labels",[]))&{"spam","trash","blocked","unauthenticated"}:return False
+    if not isinstance(message.get("from"),str):return False
+    sender=parseaddr(message["from"])[1].lower().rsplit("@",1)
+    if len(sender)!=2 or sender[-1] not in approval.sender_domains:return False
+    if inbox.lower() not in {parseaddr(v)[1].lower() for v in message.get("to",[]) if isinstance(v,str)}:return False
+    try:
+        received=stamp(message["created_at"]);sent=stamp(message["timestamp"])
+    except (KeyError,AuthUnavailable):return False
+    now=utcnow()
+    if not since<=received<=now+timedelta(seconds=10) or not since-timedelta(seconds=30)<=sent<=now+timedelta(seconds=10):return False
+    subject=message.get("subject","")
+    if not isinstance(subject,str) or not VERIFY_SUBJECT.search(subject):return False
+    return True
 
 def parse_verification(message,inbox,approval,since):
     """Never give email body to a model; refuse ambiguous or off-origin tokens."""
-    approval.check()
-    if message.get("inbox_id")!=inbox or "received" not in message.get("labels",[]):return None
-    if set(message.get("labels",[]))&{"spam","trash","blocked","unauthenticated"}:return None
-    if not isinstance(message.get("from"),str):return None
-    sender=parseaddr(message["from"])[1].lower().rsplit("@",1)
-    if len(sender)!=2 or sender[-1] not in approval.sender_domains:return None
-    if inbox.lower() not in {parseaddr(v)[1].lower() for v in message.get("to",[]) if isinstance(v,str)}:return None
-    try:
-        received=stamp(message["created_at"]);sent=stamp(message["timestamp"])
-    except (KeyError,AuthUnavailable):return None
-    now=utcnow()
-    if not since<=received<=now+timedelta(seconds=10) or not since-timedelta(seconds=30)<=sent<=now+timedelta(seconds=10):return None
+    if not matches_verification_envelope(message,inbox,approval,since):
+        return None
     subject=message.get("subject","")
-    if not isinstance(subject,str) or not VERIFY_SUBJECT.search(subject):return None
     text=message.get("extracted_text") or message.get("text") or ""
     html=message.get("extracted_html") or message.get("html") or ""
     if not isinstance(text,str) or not isinstance(html,str) or len(text)+len(html)>100000:return None
     codes=set(CODE.findall(text))
     # Some authentic messages put the verification code alone in the subject.
     codes.update(CODE.findall(subject))
+    codes.update(re.findall(r"\bOTP(?: code)?(?: is)?\s*[:\s-]+([0-9]{4,8})\b",text,re.I))
     links=Links();links.feed(html)
     candidates=set()
     for url in links.urls+re.findall(r'https://[^\s<>"\']+',text):
         try:
             p=urlsplit(url)
             if (p.scheme=="https" and not p.username and not p.password and not p.fragment
-                and origin(url)==origin(approval.signup_url) and p.path in approval.verification_url_paths
+                and origin(url)==origin(approval.signup_url)
+                and (p.path in approval.verification_url_paths or approval.mode=="discover"
+                     and re.search(r"(?i)(verify|confirm|activate|magic|callback)",p.path))
                 and bool(p.query) and len(url)<=2048):
                 candidates.add(url)
         except ValueError:continue
@@ -180,6 +199,8 @@ def wait_verification(mail,inbox,approval,since,*,timeout=90,sleep=time.sleep):
             ident=row.get("message_id")
             if not isinstance(ident,str) or len(ident)>512 or ident in seen:continue
             seen.add(ident)
+            if not matches_verification_envelope(row,inbox,approval,since):
+                continue
             msg=mail.message(inbox,ident)
             v=parse_verification(msg,inbox,approval,since)
             if v:matches.append(v)
@@ -292,7 +313,7 @@ def provision(approval,mail):
                 raise AuthUnavailable("Challenge requires human completion")
             # Validate form before spending an inbox allocation.
             unique_field(p,'input[type="email"]');unique_field(p,'input[type="password"]')
-            inbox=mail.create(approval);secret=password();button=fill_registration(p,approval,inbox,secret)
+            inbox=mail.identity(approval);secret=password();button=fill_registration(p,approval,inbox,secret)
             since=utcnow();armed=True;button.click(timeout=5000)
             p.wait_for_timeout(1200)
             if p.url!=approval.product_url:

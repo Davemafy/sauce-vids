@@ -135,3 +135,19 @@ def test_public_screenshot_does_not_enter_private_session_checks(monkeypatch):
     assert story.shot(page)==b"fixture-image"
     capture.assert_called_once_with(page)
     check.assert_not_called()
+
+
+
+def test_shared_inbox_filters_envelope_before_fetching_body(approval,monkeypatch):
+    monkeypatch.setenv("AGENTMAIL_INBOX_ID","test@agentmail.to")
+    assert auth.AgentMail(api_key="fixture").identity(approval)=="test@agentmail.to"
+    inbound=message()
+    unrelated={**inbound,"message_id":"other","from":"notifications@other.example"}
+    verified={**inbound,"message_id":"correct"}
+    class Mail:
+        def messages(self,*args):return [unrelated,verified]
+        def message(self,inbox,ident):
+            assert ident=="correct"
+            return inbound
+    assert auth.wait_verification(Mail(),inbound["inbox_id"],approval,
+                                  auth.utcnow()-timedelta(seconds=1)).kind=="code"

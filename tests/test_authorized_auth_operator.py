@@ -44,9 +44,13 @@ def test_job_bound_session_transfer(tmp_path,monkeypatch):
         load_session(approved)
 
 
-def test_real_chromium_registration_code_onboarding_and_session(monkeypatch):
+@pytest.mark.parametrize("mode",("register","discover"))
+def test_real_chromium_registration_code_onboarding_and_session(monkeypatch,tmp_path,mode):
     monkeypatch.setattr(auth,"checked_url",lambda url:url)
+    monkeypatch.setattr(network,"checked_url",lambda url:url)
     monkeypatch.setattr(network,"validate_public_url",lambda url:url)
+    monkeypatch.setenv("SAUCE_AUTH_APPROVAL_DIR",str(tmp_path))
+    tmp_path.chmod(0o700)
     received=[]
     pages={
         "/login":'<h1>Join the space</h1><a href="/join">New profile</a>',
@@ -84,6 +88,7 @@ def test_real_chromium_registration_code_onboarding_and_session(monkeypatch):
     monkeypatch.setattr("backend.authorized_auth_operator.wait_verification",lambda *a:auth.Verification("code",otp))
     class Mail:
         def create(self,approval):return email
+        def identity(self,approval):return email
     class Gemini:
         steps=iter((
             ("click","login","New profile",""),("fill","registration","Work email","email"),
@@ -102,12 +107,20 @@ def test_real_chromium_registration_code_onboarding_and_session(monkeypatch):
             target=next((r["id"] for r in controls if r["label"]==label),"")
             return json.dumps(dict(operation=operation,phase=phase,target=target,role=role,option=""))
     try:
-        state=network.provision(grant(f"http://127.0.0.1:{http.server_port}"),Mail(),Gemini())
+        kwargs={"mode":"discover","auth_posts":(),"navigation_urls":()} if mode=="discover" else {}
+        approval=grant(f"http://127.0.0.1:{http.server_port}",**kwargs)
+        state=network.provision(approval,Mail(),Gemini())
         assert [path for path,_ in received]==["/register","/verify","/setup"]
         assert received[0][1]["contact"]==[email]
         assert received[1][1]["otp"]==[otp]
         assert received[2][1]["team"]==["Sauce Demo"]
         assert state["cookies"][0]["name"]=="access"
+        if mode=="discover":
+            class NoDecisions:
+                def ask(self,*a,**kw):pytest.fail("Reusable session should not reauthenticate")
+            assert network.provision(approval,Mail(),NoDecisions())["cookies"][0]["name"]=="access"
+            assert len(received)==3
+            assert all(p.stat().st_mode&0o777==0o600 for p in tmp_path.glob("*.identity"))
     finally:
         http.shutdown()
         http.server_close()
