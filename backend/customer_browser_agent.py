@@ -165,8 +165,14 @@ def run(url,out,conv,browser,shot,media,verify):
                     elif dest in visited:entry['status']='already-visited'
                     else:
                         visited.add(dest)
+                        # Each guarded browser owns a sync Playwright lifecycle.
+                        # Close the old context before starting a new one; never nest
+                        # sync_playwright() inside its own running asyncio loop.
+                        contexts.close()
                         try:new,rb=contexts.enter_context(browser(dest,include_robots=True))
-                        except (ValueError,BrowserTimeout) as exc:entry.update(status='route-rejected',error=type(exc).__name__)
+                        except (ValueError,BrowserTimeout) as exc:
+                            entry.update(status='route-rejected',error=type(exc).__name__)
+                            steps.append(entry);save();break
                         else:
                             p,robots=new,rb;current=p.url;visited.add(current);opening=shot(p);actions=[];records=[];images=[];clean_start=True;entry['status']='navigated'
                 else:

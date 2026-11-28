@@ -78,3 +78,27 @@ def test_navigation_reobserves_destination_without_guessed_url(page,tmp_path):
     r=agent.run(page.url,tmp_path/'scout',Gemini(),browser,story.shot,story.media,story.verify)
     assert r['url']=='https://example.com/demo' and r['calls']==2
     assert r['steps'][0]['status']=='navigated'
+
+
+def test_navigation_closes_actual_sync_browser_before_opening_next(tmp_path):
+    events=[]
+    @contextmanager
+    def fresh(url,include_robots=False):
+        with sync_playwright() as pw:
+            b=pw.chromium.launch(executable_path=CHROME,headless=True,args=['--no-sandbox'])
+            p=b.new_page(viewport={'width':story.W,'height':story.H})
+            p.route('https://example.com/**',lambda r:r.fulfill(status=200,content_type='text/html',body=HTML))
+            p.goto(url);events.append(('open',url))
+            try:yield p,Robots()
+            finally:b.close();events.append(('close',url))
+    class Model:
+        calls=0
+        def ask(self,prompt,**kw):
+            self.calls+=1
+            obs=json.loads(prompt.split(' Current public DOM observation: ',1)[1])
+            if self.calls==1:return json.dumps({'operation':'navigate','target':next(r['id'] for r in obs['elements'] if r['name']=='Interactive demo')})
+            assert obs['path']=='/demo'
+            return json.dumps({'operation':'finish'})
+    r=agent.run('https://example.com/',tmp_path/'scout',Model(),fresh,story.shot,story.media,story.verify)
+    assert r['url']=='https://example.com/demo'
+    assert events==[('open','https://example.com/'),('close','https://example.com/'),('open','https://example.com/demo'),('close','https://example.com/demo')]
