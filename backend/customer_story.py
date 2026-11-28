@@ -98,9 +98,9 @@ class WeakVisualOutcome(StoryRejected):
 
 def require_test_surface(page):
     """Revalidate the existing approved test surface before evidence capture."""
-    from backend.agentmail_auth import test_session_active,check_test_surface
+    from backend.agentmail_auth import test_session_active,check_film_surface
     if test_session_active():
-        check_test_surface(page)
+        check_film_surface(page)
 
 def shot(page):
     require_test_surface(page)
@@ -677,20 +677,20 @@ def verify(page,url,before,old,snapshot,*,allow_localized=False,proof_metrics=No
     if "primitive_target" in old:
         from backend.customer_local_operator import verify as primitive_verify
         return primitive_verify(page,url,before,old,snapshot)
-    from backend.agentmail_auth import test_session_active,check_test_surface
+    from backend.agentmail_auth import test_session_active,check_film_surface
     assert_local(page,url)
-    if test_session_active():check_test_surface(page)
+    if test_session_active():check_film_surface(page)
     new=result_panel(page,old);box=intersection(old,new,minimum_fraction=.04 if "tab_result_id" in old else (.09 if "workspace_key" in old else (.07 if "sample_choice_key" in old else .18)))
     x,y,w,h=(round(box[k]) for k in ("x","y","width","height"))
     weak=None
     for _ in range(3):
         page.wait_for_timeout(500)
-        if test_session_active():check_test_surface(page)
+        if test_session_active():check_film_surface(page)
         after=snapshot(page);t=time.monotonic()
         page.wait_for_timeout(250)
-        if test_session_active():check_test_surface(page)
+        if test_session_active():check_film_surface(page)
         settled=snapshot(page)
-        if test_session_active():check_test_surface(page)
+        if test_session_active():check_film_surface(page)
         assert_local(page,url)
         if image_change(pixels(after),pixels(settled))>.025:continue
         a=pixels(before)[y:y+h,x:x+w];b=pixels(after)[y:y+h,x:x+w]
@@ -824,8 +824,10 @@ def explore(url,out,progress,*,request=None,brief=""):
     from backend.agentmail_auth import session_for,test_session_active
     explorer_provider=os.getenv("SAUCE_PUBLIC_EXPLORER_PROVIDER") or ("gemini" if os.getenv("SAUCE_GEMINI_EXPLORER")=="1" else "off")
     require(explorer_provider in ("off","gemini","claude"),"Unknown public explorer provider")
+    authorized=test_session_active()
+    if authorized:session_for(url)
     if (explorer_provider!="off" and request is None
-            and not test_session_active() and session_for(url) is None):
+            and (not authorized or explorer_provider=="gemini")):
         from backend.customer_browser_agent import run as explore_browser
         from backend.story_outcome_evidence import require_provider_reply
         if explorer_provider=="gemini":
@@ -851,7 +853,8 @@ def explore(url,out,progress,*,request=None,brief=""):
                 "Use a shorter witnessed prefix or abstain if the goal result is absent. "
             ) if objective else ""
             # Only connected, independently verified browser actions reach the director.
-            # No free-tier explorer receives authenticated customer content.
+            # Authenticated scouting requires an explicit model-processing authorization
+            # and remains on the independently checked synthetic demo surface.
             raw=conv.ask(creative+" Direct a meaningful connected product workflow from the following actual before/after pairs in action order. "
                          "Use only witnessed IDs; honor each prerequisite immediately before its dependent action. "
                          "Do not market a navigation tour or invent a capability. Abstain if the evidence lacks buyer value. "

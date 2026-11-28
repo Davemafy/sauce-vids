@@ -242,3 +242,39 @@ def test_model_schema_only_offers_executable_current_choices(page,tmp_path):
 
     r=agent.run(page.url,tmp_path/'scout',Model(),browser,story.shot,story.media,story.verify)
     assert [action["label"] for action in r["actions"]]==["Show trends","View breakdown"]
+
+
+def test_authorized_session_adaptive_read_only_and_private_evidence(page,tmp_path,monkeypatch):
+    from datetime import timedelta
+    from hashlib import sha256
+    from backend import agentmail_auth as auth
+    monkeypatch.setattr(auth,"validate_public_url",lambda url:url)
+    monkeypatch.setenv("AGENTMAIL_INBOX_ID","fixture@agentmail.to")
+    a=auth.Approval(job_id="a"*24,signup_url=page.url,product_url=page.url,sender_domains=(),
+        expires_at=(auth.utcnow()+timedelta(hours=1)).isoformat(),first_name="Demo",last_name="Tester",
+        auth_posts=(),session_marker="Observed product result",test_account_authorized=True,
+        terms_reviewed=True,test_data_only=True,model_processing_authorized=True,mode="session")
+    @contextmanager
+    def browser(url,include_robots=False):
+        assert url==a.product_url;yield page,Robots()
+    class Gemini:
+        calls=0
+        def ask(self,prompt,**kw):
+            self.calls+=1
+            assert kw["phase"]=="authorized-browser-exploration"
+            obs=json.loads(prompt.split(" Current authorized demo DOM observation: ",1)[1])
+            assert all(r["allowed"]!="navigate" for r in obs["elements"])
+            assert "fixture@agentmail.to" not in prompt
+            if self.calls>2:return json.dumps({"operation":"finish"})
+            label=["Show trends","View breakdown"][self.calls-1]
+            return json.dumps({"operation":"click","target":next(r["id"] for r in obs["elements"] if r["name"]==label),"region":obs["result_regions"][0]["id"]})
+    with auth.approved_session(a,{"cookies":[],"origins":[]}):
+        out=tmp_path/"scout";r=agent.run(page.url,out,Gemini(),browser,story.shot,story.media,story.verify)
+        assert len(r["actions"])==2
+        for proof in r["proofs"]:
+            for suffix in ("before","after"):
+                frame=out/"verified-frames"/(proof["id"]+"-"+suffix+".png")
+                assert frame.stat().st_mode&0o777==0o600
+                assert sha256(frame.read_bytes()).hexdigest()==proof[suffix+"_sha256"]
+        page.locator("main").evaluate("e=>e.insertAdjacentHTML('beforeend','<p>fixture@agentmail.to</p>')")
+        with pytest.raises(auth.AuthUnavailable,match="identity"):agent.observation(page,Robots())

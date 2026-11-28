@@ -277,6 +277,16 @@ def check_test_surface(page,approval=None):
         markers=[e for e in page.get_by_text(approval.session_marker,exact=True).all() if e.is_visible()]
         if len(markers)!=1:raise AuthUnavailable("Signed-in test product marker not observed")
 
+def check_film_surface(page):
+    """Confirm the authorized product and reject visible login identity before capture."""
+    check_test_surface(page)
+    inbox=os.getenv("AGENTMAIL_INBOX_ID")
+    if inbox and (any(loc.is_visible() for loc in page.get_by_text(inbox,exact=False).all())
+                  or page.locator("input:visible,textarea:visible").evaluate_all(
+                      "(els,identity)=>els.some(e=>String(e.value||'').toLowerCase().includes(identity.toLowerCase()))",inbox)):
+        raise AuthUnavailable("Demo login identity is present on the product surface")
+
+
 def provision(approval,mail):
     """Single authorized signup; direct same-origin email/password forms only."""
     from playwright.sync_api import sync_playwright
