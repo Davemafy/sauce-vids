@@ -77,6 +77,15 @@ def _has_numeric_enum(node):
     return False
 
 
+def phase_needs_json_schema(node):
+    """Use JSON Schema for nullable/abstention enum values, too."""
+    if isinstance(node,dict):
+        return "" in node.get("enum",[]) or any(phase_needs_json_schema(v) for v in node.values())
+    if isinstance(node,list):
+        return any(phase_needs_json_schema(v) for v in node)
+    return False
+
+
 def _json_schema(node):
     """Translate the existing OpenAPI-style contract to JSON Schema.
 
@@ -128,7 +137,7 @@ class Conversation:
         if json_mode:
             config["responseMimeType"] = "application/json"
         if response_schema is not None:
-            if _has_numeric_enum(response_schema):
+            if _has_numeric_enum(response_schema) or phase_needs_json_schema(response_schema):
                 config["responseJsonSchema"] = _json_schema(response_schema)
             else:
                 config["responseSchema"] = response_schema
