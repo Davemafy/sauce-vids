@@ -145,3 +145,21 @@ def test_public_local_stepper_without_named_result_or_site_selectors(page,tmp_pa
     page.locator('p').evaluate("e=>e.textContent='Cloud project with external storage'")
     obs,_,_,_=agent.observation(page,Robots())
     assert all(r['allowed'] is None for r in obs['elements'] if r['role']=='button')
+
+
+def test_agent_uses_existing_semantic_executor_in_observation_loop(page,tmp_path):
+    page.locator('main').evaluate(r"""e=>{e.innerHTML='<header><button type="button" aria-pressed="false" aria-controls="r" onclick="this.setAttribute(\'aria-pressed\',\'true\');r.style.background=\'#245587\'">Show trends</button><button type="button" aria-pressed="false" aria-controls="r" onclick="this.setAttribute(\'aria-pressed\',\'true\');r.style.background=\'#773355\'">View breakdown</button></header><section id="r" aria-label="Results">Observed result</section>'}""")
+    @contextmanager
+    def browser(url,include_robots=False):yield page,Robots()
+    class Model:
+        calls=0
+        def ask(self,prompt,**kw):
+            self.calls+=1
+            obs=json.loads(prompt.split(' Current public DOM observation: ',1)[1])
+            if self.calls>2:return json.dumps({'operation':'finish'})
+            label=['Show trends','View breakdown'][self.calls-1]
+            return json.dumps({'operation':'investigate','target':next(r['id'] for r in obs['trusted_actions'] if r['name']==label)})
+    r=agent.run(page.url,tmp_path/'scout',Model(),browser,story.shot,story.media,story.verify)
+    assert len(r['actions'])==2 and all(a['control']=='semantic-capability' for a in r['actions'])
+    assert r['actions'][1]['requires']==r['actions'][0]['id']
+    assert all(x['delta']>.8 for x in r['proofs'])
