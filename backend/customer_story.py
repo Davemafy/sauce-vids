@@ -760,16 +760,21 @@ def explore(url,out,progress,*,request=None,brief=""):
     submitted_url=url
     scout_calls=0
     from backend.agentmail_auth import session_for,test_session_active
-    if (os.getenv("SAUCE_GEMINI_EXPLORER")=="1" and provider=="claude" and request is None
+    explorer_provider=os.getenv("SAUCE_PUBLIC_EXPLORER_PROVIDER") or ("gemini" if os.getenv("SAUCE_GEMINI_EXPLORER")=="1" else "off")
+    require(explorer_provider in ("off","gemini","claude"),"Unknown public explorer provider")
+    if (explorer_provider!="off" and provider=="claude" and request is None
             and not test_session_active() and session_for(url) is None):
         from backend.customer_browser_agent import run as explore_browser
         from backend.story_outcome_evidence import require_provider_reply
-        if not os.getenv("GEMINI_API_KEY"):
-            raise StoryRejected("Gemini public explorer configured but credential unavailable")
-        scout=Conversation(out/"explorer"/"model")
+        if explorer_provider=="gemini":
+            if not os.getenv("GEMINI_API_KEY"):
+                raise StoryRejected("Gemini public explorer configured but credential unavailable")
+            scout=Conversation(out/"explorer"/"model")
+        else:
+            scout=ClaudeConversation(out/"explorer"/"model")
         graph=explore_browser(url,out/"explorer",scout,browser,shot,media,verify)
         scout_calls=graph["calls"];url=graph["url"]
-        save(out/"entry-route.json",{"submitted_url":submitted_url,"chosen_url":url,"explorer_provider":"Gemini","model_calls":scout_calls,"steps":graph["steps"]})
+        save(out/"entry-route.json",{"submitted_url":submitted_url,"chosen_url":url,"explorer_provider":scout.provider_name,"model_calls":scout_calls,"steps":graph["steps"]})
         if len(graph["actions"])>=MIN_ACTIONS:
             progress("directing")
             witnessed=graph["actions"]
