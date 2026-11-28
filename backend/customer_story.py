@@ -1471,6 +1471,11 @@ def capture(url,plan,proofs,out):
         if local_setup:
             from backend.customer_aperture import derive
             return derive(source,out/"manifest.json",aperture_regions)
+        from backend.agentmail_auth import test_session_active
+        if not test_session_active():
+            from backend.customer_aperture import connected_stepper_regions,derive
+            regions=connected_stepper_regions(plan,manifest)
+            if regions:return derive(source,out/"manifest.json",regions)
         return source,out/"manifest.json"
 
 def render(folder,source,manifest,plan,calls,progress,audio,*,competitive=True):

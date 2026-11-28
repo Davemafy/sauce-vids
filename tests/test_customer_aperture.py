@@ -46,3 +46,14 @@ def test_state_dependent_action_needs_predecessor():
     assert select(["b","a"]) is None
     assert select(["c","b"]) is None
     assert select(["a","c","b"]) is None
+
+
+def test_stepper_aperture_keeps_recorded_target_and_growing_result():
+    from backend.customer_aperture import connected_stepper_regions
+    _,m=fixture();m['events'].append({'targetRect':{'x':1800,'y':650,'width':160,'height':68},'resultRect':{'x':820,'y':800,'width':2208,'height':1002}})
+    a={'id':'a','control':'browser-agent','stepper':True,'region_key':'observed shared result'};b={**a,'id':'b','requires':'a'}
+    plan={'actions':[a,b]};r=connected_stepper_regions(plan,m);assert len(r)==1
+    rect=aperture(r,m);assert rect and rect[2]<3840
+    d=translate(m,rect);assert len(d['events'])==2 and len(d['pointer_samples'])==len(m['pointer_samples'])
+    assert connected_stepper_regions({'actions':[a,{**b,'region_key':'different'}]},m)==[]
+    assert connected_stepper_regions({'actions':[a,{**b,'requires':'unobserved'}]},m)==[]

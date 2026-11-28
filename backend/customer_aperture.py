@@ -36,6 +36,27 @@ def aperture(regions,manifest):
     if x is None or y is None:return None
     return [x,y,w,h]
 
+def connected_stepper_regions(plan,manifest):
+    """Use the union of recorded target/result evidence for one observed workflow.
+
+    Step content can change height as the product advances. The independently
+    verified result identity is stable even when its rectangle is not.
+    """
+    actions=plan.get("actions",[]);events=manifest.get("events",[])
+    if len(actions)<2 or len(actions)!=len(events):return []
+    key=actions[0].get("region_key")
+    if not key or not all(a.get("control")=="browser-agent" and a.get("stepper") is True and a.get("region_key")==key for a in actions):return []
+    if any(a.get("requires")!=actions[i-1].get("id") for i,a in enumerate(actions) if i):return []
+    boxes=[]
+    for e in events:
+        for k in ("targetRect","resultRect"):
+            r=e.get(k)
+            if not isinstance(r,dict) or any(type(r.get(f)) not in (int,float) or not math.isfinite(r[f]) for f in ("x","y","width","height")) or r["width"]<=0 or r["height"]<=0:return []
+            boxes.append(r)
+    left=min(r["x"] for r in boxes);top=min(r["y"] for r in boxes)
+    right=max(r["x"]+r["width"] for r in boxes);bottom=max(r["y"]+r["height"] for r in boxes)
+    return [{"x":left,"y":top,"width":right-left,"height":bottom-top}]
+
 def translate(manifest,rect):
     x,y,w,h=rect;d=copy.deepcopy(manifest)
     sw,sh=(d["capture_rect"][k] for k in ("width","height"))
