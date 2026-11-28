@@ -215,31 +215,51 @@ def run(url,out,conv,browser,shot,media,verify):
     from pathlib import Path
     from playwright.sync_api import TimeoutError as BrowserTimeout
     out=Path(out);out.mkdir(mode=0o700,parents=True,exist_ok=True)
-    steps=[];visited=set();actions=[];images=[];records=[];current=url;clean_start=True;opening=None;setup=None;recovered=False;objective="";failed=set()
+    steps=[];visited=set();actions=[];images=[];records=[];checkpoints=[];current=url;clean_start=True;opening=None;setup=None;recovered=False;objective="";failed=set()
     def save():
         (out/'graph.json').write_text(json.dumps({'submitted_url':url,'chosen_url':current,'steps':steps,'actions':actions,'proofs':records,'calls':conv.calls,'setup':setup,'objective':objective},indent=2)+'\n')
     with ExitStack() as contexts:
-        def recover_initial_weak_result():
-            # Abandon an unsuccessful public local branch. Never retry the
-            # interaction; independently reopen the already admitted route.
-            # A verified prefix, auth/route failure, or changed original
-            # state is not recoverable by this narrow restart.
-            nonlocal p,robots,clean_start,recovered
-            if recovered or actions or not clean_start or visible_authentication_barrier(p):
+        def recover_weak_result():
+            # Restart once. Replay only proven, disconnected sample actions;
+            # never repeat the failed action or replay an online prefix.
+            nonlocal p,robots,recovered
+            from backend.customer_local_operator import isolate
+            from backend.customer_story import replay_setup
+            if recovered or not clean_start or visible_authentication_barrier(p):
                 return False
             assert_local(p,current)
             _,_,_,safe=observation(p,robots)
             if not safe:return False
+            disconnected=getattr(p.context,"_sauce_sample_isolated",False)
+            if actions and (not disconnected or any(a['control']!='local-primitive' for a in actions)):
+                return False
             recovered=True
             contexts.close()
-            p,robots=contexts.enter_context(browser(current,include_robots=True))
-            assert_local(p,current)
-            if setup:
-                from backend.customer_story import replay_setup
-                replay_setup(p,{'url':current,'setup':setup})
-            _,_,_,safe=observation(p,robots)
-            if not safe or image_change(arr(opening),arr(shot(p)))>.025:
-                raise StoryRejected('Recovered browser did not reproduce original opening')
+            try:
+                p,robots=contexts.enter_context(browser(current,include_robots=True))
+                assert_local(p,current)
+                if setup:
+                    replay_setup(p,{'url':current,'setup':setup})
+                if disconnected:
+                    isolate(p)
+                    p.wait_for_timeout(350)
+                _,_,_,safe=observation(p,robots)
+                if not safe or image_change(arr(opening),arr(shot(p)))>.025:
+                    raise StoryRejected('Recovered browser did not reproduce original opening')
+                for action,(expected_before,expected_after),record in zip(actions,checkpoints,records,strict=True):
+                    before=shot(p)
+                    if image_change(arr(expected_before),arr(before))>.025:
+                        raise StoryRejected('Recovered prerequisite started from a different state')
+                    old=action_panel(p,action)
+                    execute(p,current,action,None,lambda h,_:h.click(timeout=3500))
+                    after,_,delta,_=verify(p,current,before,old,shot)
+                    _,_,_,safe=observation(p,robots)
+                    if not safe or delta<record['delta']*.6 or image_change(arr(expected_after),arr(after))>.025:
+                        raise StoryRejected('Recovered prerequisite did not reproduce its verified outcome')
+            except (StoryRejected,ValueError,BrowserTimeout):
+                # The new browser may be closed or in a different state. The
+                # caller can retain earlier proof, but must end exploration.
+                return None
             return True
         p,robots=contexts.enter_context(browser(url,include_robots=True));current=p.url;visited.add(current)
         opening=shot(p)
@@ -264,6 +284,8 @@ def run(url,out,conv,browser,shot,media,verify):
             trusted={f't{i}':a for i,a in enumerate(available) if (a.get('control'),a.get('key'),a.get('label')) not in failed}
             public['trusted_actions']=[{'id':i,'name':clean(a['label']),'context':clean(a['group']),
                 'capability':a['control'],'allowed':'investigate','primitive':a.get('operation')} for i,a in trusted.items()]
+            targets={i:(row,policy) for i,(row,policy) in targets.items()
+                if ('browser-agent',row['key'],row['label']) not in failed}
             options=decision_options(public,targets,trusted,visited)
             labels={i:clean(row['label']) for i,(row,_) in targets.items()}
             labels.update({i:clean(a['label']) for i,a in trusted.items()})
@@ -325,12 +347,17 @@ def run(url,out,conv,browser,shot,media,verify):
                     if actions:a['requires']=actions[-1]['id']
                     actions.append(a)
                     records.append({'id':a['id'],'delta':delta,'result':box,'before_sha256':hashlib.sha256(steady).hexdigest(),'after_sha256':hashlib.sha256(after).hexdigest()})
+                    checkpoints.append((steady,after))
                     images.extend([media(steady),media(after)])
                     entry.update(status='verified-local-result',delta=delta)
                 except WeakVisualOutcome as exc:
                     failed.add((a.get('control'),a.get('key'),a.get('label')))
-                    if recover_initial_weak_result():
-                        entry.update(status='weak-result-recovered',error=type(exc).__name__)
+                    restored=recover_weak_result()
+                    if restored is None:
+                        entry.update(status='checkpoint-restore-failed',error=type(exc).__name__)
+                        steps.append(entry);save();break
+                    if restored:
+                        entry.update(status='weak-result-recovered',error=type(exc).__name__,restored_actions=len(actions))
                     else:
                         clean_start=False;entry.update(status='unverified-or-blocked',error=type(exc).__name__)
                     if visible_authentication_barrier(p):steps.append(entry);save();break
@@ -357,7 +384,7 @@ def run(url,out,conv,browser,shot,media,verify):
                             entry.update(status='route-rejected',error=type(exc).__name__)
                             steps.append(entry);save();break
                         else:
-                            p,robots=new,rb;current=p.url;visited.add(current);opening=shot(p);actions=[];records=[];images=[];clean_start=True;setup=None;entry['status']='navigated'
+                            p,robots=new,rb;current=p.url;visited.add(current);opening=shot(p);actions=[];records=[];images=[];checkpoints=[];clean_start=True;setup=None;entry['status']='navigated'
                 else:
                     chosen=choice.get('region')
                     if r.get('stepper'):
@@ -381,11 +408,16 @@ def run(url,out,conv,browser,shot,media,verify):
                             _,_,_,safe_after=observation(p,robots)
                             if not safe_after:raise ValueError('Result includes a form surface')
                             if actions:a['requires']=actions[-1]['id']
-                            actions.append(a);records.append({'id':a['id'],'delta':delta,'result':box,'before_sha256':hashlib.sha256(steady).hexdigest(),'after_sha256':hashlib.sha256(after).hexdigest()});images.extend([media(steady),media(after)]);entry.update(status='verified-local-result',delta=delta)
+                            actions.append(a);records.append({'id':a['id'],'delta':delta,'result':box,'before_sha256':hashlib.sha256(steady).hexdigest(),'after_sha256':hashlib.sha256(after).hexdigest()});checkpoints.append((steady,after));images.extend([media(steady),media(after)]);entry.update(status='verified-local-result',delta=delta)
                         else:clean_start=False;entry['status']='observed-not-film-proof'
                     except WeakVisualOutcome as exc:
-                        if recover_initial_weak_result():
-                            entry.update(status='weak-result-recovered',error=type(exc).__name__)
+                        failed.add((a['control'],a['target_key'],a['label']))
+                        restored=recover_weak_result()
+                        if restored is None:
+                            entry.update(status='checkpoint-restore-failed',error=type(exc).__name__)
+                            steps.append(entry);save();break
+                        if restored:
+                            entry.update(status='weak-result-recovered',error=type(exc).__name__,restored_actions=len(actions))
                         else:
                             clean_start=False;entry.update(status='unverified-or-blocked',error=type(exc).__name__)
                         if visible_authentication_barrier(p):steps.append(entry);save();break

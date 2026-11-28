@@ -60,3 +60,26 @@ def test_sensitive_and_noop_not_accepted(browser):
             story.verify(p,url,before,old,story.shot)
         p.locator('main').evaluate("e=>e.insertAdjacentHTML('beforeend','<input type=password>')")
         assert op.primitives(p)==[]
+
+
+def test_operator_restores_verified_prefix_after_weak_action(browser,tmp_path):
+    class Model:
+        calls=0
+
+        def ask(self,prompt,**kwargs):
+            observation=json.loads(prompt.split(' Current public DOM observation: ',1)[1])
+            choices={row['name']:row['id'] for row in observation['trusted_actions']}
+            self.calls+=1
+            if self.calls==4:
+                return json.dumps({'selection':'finish','region':'none'})
+            if self.calls==3:
+                assert 'Nothing' not in choices
+            wanted=('Forecast','Nothing','Segment')[self.calls-1]
+            return json.dumps({'selection':'investigate:'+choices[wanted],'region':'none'})
+
+    url='https://example.com/demo'
+    result=agent.run(url,tmp_path/'scout',Model(),browser,story.shot,story.media,story.verify)
+    assert [a['label'] for a in result['actions']]==['Forecast','Segment']
+    assert result['steps'][1]['status']=='weak-result-recovered'
+    assert result['steps'][1]['restored_actions']==1
+    assert result['actions'][1]['requires']==result['actions'][0]['id']

@@ -57,7 +57,7 @@ def schema(ids,fixed_duration=None):
             "properties":{"accept":{"type":"BOOLEAN"},"reason":{"type":"STRING"},
             "backdrop":{"type":"STRING","enum":list(TONES)},
             "duration_seconds":{"type":"INTEGER","enum":([fixed_duration] if fixed_duration is not None else [d for d in legacy_durations(len(ids)) if d>=minimum_duration(len(ids),d)])},
-            "beats":{"type":"ARRAY","items":{"type":"OBJECT",
+            "beats":{"type":"ARRAY","minItems":len(ids),"maxItems":len(ids),"items":{"type":"OBJECT",
              "required":["action_id","framing","pace","purpose"],
              "properties":{"action_id":{"type":"STRING","enum":list(ids)},
                "framing":{"type":"STRING","enum":list(FRAMINGS)},

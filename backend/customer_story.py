@@ -1214,7 +1214,8 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
                           "before_image":2*i+1,"after_image":2*i+2}
                          for i,a in enumerate(plan["actions"])]
             task=(creative+" Challenge this connected workflow against all real before/after evidence. "
-                  "Images are numbered from 1 in actual replay order: "+json.dumps(image_order)+". "
+                  "The verified replay sequence below is the complete editorial sequence. Include prerequisite actions even if they were omitted from an earlier proposal. "
+                  "Proposed story: "+json.dumps(plan["story"])+". Images are numbered from 1 in actual replay order: "+json.dumps(image_order)+". "
                   "Inspect the last after-image: it must preserve, explain or complete the hero payoff. "
                   "Reject a misleading or unrelated marketing detour, repetitive decoration or navigation-only outcomes. "
                   "Each accepted beat should state a distinct observable change or useful context, and what a viewer learns from it. "
@@ -1232,7 +1233,7 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
                        "Choose backdrop cobalt (bright expressive cloud), muted (quiet low-contrast blue-gray cloud), graphite (restrained dark neutral cloud), or paper (quiet neutral studio with no cloud texture). Let the actual product be the visual hero; for dense interfaces prefer the quietest grade that supports readability and brand color. "
                        "Choose for the product's actual palette, not a generic aesthetic. Sauce validates the true action, result, cursor, and source timing; "
                        "If measured proof includes a named changed component inside a dense result, prefer a detail beat when the labels would otherwise be unreadable. Detail may use that complete witnessed component after a full-result hold; otherwise it safely backs off if the entire verified result cannot fit. Return accept, reason, backdrop, duration_seconds, beats. "
-                       "If rejecting, return empty beats. Exact action order: "+json.dumps(ids)+" Hero: "+plan["hero_action_id"])
+                       "For either verdict, return exactly one beat per action in this order; beat choices are ignored if rejecting. Exact action order: "+json.dumps(ids)+" Hero: "+plan["hero_action_id"])
                 kwargs["response_schema"]=customer_editorial.schema(ids)
             else:
                 task+=" JSON {accept:true/false,reason:'...'}. "

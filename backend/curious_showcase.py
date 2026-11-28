@@ -178,7 +178,7 @@ class Conversation:
         limit=self.call_budget if max_attempts is None else min(self.call_budget,self.calls+max_attempts)
         models = self._models()
         contents = [{"role": t["role"], "parts": [{"text": t["text"]}]}
-                    for t in self.data["turns"] if phase!="public-browser-exploration"]
+                    for t in self.data["turns"] if phase not in ("public-browser-exploration","story-editorial")]
         contents.append({"role": "user", "parts": [{"text": prompt}, *media]})
         # The structured customer phases can retry transient overloads.
         # Every HTTP request is still a separate durable attempt and counts
