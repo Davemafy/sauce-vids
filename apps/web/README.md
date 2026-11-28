@@ -1,4 +1,4 @@
-# Sauce product site and private Studio
+# Sauce waitlist website
 
 An editorial Sauce landing page and responsive one-click Studio on Next.js 15 / React 19. The Studio triggers a bounded set of real Python/Chromium/FFmpeg render jobs while preserving the existing verified rendering pipeline.
 
@@ -47,14 +47,3 @@ The **AFTER: A demo with Sauce** film is a real Phase 2 3D Launch H.264/AAC expo
 - The RECORD / POLISH cutouts must remain sharp, transparent, and not obscure the form or headline.
 - All links must have real destinations; no fake sign-in, price table, testimonials, or fabricated videos.
 - Test a real production database insert, including duplicates and network failure.
-
-## The product journey (November 2026)
-
-- `/`: editorial condiment campaign, genuine short technique sample, real waitlist, and URL entry.
-- Homepage URL entry validates public HTTP(S) format, removes potentially sensitive query/fragment data, and routes to `/studio?url=<encoded>`. This is **prefill, not submission**.
-- `/studio`: real private-pilot form, proof-oriented progress, existing jobs, downloadable previews, reviews, and saved-film recovery.
-- Auto PR is shown as **in development** only. The stylized PR card is a labeled concept, not product footage.
-- The three-second sample is **not** a quality-approved autonomous product film; do not market it as one.
-- Public rendering is not open; a real pilot code and configured backend are required. Waitlist storage is real Supabase or HTTP 503, never fake success.
-
-Verified separately in development with TypeScript, build, Vitest and Playwright desktop/mobile; see `docs/SAUCE_HANDOFF.md` for latest receipts.

@@ -43,12 +43,12 @@ test("Studio API denies cross-site render submissions", async ({ request }) => {
 
 test("Landing page AFTER card plays a real 3D Launch MP4", async ({ page }) => {
   await page.goto(prefix || "/");
-  const film = page.getByRole("heading", { name: /nobody came to watch/i });
+  const film = page.getByRole("heading", { name: /difference is in the details/i });
   await expect(film).toBeVisible();
-  const player = page.getByLabel("Previously rendered Sauce product demonstration video");
+  const player = page.getByLabel("AFTER: A demo with Sauce — verified 3D Launch film");
   await expect(player).toBeVisible();
   await expect(player).toHaveAttribute("src", /sauce-motion-phase2\/master-1080p60\.mp4/);
-  await expect(page.getByRole("link", { name: /try your own link/i })).toHaveAttribute("href", /\/studio$/);
+  await expect(page.getByRole("link", { name: /open sauce studio/i })).toHaveAttribute("href", /\/studio$/);
 });
 
 test("Studio render monitor reports real frame counts, survives refresh and shows an actual-ready transition", async ({ page }) => {

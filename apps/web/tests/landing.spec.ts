@@ -27,7 +27,7 @@ test('mobile campaign is usable without clipping or fake success', async ({ page
   await page.evaluate(() => document.fonts.ready);
   await expect(page.getByRole('heading', { name: /make software worth watching/i })).toBeVisible();
   await ensureNoHorizontalOverflow(page);
-  await expect(page.getByRole('link', { name: /open studio/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /get early access/i })).toBeVisible();
   mkdirSync('artifacts', { recursive: true });
   await page.screenshot({ path: 'artifacts/mobile.png', animations: 'disabled', fullPage: true });
 
@@ -35,7 +35,7 @@ test('mobile campaign is usable without clipping or fake success', async ({ page
   await email.fill('visitor@example.com');
   await page.getByRole('button', { name: /join the waitlist/i }).first().click();
   // CI intentionally runs without database credentials. It must fail closed.
-  await expect(page.locator('#waitlist-message-footer')).toContainText(/temporarily unavailable/i);
+  await expect(page.locator('#waitlist-message-hero')).toContainText(/temporarily unavailable/i);
 });
 
 test('unconfigured persistence must not claim a successful signup', async ({ request }) => {
