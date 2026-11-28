@@ -61,6 +61,36 @@ def panel(page,action):
     size=page.viewport_size
     return {'x':0,'y':0,'width':size['width'],'height':size['height'],'primitive_target':rect}
 
+def visible_text(page):
+    """Sample public screen text with source rectangles, independently of the planner."""
+    rows=page.evaluate(r"""()=>{
+        const tree=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT), rows=[];
+        let node, inspected=0;
+        while ((node=tree.nextNode()) && inspected++<2500 && rows.length<250) {
+            const e=node.parentElement, text=node.textContent.trim().replace(/\s+/g,' ').slice(0,100);
+            if (!e || !text || e.closest('script,style,nav,header,footer,form,input,textarea,[role=button],button,[inert],[data-private],[data-secret],[data-sensitive]') || !e.checkVisibility()) continue;
+            const range=document.createRange();range.selectNodeContents(node);
+            const {x,y,width,height}=range.getBoundingClientRect();
+            if (width>0 && height>0 && x>=0 && y>=0 && x+width<=innerWidth && y+height<=innerHeight) {
+                const hit=document.elementFromPoint(x+width/2,y+height/2);
+                if (hit && (e===hit || e.contains(hit))) rows.push({text,x,y,width,height});
+            }
+        }
+        return rows;
+    }""")
+    return [row for row in rows if safe_label(row["text"]) and not SECRET.search(row["text"])]
+
+
+def text_change(before,after,box):
+    def in_result(rows):
+        return list(dict.fromkeys(r["text"] for r in rows
+            if box["x"]<=r["x"]+r["width"]/2<=box["x"]+box["width"]
+            and box["y"]<=r["y"]+r["height"]/2<=box["y"]+box["height"]))
+    old,new=in_result(before),in_result(after)
+    return {"appeared":[v for v in new if v not in old][:8],
+            "disappeared":[v for v in old if v not in new][:8]}
+
+
 def isolate(page):
     # Existing customer contexts block service workers, WebSockets, downloads
     # and nonpublic destinations. Keep a second deny-all route after disconnect.

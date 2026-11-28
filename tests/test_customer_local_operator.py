@@ -37,6 +37,10 @@ def test_connected_general_primitives_replay_and_guard(browser,tmp_path):
     assert len(result['actions'])==2
     assert result['actions'][1]['requires']==result['actions'][0]['id']
     assert all(x['delta']>.85 for x in result['proofs'])
+    assert result['steps'][0]['observed_result_text']=={
+        'appeared':['Forecast result'],'disappeared':['Baseline']}
+    assert result['steps'][1]['observed_result_text']=={
+        'appeared':['Segment result'],'disappeared':['Forecast result']}
     assert story.validated_selection(json.dumps({'ids':[a['id'] for a in result['actions']],'story':'Forecast segmentation','hero_action_id':result['actions'][-1]['id']}),result['actions'])
     with browser(url) as (p,_):
         op.isolate(p)

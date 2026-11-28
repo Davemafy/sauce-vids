@@ -847,6 +847,7 @@ def explore(url,out,progress,*,request=None,brief=""):
                 " The operator objective is "+json.dumps(objective)+". "
                 "End the selected sequence on its demonstrated outcome and name that final action as the hero. "
                 "A setup screen, loading state, return to raw input, or promise of an outcome is not closure. "
+                "Use the independent observed result text and image pairs to distinguish a change of inputs from a completed outcome. "
                 "Use a shorter witnessed prefix or abstain if the goal result is absent. "
             ) if objective else ""
             # Only connected, independently verified browser actions reach the director.
