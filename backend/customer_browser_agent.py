@@ -129,9 +129,9 @@ def run(url,out,conv,browser,shot,media,verify):
     from pathlib import Path
     from playwright.sync_api import TimeoutError as BrowserTimeout
     out=Path(out);out.mkdir(mode=0o700,parents=True,exist_ok=True)
-    steps=[];visited=set();actions=[];images=[];records=[];current=url;clean_start=True;opening=None
+    steps=[];visited=set();actions=[];images=[];records=[];current=url;clean_start=True;opening=None;setup=None
     def save():
-        (out/'graph.json').write_text(json.dumps({'submitted_url':url,'chosen_url':current,'steps':steps,'actions':actions,'proofs':records,'calls':conv.calls},indent=2)+'\n')
+        (out/'graph.json').write_text(json.dumps({'submitted_url':url,'chosen_url':current,'steps':steps,'actions':actions,'proofs':records,'calls':conv.calls,'setup':setup},indent=2)+'\n')
     with ExitStack() as contexts:
         p,robots=contexts.enter_context(browser(url,include_robots=True));current=p.url;visited.add(current)
         opening=shot(p)
@@ -155,7 +155,18 @@ def run(url,out,conv,browser,shot,media,verify):
             op=choice.get('operation');target=choice.get('target');entry={'operation':op if isinstance(op,str) else None,'path':urlsplit(current).path,'reason':clean(str(choice.get('reason','')))[:300]}
             if op=='finish':entry['status']='finished';steps.append(entry);save();break
             if op in ('scroll_down','scroll_up'):
-                old=public['scroll_y'];p.evaluate('(dy)=>window.scrollBy({top:dy,behavior:"instant"})',720 if op=='scroll_down' else -720);p.wait_for_timeout(300);assert_local(p,current);entry['status']='scrolled' if p.evaluate('()=>scrollY')!=old else 'no-change';clean_start=False
+                old=public['scroll_y'];p.evaluate('(dy)=>window.scrollBy({top:dy,behavior:"instant"})',720 if op=='scroll_down' else -720);p.wait_for_timeout(300);assert_local(p,current)
+                y=p.evaluate('()=>scrollY');entry['status']='scrolled' if y!=old else 'no-change'
+                if y!=old:
+                    # Pure inspection scrolls before any click are reproducible
+                    # opening setup, not product actions or film proof.
+                    if clean_start and not actions and 0<=y<=2880 and can_image:
+                        _,_,_,safe=observation(p,robots)
+                        if safe:
+                            setup={'kind':'browser-agent-scroll','y':y}
+                            opening=shot(p)
+                        else:clean_start=False
+                    else:clean_start=False
             elif op in ('navigate','click') and isinstance(target,str) and target in targets and targets[target][1][0]==op:
                 r,policy=targets[target];entry['label']=clean(r['label'])
                 if op=='navigate':
@@ -174,7 +185,7 @@ def run(url,out,conv,browser,shot,media,verify):
                             entry.update(status='route-rejected',error=type(exc).__name__)
                             steps.append(entry);save();break
                         else:
-                            p,robots=new,rb;current=p.url;visited.add(current);opening=shot(p);actions=[];records=[];images=[];clean_start=True;entry['status']='navigated'
+                            p,robots=new,rb;current=p.url;visited.add(current);opening=shot(p);actions=[];records=[];images=[];clean_start=True;setup=None;entry['status']='navigated'
                 else:
                     chosen=choice.get('region');rg=regions.get(chosen) if isinstance(chosen,str) else None
                     a={'id':f'g{step}','kind':'option','control':'browser-agent','label':r['label'],'target_key':r['key'],'group':r['context'] or r['label']}
@@ -198,4 +209,4 @@ def run(url,out,conv,browser,shot,media,verify):
             else:entry['status']='invalid-or-denied-target'
             steps.append(entry);save()
         save()
-    return {'url':current,'actions':actions,'images':images,'proofs':records,'opening':opening,'calls':conv.calls,'steps':steps}
+    return {'url':current,'actions':actions,'images':images,'proofs':records,'opening':opening,'calls':conv.calls,'steps':steps,'setup':setup}

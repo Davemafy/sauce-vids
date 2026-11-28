@@ -102,3 +102,27 @@ def test_navigation_closes_actual_sync_browser_before_opening_next(tmp_path):
     r=agent.run('https://example.com/',tmp_path/'scout',Model(),fresh,story.shot,story.media,story.verify)
     assert r['url']=='https://example.com/demo'
     assert events==[('open','https://example.com/'),('close','https://example.com/'),('open','https://example.com/demo'),('close','https://example.com/demo')]
+
+
+def test_inspection_scroll_before_actions_is_replayable_opening(page,tmp_path):
+    page.locator('main').evaluate("e=>e.insertAdjacentHTML('afterbegin','<div style=\"height:720px\">Intro</div>')")
+    @contextmanager
+    def browser(url,include_robots=False):yield page,Robots()
+    class Model:
+        calls=0
+        def ask(self,prompt,**kw):
+            self.calls+=1
+            obs=json.loads(prompt.split(' Current public DOM observation: ',1)[1])
+            if self.calls==1:return json.dumps({'operation':'scroll_down'})
+            if self.calls==4:return json.dumps({'operation':'finish'})
+            label=['Show trends','View breakdown'][self.calls-2]
+            return json.dumps({'operation':'click','target':next(r['id'] for r in obs['elements'] if r['name']==label),'region':obs['result_regions'][0]['id']})
+    r=agent.run(page.url,tmp_path/'scout',Model(),browser,story.shot,story.media,story.verify)
+    assert r['setup']['kind']=='browser-agent-scroll' and r['setup']['y']>0
+    assert len(r['actions'])==2
+    page.evaluate('()=>window.scrollTo(0,0)')
+    story.replay_setup(page,{'url':page.url,'setup':r['setup']})
+    for a in r['actions']:
+        before=story.shot(page);old=story.action_panel(page,a)
+        story.apply(page,page.url,a,None,lambda h,l:h.click())
+        assert story.verify(page,page.url,before,old,story.shot)[2]>.8

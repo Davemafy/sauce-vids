@@ -803,6 +803,7 @@ def explore(url,out,progress,*,request=None,brief=""):
                          media=tuple(graph["images"]),json_mode=True,phase="story-from-outcomes",stop_on_rate_limit=True,response_schema=story_response_schema(witnessed))
             with browser(url) as fresh:title=fresh.title()[:140]
             metadata={"picker":None,"title":title,"url":url,"submitted_url":submitted_url}
+            if graph.get("setup"):metadata["setup"]=graph["setup"]
             plan,calls,proofs=investigate_story(require_provider_reply(raw,conv),witnessed,metadata,graph["opening"],out,conv,creative)
             return plan,calls+scout_calls,proofs
     else:
@@ -910,6 +911,15 @@ def explore(url,out,progress,*,request=None,brief=""):
 
 def replay_setup(page,plan):
     if plan.get("setup"):
+        if plan["setup"].get("kind")=="browser-agent-scroll":
+            from backend.customer_browser_agent import raw
+            y=plan["setup"].get("y")
+            require(type(y) in (int,float) and 0<=y<=2880,"Invalid observed opening scroll")
+            require(not raw(page)["forms"],"Form surface cannot be film proof")
+            page.evaluate('(y)=>window.scrollTo({top:y,behavior:"instant"})',y)
+            page.wait_for_timeout(500);assert_local(page,plan["url"])
+            require(not raw(page)["forms"] and abs(page.evaluate('()=>scrollY')-y)<=1,"Observed opening scroll not reproduced")
+            return
         if plan["setup"].get("kind")=="observed-workspace":
             from backend.customer_observed_workspace import prepare
         elif plan["setup"].get("kind")=="sample-choices":
