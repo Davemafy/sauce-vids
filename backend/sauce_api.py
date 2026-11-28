@@ -135,8 +135,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path=urlsplit(self.path).path
         if path=="/health":
+            director=os.getenv("SAUCE_CUSTOMER_DIRECTOR_PROVIDER","gemini")
+            explorer=os.getenv("SAUCE_PUBLIC_EXPLORER_PROVIDER") or ("gemini" if os.getenv("SAUCE_GEMINI_EXPLORER")=="1" else "off")
             return self.send_json(200,{"service":"Sauce URL-to-video",
                 "status":"ready","director_key_configured":bool(os.getenv("ANTHROPIC_API_KEY" if os.getenv("SAUCE_CUSTOMER_DIRECTOR_PROVIDER")=="claude" else "GEMINI_API_KEY")),
+                "director_provider":director if director in ("gemini","claude") else "unknown",
+                "explorer_provider":explorer if explorer in ("gemini","claude","off") else "unknown",
+                "explorer_key_configured":bool(os.getenv("GEMINI_API_KEY" if explorer=="gemini" else "ANTHROPIC_API_KEY")) if explorer in ("gemini","claude") else False,
                 "one_ai_call":True,"export_requires_review":True})
         if not self.require_auth(): return
         match=re.fullmatch(r"/v1/jobs/([a-f0-9]{24})(/preview(?:-clean)?\.mp4)?",path)

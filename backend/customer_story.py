@@ -788,7 +788,7 @@ def explore(url,out,progress,*,request=None,brief=""):
     from backend.agentmail_auth import session_for,test_session_active
     explorer_provider=os.getenv("SAUCE_PUBLIC_EXPLORER_PROVIDER") or ("gemini" if os.getenv("SAUCE_GEMINI_EXPLORER")=="1" else "off")
     require(explorer_provider in ("off","gemini","claude"),"Unknown public explorer provider")
-    if (explorer_provider!="off" and provider=="claude" and request is None
+    if (explorer_provider!="off" and request is None
             and not test_session_active() and session_for(url) is None):
         from backend.customer_browser_agent import run as explore_browser
         from backend.story_outcome_evidence import require_provider_reply
@@ -806,7 +806,7 @@ def explore(url,out,progress,*,request=None,brief=""):
         if len(graph["actions"])>=MIN_ACTIONS:
             progress("directing")
             witnessed=graph["actions"]
-            # Only connected, independently verified browser actions reach Claude.
+            # Only connected, independently verified browser actions reach the director.
             # No free-tier explorer receives authenticated customer content.
             raw=conv.ask(creative+" Direct a meaningful connected product workflow from the following actual before/after pairs in action order. "
                          "Use only witnessed IDs; honor each prerequisite immediately before its dependent action. "
