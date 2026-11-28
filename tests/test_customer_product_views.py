@@ -133,3 +133,28 @@ def test_icon_only_accessible_view_names_are_replayable(page):
 def test_accessible_name_cannot_disguise_unsafe_tab(page):
     page.locator('[aria-controls="traffic1"]').evaluate("e=>e.setAttribute('aria-label','Delete account')")
     assert [a["label"] for a in s.product_tab_catalog(page)]==["Devices"]
+
+
+def test_public_explorer_exposes_verified_product_tabs(page,tmp_path,monkeypatch):
+    from contextlib import contextmanager
+    from backend import customer_browser_agent as agent
+    monkeypatch.setattr(agent,"assert_local",lambda *a:None)
+    @contextmanager
+    def browser(url,**kwargs):
+        yield page,None
+    class Model:
+        calls=0
+        def ask(self,prompt,**kwargs):
+            self.calls+=1
+            obs=json.loads(prompt.split(" Current public DOM observation: ",1)[1])
+            if self.calls>2:return json.dumps({"operation":"finish"})
+            wanted=["Campaigns","Devices"][self.calls-1]
+            t=next(a for a in obs["trusted_actions"] if a["name"]==wanted)
+            assert t["capability"]=="named-product-tab"
+            menu=json.loads(prompt.split("executable menu: ",1)[1].split(". Other DOM rows",1)[0])
+            assert {"operation":"investigate","target":t["id"],"name":wanted} in menu
+            return json.dumps({"operation":"investigate","target":t["id"]})
+    r=agent.run("about:blank",tmp_path/"explorer",Model(),browser,s.shot,s.media,s.verify)
+    assert [a["label"] for a in r["actions"]]==["Campaigns","Devices"]
+    assert r["actions"][1]["requires"]==r["actions"][0]["id"]
+    assert all(p["delta"]>.9 for p in r["proofs"])
