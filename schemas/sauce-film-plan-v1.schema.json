@@ -38,8 +38,8 @@
       ]
     },
     "cursorMotion": {
-      "const": "reference-v1",
-      "description": "Optional bounded source-sample interpolation and foreground pointer rendering for recorded single-plane studio films."
+      "enum": ["reference-v1", "editorial-click-v1"],
+      "description": "Recorded sample interpolation or explicitly editorial motion between verified real click anchors."
     },
     "audio": {
       "oneOf": [

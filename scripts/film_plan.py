@@ -187,10 +187,17 @@ def load_film_plan(data,manifest,source_path,manifest_path,source_size,source_du
         raise ValueError("Unrecognized source-timed cursor appearance")
     if data.get("cursor") == "none" and "cursorPack" in data:
         raise ValueError("Cursor appearance cannot be specified when cursor is absent")
-    if "cursorMotion" in data and (data["cursorMotion"] != "reference-v1"
+    if "cursorMotion" in data and (data["cursorMotion"] not in ("reference-v1","editorial-click-v1")
             or data["cursor"] != "recorded" or "studioStage" not in data
             or "domPlane" in data or "domPlanes" in data):
         raise ValueError("Reference cursor motion requires a recorded single-plane studio stage")
+    if data.get("cursorMotion")=="editorial-click-v1":
+        from recorded_pointer import pointer_track,EditorialClickMotion
+        if manifest.get("pointerMotionProvenance")!="editorial-reconstructed-from-observed-clicks":
+            raise ValueError("Explicit editorial pointer provenance required")
+        track=pointer_track(manifest,sw,sh)
+        if track is None:raise ValueError("Missing original click samples")
+        EditorialClickMotion(track,manifest)
     if ("window" in data or "glassLoupe" in data) and data["presentation"] != "window":
         raise ValueError("Window and glass loupe controls require window presentation")
     if "glassLoupe" in data and data["cursor"] != "recorded":

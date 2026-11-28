@@ -57,13 +57,16 @@ def clean_env(display=None,*,inference=False):
             if os.environ.get(k):env[k]=os.environ[k]
     return env
 
-def capture(url,objective,out,*,max_steps=12,timeout_seconds=85):
+def capture(url,objective,out,*,max_steps=12,timeout_seconds=85,operator="stagehand"):
+    if operator not in ("stagehand","browser-use"):raise ValueError("Unknown operator")
     from backend.agentmail_auth import test_session_active
     if test_session_active():raise ValueError('Native public pilot refuses authenticated sessions')
     public_scope(url)
     if not isinstance(objective,str) or not 1<=len(objective)<=2400 or not 1<=max_steps<=24 or not 15<=timeout_seconds<=150:raise ValueError('Invalid bounded pilot objective')
     if not (os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_GENERATIVE_AI_API_KEY')):raise ValueError('Gemini not configured')
     node=os.getenv('SAUCE_STAGEHAND_NODE','node')
+    bu=os.getenv('SAUCE_BROWSER_USE_PYTHON')
+    if operator=='browser-use' and not bu:raise ValueError('Browser Use runtime unavailable')
     out=Path(out).resolve();out.mkdir(mode=0o700,parents=True,exist_ok=False)
     raw=out/'source-native.mp4';events=[];navigation=[];stage='initializing';encoder=None;agent=None;clock=None
     with native_display(out) as display,tempfile.TemporaryDirectory(prefix='sauce-native-public-') as profile,sync_playwright() as pw:
@@ -103,7 +106,8 @@ def capture(url,objective,out,*,max_steps=12,timeout_seconds=85):
                     p.wait_for_timeout(900)
                     stage='native_agent'
                     with (out/'agent.log').open('wb') as agent_log:
-                        agent=subprocess.Popen([node,str(ROOT/'scripts/stagehand-native/attached.mjs'),str(config)],env=clean_env(inference=True),stdout=agent_log,stderr=subprocess.DEVNULL)
+                        command=([bu,str(ROOT/'scripts/browser_use_attached.py'),str(config)] if operator=='browser-use' else [node,str(ROOT/'scripts/stagehand-native/attached.mjs'),str(config)])
+                        agent=subprocess.Popen(command,env={**clean_env(inference=True),'ANONYMIZED_TELEMETRY':'false'},stdout=agent_log,stderr=subprocess.DEVNULL)
                         deadline=time.monotonic()+timeout_seconds+10
                         while agent.poll() is None and time.monotonic()<deadline:
                             p.wait_for_timeout(350);safe_surface()
@@ -127,7 +131,7 @@ def capture(url,objective,out,*,max_steps=12,timeout_seconds=85):
     if raw.exists() and raw.stat().st_size:
         result=subprocess.run(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(raw)],capture_output=True,text=True,timeout=15)
         if result.returncode==0:info=json.loads(result.stdout)
-    receipt={'schema':'sauce.stagehand.native-capture.v1','status':stage,'source':url,'captureStartEpochMs':clock,'clockAlignmentVerified':False,'eventsAdvisoryOnly':True,'events':events,'navigation':navigation,'stream':info,'filmEligible':False,'verifiedOutcome':False}
+    receipt={'schema':'sauce.stagehand.native-capture.v1','operator':operator,'status':stage,'source':url,'captureStartEpochMs':clock,'clockAlignmentVerified':False,'eventsAdvisoryOnly':True,'events':events,'navigation':navigation,'stream':info,'filmEligible':False,'verifiedOutcome':False}
     if info:
         with raw.open('rb') as f:receipt['sha256']=hashlib.file_digest(f,'sha256').hexdigest()
     private_json(out/'capture-receipt.json',receipt)
@@ -136,6 +140,6 @@ def capture(url,objective,out,*,max_steps=12,timeout_seconds=85):
 if __name__=='__main__':
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--url',required=True);ap.add_argument('--objective',required=True);ap.add_argument('--out',required=True)
-    ap.add_argument('--max-steps',type=int,default=12);ap.add_argument('--timeout',type=int,default=85)
+    ap.add_argument('--operator',choices=['stagehand','browser-use'],default='stagehand');ap.add_argument('--max-steps',type=int,default=12);ap.add_argument('--timeout',type=int,default=85)
     args=ap.parse_args()
-    print(json.dumps(capture(args.url,args.objective,args.out,max_steps=args.max_steps,timeout_seconds=args.timeout)))
+    print(json.dumps(capture(args.url,args.objective,args.out,max_steps=args.max_steps,timeout_seconds=args.timeout,operator=args.operator)))

@@ -356,3 +356,31 @@ def project_pointer(stage, track, matrix, time, scale=1., theme="founder-referen
     x, y = (np.interp(time, track[:, 0], track[:, col]) for col in (1, 2))
     draw_pointer(stage, *(matrix @ [x, y, 1.]), scale=scale, theme=theme, role=role)
     return stage
+
+class EditorialClickMotion(ReferencePointerMotion):
+    """Editorial approaches between exact observed presses, never raw samples."""
+    def __init__(self,track,manifest):
+        super().__init__(track,manifest)
+        self.anchors=[]
+        for e in manifest.get("events",[]):
+            if e.get("kind")!="click" or not e.get("evidence"):
+                raise ValueError("Expected verified click outcomes")
+            t=float(e["start"]);i=int(np.argmin(np.abs(self.times-t)))
+            if abs(self.times[i]-t)>.002:raise ValueError("Missing real press anchor")
+            x,y=self.positions[i];r=e["targetRect"]
+            if not(r["x"]<=x<=r["x"]+r["width"] and r["y"]<=y<=r["y"]+r["height"]):
+                raise ValueError("Observed press outside target")
+            self.anchors.append((t,np.array([x,y],float)))
+        if not self.anchors or any(b[0]<=a[0] for a,b in zip(self.anchors,self.anchors[1:])):
+            raise ValueError("Missing ordered click anchors")
+    def at(self,t):
+        previous=self.anchors[0][1]
+        for (a,prior),(b,target) in zip(self.anchors,self.anchors[1:]):
+            if t>=b:
+                previous=target
+                continue
+            travel=min(.72,(b-a)*.45)
+            u=float(np.clip((t-(b-travel))/travel,0,1))
+            q=u*u*u*(10+u*(-15+6*u))
+            return tuple(prior+(target-prior)*q)
+        return tuple(previous)

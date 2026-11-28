@@ -231,3 +231,20 @@ def test_reference_subpixel_cursor_moves_without_double_stamp():
     draw_reference_pointer(b,800.45,500.2,.65)
     assert not np.array_equal(a,b)
     assert np.all(a[:495]==100) and np.all(b[:495]==100)
+
+def test_editorial_click_motion_uses_exact_real_click_anchors():
+    from recorded_pointer import EditorialClickMotion
+    import pytest
+    track=np.float64([[1.,20.,20.],[1.08,20.,20.],[4.,70.,40.],[4.08,70.,40.]])
+    m={"events":[
+      {"kind":"click","start":1.,"end":1.08,"t":1.5,"targetRect":{"x":10,"y":10,"width":20,"height":20},"evidence":"actual visual change"},
+      {"kind":"click","start":4.,"end":4.08,"t":4.5,"targetRect":{"x":60,"y":30,"width":20,"height":20},"evidence":"actual visual change"}]}
+    pointer=EditorialClickMotion(track,m)
+    assert pointer.at(1.)==(20.,20.)
+    assert pointer.at(2.)==(20.,20.)
+    assert 20.<pointer.at(3.6)[0]<70.
+    assert pointer.at(4.)==(70.,40.)
+    np.testing.assert_array_equal(track,np.float64([[1.,20.,20.],[1.08,20.,20.],[4.,70.,40.],[4.08,70.,40.]]))
+    m["events"][1]["start"]=3.9
+    with pytest.raises(ValueError,match="Missing real press"):
+        EditorialClickMotion(track,m)
