@@ -145,6 +145,33 @@ def story_response_schema(catalog):
                           "story":{"type":"STRING"},
                           "hero_action_id":{"type":"STRING","enum":ids+[""]}}}
 
+def complete_verified_prefix(raw,catalog):
+    """Compile an observed agent suffix into its witnessed execution prefix.
+
+    Never invent, reorder or substitute actions. Editorial admission sees the
+    complete replay; the ordinary strict validator remains unchanged.
+    """
+    data=parse(raw)
+    ids=data.get("ids")
+    if not isinstance(ids,list) or not ids or any(not isinstance(i,str) for i in ids):
+        return raw
+    known={a["id"]:a for a in catalog}
+    if any(i not in known for i in ids) or len(set(ids))!=len(ids):
+        return raw
+    if not all(a.get("control") in ("browser-agent","local-primitive") for a in catalog):
+        return raw
+    chain=[a["id"] for a in catalog]
+    if not all(a.get("requires")==chain[i-1] for i,a in enumerate(catalog) if i):
+        return raw
+    start=chain.index(ids[0])
+    if not start or ids!=chain[start:start+len(ids)] or catalog[0].get("requires"):
+        return raw
+    full=chain[:start+len(ids)]
+    if len(full)>MAX_ACTIONS:
+        return raw
+    return json.dumps({**data,"ids":full})
+
+
 def validated_selection(raw,catalog):
     data=parse(raw);ids=data.get("ids");reason=data.get("story")
     known={a["id"]:a for a in catalog}
@@ -826,7 +853,11 @@ def explore(url,out,progress,*,request=None,brief=""):
             with browser(url) as fresh:title=fresh.title()[:140]
             metadata={"picker":None,"title":title,"url":url,"submitted_url":submitted_url}
             if graph.get("setup"):metadata["setup"]=graph["setup"]
-            plan,calls,proofs=investigate_story(require_provider_reply(raw,conv),witnessed,metadata,graph["opening"],out,conv,creative)
+            raw=require_provider_reply(raw,conv)
+            compiled=complete_verified_prefix(raw,witnessed)
+            if compiled!=raw:
+                save(out/"verified-prefix.json",{"requested":parse(raw),"compiled":parse(compiled)})
+            plan,calls,proofs=investigate_story(compiled,witnessed,metadata,graph["opening"],out,conv,creative)
             return plan,calls+scout_calls,proofs
     else:
         url=resolve_public_product_entry(url,out,conv,creative)
