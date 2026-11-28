@@ -1,5 +1,12 @@
 # Sauce — living handoff for new agents and new chats
 
+## 2026-11-28 — HioBuy public demo preflight (authentication acceptance unchanged)
+
+- Authentication-only scope maintained. Current main 24655db recovered; live checkout was two documentation commits behind with existing unrelated recorded-pointer, native capture and refinement work preserved. No deployment, credential/connectivity, grant mechanism or renderer changes. No Claude, new inbox or model inference.
+- New candidate: https://forwarding.demo.hiobuy.com/ (official source and demo permission https://github.com/hiobuy/forwarding#live-demo). Upstream explicitly permits demo customer registration, documents signup verification email and post-login read-only sample catalog. Use only demo data, no real parcel submission, payments or logistics activity.
+- Actual guarded local Chromium: homepage HTTP 200, title Shop in China | HIOBuy Forwarding; followed visible Sign up link to /auth/register. Registration page explicitly states member code assigned after email verification. Visible required name/email/new-password controls plus terms/privacy checkbox, no CAPTCHA indicators in observed DOM. No credentials supplied, terms accepted or registration submitted. Strict server-side gating and actual delivery are not independently proven; do not call this a completed trial. This is a stronger prospective candidate than Seedcorn. No username field on this target, so it cannot prove separate username support by itself.
+- Prior combined native-tool/username implementation rejection remains binding; no alternate submission or use of another interface to evade it. Native integration, generic username repair and external authenticated workflow remain unproven. No new target scope was issued. No additional score: 3/10 remains; 0 completed authenticated workflows, session reuse or generalization. Preserve concurrent work. 
+
 ## 2026-11-28 — Remaining authentication criteria: candidate qualification, no new acceptance
 
 - Owner explicitly retained verified 3/10 baseline; no repeat deployment, AgentMail connectivity, Gemini configuration or grant work. No renderer, infrastructure, new inbox or Claude work.
