@@ -147,13 +147,15 @@ def test_public_explorer_exposes_verified_product_tabs(page,tmp_path,monkeypatch
         def ask(self,prompt,**kwargs):
             self.calls+=1
             obs=json.loads(prompt.split(" Current public DOM observation: ",1)[1])
-            if self.calls>2:return json.dumps({"operation":"finish"})
+            if self.calls>2:return json.dumps({"selection":"finish","region":"none","reason":"Done"})
             wanted=["Campaigns","Devices"][self.calls-1]
             t=next(a for a in obs["trusted_actions"] if a["name"]==wanted)
             assert t["capability"]=="named-product-tab"
             menu=json.loads(prompt.split("executable menu: ",1)[1].split(". Other DOM rows",1)[0])
-            assert {"operation":"investigate","target":t["id"],"name":wanted} in menu
-            return json.dumps({"operation":"investigate","target":t["id"]})
+            choice=f'investigate:{t["id"]}'
+            assert menu[choice]==wanted
+            assert choice in kwargs["response_schema"]["properties"]["selection"]["enum"]
+            return json.dumps({"selection":choice,"region":"none","reason":wanted})
     r=agent.run("about:blank",tmp_path/"explorer",Model(),browser,s.shot,s.media,s.verify)
     assert [a["label"] for a in r["actions"]]==["Campaigns","Devices"]
     assert r["actions"][1]["requires"]==r["actions"][0]["id"]

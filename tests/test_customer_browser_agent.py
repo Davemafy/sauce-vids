@@ -211,3 +211,34 @@ def test_weak_initial_result_recovers_fresh_without_repeating_click(tmp_path):
     assert [s['status'] for s in r['steps']]==['weak-result-recovered','verified-local-result','verified-local-result','finished']
     assert [a['label'] for a in r['actions']]==['Show trends','View breakdown']
     assert r['actions'][1]['requires']==r['actions'][0]['id']
+
+
+def test_model_schema_only_offers_executable_current_choices(page,tmp_path):
+    @contextmanager
+    def browser(url,include_robots=False):
+        yield page,Robots()
+
+    class Model:
+        calls=0
+
+        def ask(self,prompt,**kw):
+            self.calls+=1
+            obs=json.loads(prompt.split(' Current public DOM observation: ',1)[1])
+            rows={row["name"]:row["id"] for row in obs["elements"]}
+            schema=kw["response_schema"]["properties"]
+            available=schema["selection"]["enum"]
+            assert f'click:{rows["Open room session"]}' not in available
+            assert f'navigate:{rows["Log in"]}' not in available
+            assert "scroll_down:360" not in available
+            assert "none" in schema["region"]["enum"]
+            if self.calls>2:
+                return json.dumps({"selection":"finish","region":"none","reason":"Done"})
+            label=["Show trends","View breakdown"][self.calls-1]
+            selection=f"click:{rows[label]}"
+            assert selection in available
+            region=obs["result_regions"][0]["id"]
+            assert region in schema["region"]["enum"]
+            return json.dumps({"selection":selection,"region":region,"reason":label})
+
+    r=agent.run(page.url,tmp_path/'scout',Model(),browser,story.shot,story.media,story.verify)
+    assert [action["label"] for action in r["actions"]]==["Show trends","View breakdown"]
