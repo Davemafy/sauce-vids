@@ -151,3 +151,21 @@ def test_shared_inbox_filters_envelope_before_fetching_body(approval,monkeypatch
             return inbound
     assert auth.wait_verification(Mail(),inbound["inbox_id"],approval,
                                   auth.utcnow()-timedelta(seconds=1)).kind=="code"
+
+
+def test_agentmail_poll_uses_canonical_utc_timestamp():
+    from datetime import datetime, timezone, timedelta
+    from urllib.parse import urlsplit, parse_qs
+    class Fake:
+        def open(self,req,timeout):
+            params=parse_qs(urlsplit(req.full_url).query)
+            assert params["after"]==["2026-11-28T16:30:00Z"]
+            assert params["include_unauthenticated"]==["false"]
+            class Response:
+                status=200
+                def __enter__(self):return self
+                def __exit__(self,*a):pass
+                def read(self,n):return b'{"messages":[]}'
+            return Response()
+    since=datetime(2026,11,28,17,30,tzinfo=timezone(timedelta(hours=1)))
+    assert auth.AgentMail(api_key="fixture",opener=Fake()).messages("test@agentmail.to",since)==[]

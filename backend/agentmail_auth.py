@@ -123,7 +123,7 @@ class AgentMail:
 
     def messages(self,inbox,since):
         return self._call("GET","inboxes/"+quote(inbox,safe="")+"/messages",
-             params={"limit":20,"after":since.isoformat(),"include_spam":"false",
+             params={"limit":20,"after":since.astimezone(timezone.utc).isoformat().replace("+00:00","Z"),"include_spam":"false",
                      "include_blocked":"false","include_unauthenticated":"false","include_trash":"false"}).get("messages",[])
     def message(self,inbox,ident):
         return self._call("GET","inboxes/"+quote(inbox,safe="")+"/messages/"+quote(ident,safe=""))
