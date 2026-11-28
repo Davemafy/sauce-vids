@@ -21,7 +21,8 @@ from backend.curious_showcase import Conversation,MAX_CALLS
 from backend.curious_interactive import parse
 from backend.product_explorer import CHROME
 from backend.story_discovery import route_robots_allowed,focused_route_allowed,focused_routes
-from backend.source_action_preflight import image_change,visible_authentication_barrier,same_local_tab_route
+from backend.source_action_preflight import (image_change,visible_authentication_barrier,same_local_tab_route,
+    standalone_authentication_barrier,observed_auth_entry_links,AUTH_ENTRY_PATH)
 from backend.native60_capture import FULL_CHROME,verify_live_terminal_frames
 from scripts.capture_safety import validate_public_url,guard_route
 from scripts import customer_editorial
@@ -322,6 +323,13 @@ def browser(url,*,display=None,include_robots=False):
             while req and len(chain)<5:
                 chain.append(req.url);req=req.redirected_from
             chain.reverse()
+            if req is None and chain==[url] and p.url==url and AUTH_ENTRY_PATH.search(urlsplit(url).path):
+                # A hydrated auth form may be absent at DOMContentLoaded.
+                # It is never admitted as a product surface, even if absent.
+                loaded=True
+                p.wait_for_timeout(1100)
+                if p.url==url and standalone_authentication_barrier(p):
+                    raise ProductAccessRequired("Authenticated product access required")
             require(req is None and admitted_initial_route(url,chain,p.url),"Unexpected initial public URL")
             loaded=True
             if p.url!=url:
@@ -403,6 +411,8 @@ def resolve_public_product_entry(url,out,conv,creative):
                 save(out/'entry-route.json',receipt)
                 return url
         if not candidates:
+            receipt["observed_account_entries"]=observed_auth_entry_links(page,url,robots)
+            receipt["account_access_verified"]=False
             save(out/'entry-route.json',receipt)
             return url
         opening=shot(page)

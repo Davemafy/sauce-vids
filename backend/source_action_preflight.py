@@ -68,6 +68,48 @@ def visible_authentication_barrier(page):
     }"""))
 
 
+# Only explicit account-entry destinations. A marketing header alone is not
+# evidence of an authentication barrier.
+AUTH_ENTRY_PATH = re.compile(r"(?i)/(?:login|log-in|signin|sign-in|signup|sign-up|register)/?$")
+AUTH_ENTRY_LABEL = re.compile(r"(?i)^(?:sign in|log in|sign up|register|create (?:an )?account)$")
+
+def standalone_authentication_barrier(page):
+    """Read-only direct account-entry recognition; never read field values."""
+    if not AUTH_ENTRY_PATH.search(urlsplit(page.url).path):
+        return False
+    return bool(page.evaluate("""() => {
+      const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);
+        return r.width>0&&r.height>0&&s.visibility==='visible'&&s.display!=='none'
+          &&+s.opacity>0&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight};
+      return [...document.querySelectorAll('form')].some(f=>
+        visible(f)&&[...f.querySelectorAll('input[type="password"]')].some(visible)
+        &&[...f.querySelectorAll('input[type="email"],input[autocomplete="username"]')].some(visible)
+        &&[...f.querySelectorAll('button,input')].some(e=>e.type==='submit'&&visible(e)));
+    }"""))
+
+def observed_auth_entry_links(page, origin, robots):
+    """Metadata-only hypotheses; never enter or submit account routes."""
+    from urllib.parse import urljoin
+    base=urlsplit(origin)
+    rows=[]
+    for a in page.locator('a[href]').all()[:100]:
+        if not a.is_visible() or not a.evaluate("e=>!e.closest('form,[data-private],[data-secret],[data-sensitive]')&&!e.hasAttribute('download')"):continue
+        label=' '.join(a.inner_text(timeout=1600).split())
+        if not AUTH_ENTRY_LABEL.fullmatch(label):continue
+        target=urljoin(page.url,a.get_attribute('href') or '')
+        u=urlsplit(target)
+        if (u.scheme!='https' or u.netloc.lower()!=base.netloc.lower()
+            or base.scheme!='https' or u.username or u.password or u.query or u.fragment
+            or not re.fullmatch(r"/[A-Za-z0-9/_-]{1,150}",u.path)
+            or "//" in u.path or not AUTH_ENTRY_PATH.search(u.path)
+            or not robots.can_fetch("SauceBasicPreviewBot/0.1",target)):
+            continue
+        if target not in [r["url"] for r in rows]:
+            rows.append({"url":target,"label":label,"classification":"observed_account_entry"})
+        if len(rows)>=4:break
+    return rows
+
+
 def image_change(before: np.ndarray, after: np.ndarray) -> float:
     if (before is None or after is None or
         before.shape != after.shape or before.ndim != 3 or

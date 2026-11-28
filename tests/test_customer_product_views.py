@@ -112,9 +112,9 @@ def test_discovery_does_not_require_picker_for_independent_views(page,tmp_path,m
         assert len(catalog)==2 and metadata["picker"] is None
         return "test model fixture",catalog
     monkeypatch.setattr(s,"compare_outcomes",compare)
-    monkeypatch.setattr(s,"investigate_story",lambda raw,catalog,metadata,*a:catalog)
-    result=s.explore(url,tmp_path/"job",lambda _:None,request=Mock())
-    assert len(result)==2
+    monkeypatch.setattr(s,"investigate_story",lambda raw,catalog,metadata,*a:(catalog,0,[]))
+    result,calls,proofs=s.explore(url,tmp_path/"job",lambda _:None,request=Mock())
+    assert len(result)==2 and calls==0 and proofs==[]
     assert json.loads((tmp_path/"job"/"discovery.json").read_text())["kind"]=="named-product-views"
 
 

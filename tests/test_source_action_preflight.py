@@ -112,3 +112,73 @@ class AuthenticationBarrierTests(unittest.TestCase):
         self.assertEqual(apply_visible_action_verdict(plan,report,proof)["mode"],"showcase")
         with self.assertRaisesRegex(RuntimeError,"stopped before recording"):
             apply_visible_action_verdict(plan,report,proof,cinematic_only=True)
+
+
+class ReadOnlyAccessDiscoveryTests(unittest.TestCase):
+    def test_direct_auth_route_requires_visible_form_evidence(self):
+        from backend.source_action_preflight import standalone_authentication_barrier
+        from unittest.mock import Mock
+        p=Mock(url="https://example.com/login")
+        p.evaluate.return_value=True
+        self.assertTrue(standalone_authentication_barrier(p))
+        p.evaluate.return_value=False
+        self.assertFalse(standalone_authentication_barrier(p))
+        p.url="https://example.com/components/login-preview"
+        p.evaluate.reset_mock()
+        self.assertFalse(standalone_authentication_barrier(p))
+        p.evaluate.assert_not_called()
+
+    def test_auth_link_evidence_is_not_an_action_or_proof_of_access(self):
+        from backend.source_action_preflight import observed_auth_entry_links
+        from urllib.robotparser import RobotFileParser
+        from unittest.mock import Mock
+        def link(label,href,visible=True,safe=True):
+            a=Mock()
+            a.is_visible.return_value=visible
+            a.evaluate.return_value=safe
+            a.inner_text.return_value=label
+            a.get_attribute.return_value=href
+            return a
+        p=Mock(url="https://example.com/")
+        p.locator.return_value.all.return_value=[
+            link("Sign in","/login"),
+            link("Sign in","/login"),
+            link("Create an account","/signup"),
+            link("Sign in","https://other.example.com/login"),
+            link("Sign in","/login?token=secret"),
+            link("Sign in","/login#fragment"),
+            link("Sign in","/private/login"),
+            link("Sign in","/hidden/login",False),
+            link("Sign in","/sensitive/login",safe=False),
+            link("Preview","/login"),
+            link("Sign in","/editor"),
+        ]
+        robots=RobotFileParser()
+        robots.parse(["User-agent: *","Disallow: /private/"])
+        self.assertEqual(observed_auth_entry_links(p,p.url,robots),[
+            {"url":"https://example.com/login","label":"Sign in","classification":"observed_account_entry"},
+            {"url":"https://example.com/signup","label":"Create an account","classification":"observed_account_entry"},
+        ])
+        p.goto.assert_not_called()
+        p.click.assert_not_called()
+
+    def test_chromium_default_submit_type_is_detected_without_filling_form(self):
+        from backend.source_action_preflight import standalone_authentication_barrier
+        from backend.product_explorer import CHROME
+        from playwright.sync_api import sync_playwright
+        import pytest
+        if not Path(CHROME).is_file():
+            pytest.skip("Chromium not installed")
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(executable_path=str(CHROME),headless=True,args=["--no-sandbox"])
+            try:
+                page=browser.new_page()
+                page.route("https://fixture.example.com/**",lambda route:route.fulfill(
+                    status=200,content_type="text/html",body='<form><input type="email"><input type="password"><button>Sign in</button></form>'))
+                page.goto("https://fixture.example.com/login")
+                self.assertTrue(standalone_authentication_barrier(page))
+                page.locator("form").evaluate("f=>f.style.display='none'")
+                self.assertFalse(standalone_authentication_barrier(page))
+                page.goto("https://fixture.example.com/preview")
+                self.assertFalse(standalone_authentication_barrier(page))
+            finally:browser.close()
