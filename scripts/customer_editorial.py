@@ -52,11 +52,11 @@ def fit_duration(data,ids,hero):
             return validate({**data,"duration_seconds":d},ids,hero)
     raise ValueError("Detail beats exceed supported native capture duration")
 
-def schema(ids,fixed_duration=None):
+def schema(ids,fixed_duration=None,*,duration_floor=0):
     return {"type":"OBJECT","required":["accept","reason","backdrop","duration_seconds","beats"],
             "properties":{"accept":{"type":"BOOLEAN"},"reason":{"type":"STRING"},
             "backdrop":{"type":"STRING","enum":list(TONES)},
-            "duration_seconds":{"type":"INTEGER","enum":([fixed_duration] if fixed_duration is not None else [d for d in legacy_durations(len(ids)) if d>=minimum_duration(len(ids),d)])},
+            "duration_seconds":{"type":"INTEGER","enum":([fixed_duration] if fixed_duration is not None else [d for d in legacy_durations(len(ids)) if d>=max(duration_floor,minimum_duration(len(ids),d))])},
             "beats":{"type":"ARRAY","minItems":len(ids),"maxItems":len(ids),"items":{"type":"OBJECT",
              "required":["action_id","framing","pace","purpose"],
              "properties":{"action_id":{"type":"STRING","enum":list(ids)},
@@ -144,7 +144,7 @@ def compact_fast_local(data,actions,hero,proofs):
     return result,{'reason':'measured-fast-local-workflow','previous_duration':data['duration_seconds'],'duration':target,'probe_seconds':[p['probe_seconds'] for p in proofs]}
 
 
-def measured_schedule(data,actions,hero,proofs):
+def measured_schedule(data,actions,hero,proofs,*,duration_floor=0):
     """Allocate native action time from the connected, independently replayed proof.
 
     DOM-click probe time includes verification and component measurement. Native
@@ -169,7 +169,7 @@ def measured_schedule(data,actions,hero,proofs):
     # compact slow probes, detail shots, or an unverified source clock.
     if all(p['probe_seconds']<=2.0 for p in proofs) and not any(b['framing']=='detail' for b in beats):
         for d in OUTCOME_DURATIONS.get(len(ids),()):
-            if d>data['duration_seconds']:continue
+            if not duration_floor<=d<=data['duration_seconds']:continue
             candidate={**data,'duration_seconds':d}
             try:validate(candidate,ids,hero)
             except ValueError:continue
@@ -183,7 +183,7 @@ def measured_schedule(data,actions,hero,proofs):
             return candidate,starts,{'reason':'outcome-driven-native-clock','probe_seconds':[p['probe_seconds'] for p in proofs],'native_estimate_seconds':[round(v,4) for v in latencies],'slot_floors_seconds':[round(v,4) for v in budgets],'requested_duration':data['duration_seconds'],'duration':d,'action_starts':starts}
     if outcome_duration(len(ids),data['duration_seconds']):raise ValueError('Compact timing no longer supported by connected proof')
     for d in legacy_durations(len(ids)):
-        if d<data['duration_seconds']:continue
+        if d<max(duration_floor,data['duration_seconds']):continue
         candidate={**data,'duration_seconds':d}
         try:validate(candidate,ids,hero)
         except ValueError:continue

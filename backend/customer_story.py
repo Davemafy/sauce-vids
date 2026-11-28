@@ -1211,6 +1211,8 @@ def probe_story(plan,out):
 
 def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
     """At most one model-authored recovery; reserve a call for editorial admission."""
+    from backend.agentmail_auth import test_session_active
+    duration_floor=15 if test_session_active() else 0
     allowed=list(catalog)
     for attempt in range(2):
         plan=validated_selection(raw,allowed)
@@ -1247,7 +1249,7 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
                        "Choose for the product's actual palette, not a generic aesthetic. Sauce validates the true action, result, cursor, and source timing; "
                        "If measured proof includes a named changed component inside a dense result, prefer a detail beat when the labels would otherwise be unreadable. Detail may use that complete witnessed component after a full-result hold; otherwise it safely backs off if the entire verified result cannot fit. Return accept, reason, backdrop, duration_seconds, beats. "
                        "For either verdict, return exactly one beat per action in this order; beat choices are ignored if rejecting. Exact action order: "+json.dumps(ids)+" Hero: "+plan["hero_action_id"])
-                kwargs["response_schema"]=customer_editorial.schema(ids)
+                kwargs["response_schema"]=customer_editorial.schema(ids,duration_floor=duration_floor)
             else:
                 task+=" JSON {accept:true/false,reason:'...'}. "
             verdict=parse(conv.ask(task,media=tuple(images),json_mode=True,phase="story-editorial",stop_on_rate_limit=True,**kwargs))
@@ -1260,9 +1262,13 @@ def investigate_story(raw,catalog,metadata,opening,out,conv,creative):
                     plan["editorial"],readability=customer_editorial.protect_local_readability(
                         plan["editorial"],plan["actions"],plan["hero_action_id"],proofs,(W,H))
                     if readability:save(trial/"readability-adjustment.json",readability)
-                    plan["editorial"],pacing=customer_editorial.compact_fast_local(plan["editorial"],plan["actions"],plan["hero_action_id"],proofs)
-                    if pacing:save(trial/"pacing-adjustment.json",pacing)
-                    plan["editorial"],_,measured=customer_editorial.measured_schedule(plan["editorial"],plan["actions"],plan["hero_action_id"],proofs)
+                    if plan["editorial"]["duration_seconds"]<duration_floor:
+                        raise ValueError("Authenticated demo needs a 15–30 second edit")
+                    if not duration_floor:
+                        plan["editorial"],pacing=customer_editorial.compact_fast_local(plan["editorial"],plan["actions"],plan["hero_action_id"],proofs)
+                        if pacing:save(trial/"pacing-adjustment.json",pacing)
+                    plan["editorial"],_,measured=customer_editorial.measured_schedule(
+                        plan["editorial"],plan["actions"],plan["hero_action_id"],proofs,duration_floor=duration_floor)
                     if measured:save(trial/"measured-schedule.json",measured)
                 except (ValueError,TypeError) as exc:
                     raise StoryRejected("Invalid model-authored editorial direction") from exc
@@ -1385,10 +1391,13 @@ def action_start(index,count):
     return .8+index*19.0/(count-1)
 
 def capture(url,plan,proofs,out):
+    from backend.agentmail_auth import test_session_active
     out.mkdir(mode=0o700,parents=True,exist_ok=False)
+    duration_floor=15 if test_session_active() else 0
     native=lambda r:{k:round(r[k]*D,4) for k in ("x","y","width","height")}
     if "editorial" in plan:
-        compiled,starts,measured=customer_editorial.measured_schedule(plan["editorial"],plan["actions"],plan["hero_action_id"],proofs)
+        compiled,starts,measured=customer_editorial.measured_schedule(
+            plan["editorial"],plan["actions"],plan["hero_action_id"],proofs,duration_floor=duration_floor)
         require(compiled==plan["editorial"],"Native timing budget differs from admitted plan")
         if measured:save(out/"measured-schedule.json",measured)
     else:starts=[action_start(i,len(proofs)) for i in range(len(proofs))]
@@ -1540,7 +1549,6 @@ def capture(url,plan,proofs,out):
             save(out/"workspace-aperture.json",{"checkpoints":aperture_regions,
                 "envelope":regions,"applied":framed_source!=source})
             return framed_source,framed_manifest
-        from backend.agentmail_auth import test_session_active
         if not test_session_active():
             from backend.customer_aperture import connected_stepper_regions,derive
             regions=connected_stepper_regions(plan,manifest)

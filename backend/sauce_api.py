@@ -11,6 +11,7 @@ GET /health -> readiness; no secrets or raw browser recordings.
 """
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from hashlib import sha256
 import hmac,json,os,re,secrets,threading,time,socketserver,shutil
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
@@ -18,6 +19,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from .url_engine import execute, NoVerifiedProductAction, customer_quality_summary
 from .url2video import inspect_url,validate_public_url,NeedsKey,NeedsAccess
+from .agentmail_auth import AgentMail, AuthUnavailable, approved_session
 from .job_store import load_render_checkpoint, recover_jobs, save_job, write_render_checkpoint
 
 HOST="127.0.0.1"
@@ -47,10 +49,27 @@ def worker(job_id):
             save(job_id)
     try:
         job=JOBS[job_id]
-        result=execute(job["url"],folder,progress=stage,
-                       brief=job.get("brief",""),audio=job.get("audio","auto"),
-                       cursor_pack=job.get("cursor_pack","founder-reference"),
-                       intent=job.get("intent","product_demo"))
+        access=nullcontext()
+        if job.get("authorized_access"):
+            from backend.auth_access_grant import load,load_session
+            stage("authenticating")
+            approval=load(job_id,job["url"])
+            if approval.mode=="session":
+                state=load_session(approval)
+            else:
+                from backend.authorized_auth_network import provision
+                from backend.curious_showcase import Conversation
+                if not os.getenv("GEMINI_API_KEY"):
+                    raise AuthUnavailable("Configure Gemini for authorized authentication")
+                mail=AgentMail()
+                decisions=Conversation(folder/"private"/"auth-model",call_budget=16)
+                state=provision(approval,mail,decisions)
+            access=approved_session(approval,state)
+        with access:
+            result=execute(job["url"],folder,progress=stage,
+                           brief=job.get("brief",""),audio=job.get("audio","auto"),
+                           cursor_pack=job.get("cursor_pack","founder-reference"),
+                           intent=job.get("intent","product_demo"))
         with LOCK:
             JOBS[job_id].update(result)
             JOBS[job_id]["updated_at"]=time.time()
@@ -69,6 +88,10 @@ def worker(job_id):
             JOBS[job_id].update(status="needs_key",stage="needs_key",
                                 error="Configure ANTHROPIC_API_KEY server-side" if os.getenv("SAUCE_CUSTOMER_DIRECTOR_PROVIDER")=="claude" else "Configure GEMINI_API_KEY server-side")
             save(job_id)
+    except AuthUnavailable as err:
+        with LOCK:
+            JOBS[job_id].update(status="needs_access",stage="needs_access",error=str(err)[:250])
+            save(job_id)
     except NeedsAccess as err:
         with LOCK:
             JOBS[job_id].update(status="needs_access",stage="needs_access",error=str(err)[:250])
@@ -77,11 +100,11 @@ def worker(job_id):
         # Diagnostic remains in a private directory; API only reveals exception class.
         category=type(err).__name__
         diagnosis=folder/"failure-local.txt"
-        diagnosis.write_text(category+": "+str(err)[:900]+"\n")
+        description="" if JOBS[job_id].get("authorized_access") else str(err)
+        diagnosis.write_text(category+(": "+description[:900] if description else "")+"\n")
         os.chmod(diagnosis,0o600)
         with LOCK:
             last_stage=JOBS[job_id].get("stage")
-            description=str(err)
             if any(f"{provider} returned HTTP 503" in description for provider in ("Gemini","Claude")):
                 safe_message="The AI direction service is temporarily unavailable. Try again."
             elif any(f"{provider} returned HTTP 429" in description for provider in ("Gemini","Claude")):
@@ -142,6 +165,8 @@ class Handler(BaseHTTPRequestHandler):
                 "director_provider":director if director in ("gemini","claude") else "unknown",
                 "explorer_provider":explorer if explorer in ("gemini","claude","off") else "unknown",
                 "explorer_key_configured":bool(os.getenv("GEMINI_API_KEY" if explorer=="gemini" else "ANTHROPIC_API_KEY")) if explorer in ("gemini","claude") else False,
+                "authorized_access_configured":bool(os.getenv("SAUCE_AUTH_APPROVAL_DIR")),
+                "agentmail_configured":bool(os.getenv("AGENTMAIL_API_KEY")),
                 "one_ai_call":True,"export_requires_review":True})
         if not self.require_auth(): return
         match=re.fullmatch(r"/v1/jobs/([a-f0-9]{24})(/preview(?:-clean)?\.mp4)?",path)
@@ -237,14 +262,26 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(422,{"error":"Choose a supported cursor style"})
             if not isinstance(brief,str) or len(brief)>240 or audio not in ("auto","clean","narrated"):
                 return self.send_json(422,{"error":"Invalid brief or audio preference"})
+            access_grant=body.get("accessGrant")
+            if access_grant is not None:
+                from backend.auth_access_grant import load
+                if intent!="product_demo":
+                    return self.send_json(422,{"error":"Authorized access requires product demo intent"})
+                try:
+                    load(access_grant,url)
+                except AuthUnavailable:
+                    return self.send_json(422,{"error":"Authorized access grant unavailable for this URL"})
             with LOCK:
+                if access_grant is not None and (access_grant in JOBS or (OUT/access_grant).exists()):
+                    return self.send_json(409,{"error":"Access grant already used"})
                 if sum(x.get("status")=="queued" or x.get("stage") in
-                       ("inspecting","directing","capturing","rendering")
+                       ("authenticating","inspecting","directing","capturing","rendering")
                        for x in JOBS.values())>=2:
                     return self.send_json(429,{"error":"Sauce queue full"})
-                job_id=secrets.token_hex(12)
+                job_id=access_grant or secrets.token_hex(12)
                 JOBS[job_id]={"id":job_id,"url":url,"brief":brief,"audio":audio,
                               "cursor_pack":cursor_pack,"intent":intent,"stage":"queued",
+                              "authorized_access":access_grant is not None,
                               "status":"queued","created_at":time.time(),
                               "updated_at":time.time(),"stage_started_at":time.time()}
                 save(job_id)

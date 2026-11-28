@@ -54,17 +54,22 @@ class Approval:
     terms_reviewed:bool=False
     test_data_only:bool=False
     model_processing_authorized:bool=False
+    mode:str="register"
+    navigation_urls:tuple[str,...]=()
     def check(self):
         if not re.fullmatch(r"[a-f0-9]{24}",self.job_id):raise AuthUnavailable("Invalid job identity")
         if not all(v is True for v in (self.test_account_authorized,self.terms_reviewed,self.test_data_only,self.model_processing_authorized)):
             raise AuthUnavailable("Explicit test-account, terms and test-data authorization required")
         now=utcnow();expiry=stamp(self.expires_at)
         if not now<expiry<=now+timedelta(hours=24):raise AuthUnavailable("Authorization expired or too broad")
-        routes=(self.signup_url,self.product_url,*self.auth_posts)
+        if self.mode not in ("register","session"):
+            raise AuthUnavailable("Unsupported access grant mode")
+        routes=(self.signup_url,self.product_url,*self.auth_posts,*self.navigation_urls)
         for u in routes:checked_url(u)
-        if not self.auth_posts or len(self.auth_posts)>4 or any(origin(u)!=origin(self.signup_url) for u in routes):
+        if ((self.mode=="register" and not self.auth_posts) or len(self.auth_posts)>8
+                or len(self.navigation_urls)>16 or any(origin(u)!=origin(self.signup_url) for u in routes)):
             raise AuthUnavailable("Authentication must use explicit same-origin endpoints")
-        if (not self.sender_domains or len(self.sender_domains)>4 or
+        if ((self.mode=="register" and not self.sender_domains) or len(self.sender_domains)>4 or
             any(not re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)+",s) for s in self.sender_domains)):
             raise AuthUnavailable("Exact verification sender domains required")
         if any(not re.fullmatch(r"/[A-Za-z0-9/_-]{1,100}",p) or "//" in p or ".." in p for p in self.verification_url_paths):
@@ -103,7 +108,7 @@ class AgentMail:
         approval.check()
         result=self._call("POST","inboxes",json={"display_name":"Sauce test account","client_id":"sauce-auth-"+approval.job_id,
                        "deactivate_at":approval.expires_at,"metadata":{"purpose":"authorized-product-demo"}})
-        email=result.get("email");ident=result.get("inbox_id")
+        ident=result.get("inbox_id");email=result.get("email",ident)
         if not isinstance(email,str) or email!=ident or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",email):
             raise AuthUnavailable("Invalid dedicated inbox")
         return email

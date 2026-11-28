@@ -79,7 +79,7 @@ def recover_jobs(root: Path) -> tuple[dict[str, dict], list[str]]:
         if status == "queued":
             if stage == "queued":
                 pending.append(folder.name)
-            elif stage == "rendering" and (
+            elif stage == "rendering" and not job.get("authorized_access") and (
                 (checkpoint := load_render_checkpoint(folder, job.get("url", ""))) and checkpoint["attempts"] < 2
             ):
                 pending.append(folder.name)
