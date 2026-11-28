@@ -5,7 +5,7 @@ from playwright.sync_api import sync_playwright
 from backend import customer_browser_agent as agent,customer_story as story,customer_local_operator as op
 from backend.product_explorer import CHROME
 
-HTML="""<style>body{margin:0;font:22px sans-serif}button{padding:20px}article{width:1250px;height:650px;background:#ddd}</style><main><p>Interactive demo runs entirely in your browser with sample data.</p><button id=a>Forecast</button><button id=b hidden>Segment</button><button id=c>Send report</button><button id=d>Nothing</button><article id=result>Baseline</article></main><script>a.onclick=()=>{result.textContent='Forecast result';result.style.background='#245587';b.hidden=false;fetch('https://example.com/blocked').catch(()=>{})};b.onclick=()=>{result.style.background='#773355';result.textContent='Segment result'}</script>"""
+HTML="""<style>body{margin:0;font:22px sans-serif}button{padding:20px}article{width:1250px;height:650px;background:#ddd}</style><main><p>Interactive demo runs entirely in your browser with sample data.</p><button id=a>Forecast</button><button id=b hidden>Segment</button><button id=c>Send report</button><button id=d>Nothing</button><button id=e>Unchanged</button><article id=result>Baseline</article></main><script>a.onclick=()=>{result.textContent='Forecast result';result.style.background='#245587';b.hidden=false;fetch('https://example.com/blocked').catch(()=>{})};b.onclick=()=>{result.style.background='#773355';result.textContent='Segment result'}</script>"""
 class Robots:
     def can_fetch(self,*a):return True
 @pytest.fixture
@@ -74,11 +74,11 @@ def test_operator_restores_verified_prefix_after_weak_action(browser,tmp_path):
             observation=json.loads(prompt.split(' Current public DOM observation: ',1)[1])
             choices={row['name']:row['id'] for row in observation['trusted_actions']}
             self.calls+=1
-            if self.calls==4:
+            if self.calls==5:
                 return json.dumps({'selection':'finish','region':'none'})
             if self.calls==3:
                 assert 'Nothing' not in choices
-            wanted=('Forecast','Nothing','Segment')[self.calls-1]
+            wanted=('Forecast','Nothing','Unchanged','Segment')[self.calls-1]
             return json.dumps({'selection':'investigate:'+choices[wanted],'region':'none'})
 
     url='https://example.com/demo'
@@ -86,6 +86,8 @@ def test_operator_restores_verified_prefix_after_weak_action(browser,tmp_path):
     assert [a['label'] for a in result['actions']]==['Forecast','Segment']
     assert result['steps'][1]['status']=='weak-result-recovered'
     assert result['steps'][1]['restored_actions']==1
+    assert result['steps'][2]['status']=='weak-result-recovered'
+    assert result['steps'][2]['restored_actions']==1
     assert result['actions'][1]['requires']==result['actions'][0]['id']
 
 

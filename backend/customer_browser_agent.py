@@ -215,17 +215,17 @@ def run(url,out,conv,browser,shot,media,verify):
     from pathlib import Path
     from playwright.sync_api import TimeoutError as BrowserTimeout
     out=Path(out);out.mkdir(mode=0o700,parents=True,exist_ok=True)
-    steps=[];visited=set();actions=[];images=[];records=[];checkpoints=[];current=url;clean_start=True;opening=None;setup=None;recovered=False;objective="";failed=set()
+    steps=[];visited=set();actions=[];images=[];records=[];checkpoints=[];current=url;clean_start=True;opening=None;setup=None;recoveries=0;objective="";failed=set()
     def save():
         (out/'graph.json').write_text(json.dumps({'submitted_url':url,'chosen_url':current,'steps':steps,'actions':actions,'proofs':records,'calls':conv.calls,'setup':setup,'objective':objective},indent=2)+'\n')
     with ExitStack() as contexts:
         def recover_weak_result():
-            # Restart once. Replay only proven, disconnected sample actions;
+            # Bound fresh replay work. Replay proven, disconnected sample actions;
             # never repeat the failed action or replay an online prefix.
-            nonlocal p,robots,recovered
+            nonlocal p,robots,recoveries
             from backend.customer_local_operator import isolate
             from backend.customer_story import replay_setup
-            if recovered or not clean_start or visible_authentication_barrier(p):
+            if not clean_start or visible_authentication_barrier(p):
                 return False
             assert_local(p,current)
             _,_,_,safe=observation(p,robots)
@@ -233,7 +233,9 @@ def run(url,out,conv,browser,shot,media,verify):
             disconnected=getattr(p.context,"_sauce_sample_isolated",False)
             if actions and (not disconnected or any(a['control']!='local-primitive' for a in actions)):
                 return False
-            recovered=True
+            if recoveries >= (2 if disconnected else 1):
+                return False
+            recoveries+=1
             contexts.close()
             try:
                 p,robots=contexts.enter_context(browser(current,include_robots=True))
@@ -367,6 +369,8 @@ def run(url,out,conv,browser,shot,media,verify):
                         entry.update(status='weak-result-recovered',error=type(exc).__name__,restored_actions=len(actions))
                     else:
                         clean_start=False;entry.update(status='unverified-or-blocked',error=type(exc).__name__)
+                        if disconnected_primitive:
+                            steps.append(entry);save();break
                     if visible_authentication_barrier(p):steps.append(entry);save();break
                     assert_local(p,current)
                 except (StoryRejected,ValueError,BrowserTimeout) as exc:
