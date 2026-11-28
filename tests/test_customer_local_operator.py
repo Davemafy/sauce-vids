@@ -83,3 +83,29 @@ def test_operator_restores_verified_prefix_after_weak_action(browser,tmp_path):
     assert result['steps'][1]['status']=='weak-result-recovered'
     assert result['steps'][1]['restored_actions']==1
     assert result['actions'][1]['requires']==result['actions'][0]['id']
+
+
+
+def test_delayed_result_is_verified_after_loading_state(browser):
+    url='https://example.com/demo'
+    with browser(url) as (page,_):
+        page.locator('#a').evaluate("""button => {
+            button.onclick=() => {
+                result.textContent='Parsing';
+                result.style.background='#cc5555';
+                result.setAttribute('aria-busy','true');
+                setTimeout(() => {
+                    result.textContent='Completed report';
+                    result.style.background='#245587';
+                    result.removeAttribute('aria-busy');
+                }, 1050);
+            };
+        }""")
+        action=next(a for a in op.primitives(page) if a['label']=='Forecast')
+        op.isolate(page)
+        old=story.action_panel(page,action)
+        before=story.shot(page)
+        story.apply(page,url,action,None,lambda h,_:h.click())
+        after,_,_,_=story.verify(page,url,before,old,story.shot)
+        assert page.locator('#result').inner_text()=='Completed report'
+        assert story.image_change(story.arr(after),story.arr(story.shot(page)))<.01

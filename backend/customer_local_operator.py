@@ -82,19 +82,25 @@ def verify(page,url,before,old,snapshot):
     from backend.customer_story import pixels,WeakVisualOutcome,StoryRejected
     target=old['primitive_target'];a=pixels(before)
     last=None
-    for _ in range(3):
-        page.wait_for_timeout(500);assert_local(page,url)
+    for attempt in range(3):
+        # Sampling immediately after contact can capture an intermediate
+        # loading card even when it looks stationary for a few frames.
+        page.wait_for_timeout(1250 if attempt==0 else 350)
+        assert_local(page,url)
         if not admitted(page):raise StoryRejected('Local sample admission lost before proof')
-        after=snapshot(page);t=time.monotonic();page.wait_for_timeout(250)
+        candidate=pixels(snapshot(page))
+        page.wait_for_timeout(550)
+        assert_local(page,url)
         if not admitted(page):raise StoryRejected('Local sample admission lost before settled proof')
-        settled=snapshot(page)
-        b,c=pixels(after),pixels(settled)
-        if image_change(b,c)>.025:continue
-        mask=(np.max(cv2.absdiff(a,b),axis=2)>25).astype(np.uint8)
+        after=snapshot(page);t=time.monotonic();settled=pixels(after)
+        if page.locator("[aria-busy=true]:visible,[role=progressbar]:visible").count():continue
+        motion=np.max(cv2.absdiff(candidate,settled),axis=2)>25
+        mask=(np.max(cv2.absdiff(a,settled),axis=2)>25).astype(np.uint8)
+        if image_change(candidate,settled)>.025 or motion.sum()>max(mask.size*.003,mask.sum()*.30):continue
         # A selected button, hover, cursor or menu highlight is not a result.
         x,y,w,h=[round(target[k]) for k in ('x','y','width','height')]
         mask[max(0,y-24):y+h+24,max(0,x-24):x+w+24]=0
-        mask[np.max(cv2.absdiff(b,c),axis=2)>25]=0
+        mask[motion]=0
         mask=cv2.morphologyEx(mask,cv2.MORPH_OPEN,np.ones((2,2),np.uint8))
         count=int(mask.sum());last=(count/mask.size,after)
         if count<mask.size*.006:continue
