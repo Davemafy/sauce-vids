@@ -842,13 +842,20 @@ def explore(url,out,progress,*,request=None,brief=""):
         if len(graph["actions"])>=MIN_ACTIONS:
             progress("directing")
             witnessed=graph["actions"]
+            objective=graph.get("objective") if all(a.get("control")=="local-primitive" for a in witnessed) else None
+            closure=(
+                " The operator objective is "+json.dumps(objective)+". "
+                "End the selected sequence on its demonstrated outcome and name that final action as the hero. "
+                "A setup screen, loading state, return to raw input, or promise of an outcome is not closure. "
+                "Use a shorter witnessed prefix or abstain if the goal result is absent. "
+            ) if objective else ""
             # Only connected, independently verified browser actions reach the director.
             # No free-tier explorer receives authenticated customer content.
             raw=conv.ask(creative+" Direct a meaningful connected product workflow from the following actual before/after pairs in action order. "
                          "Use only witnessed IDs; honor each prerequisite immediately before its dependent action. "
                          "Do not market a navigation tour or invent a capability. Abstain if the evidence lacks buyer value. "
                          "Return JSON {ids:[...],story:'...',hero_action_id:'...'} with 2-4 actions or empty IDs to abstain. "
-                         +json.dumps(witnessed)+" Proofs: "+json.dumps(graph["proofs"]),
+                         +closure+json.dumps(witnessed)+" Proofs: "+json.dumps(graph["proofs"]),
                          media=tuple(graph["images"]),json_mode=True,phase="story-from-outcomes",stop_on_rate_limit=True,response_schema=story_response_schema(witnessed))
             with browser(url) as fresh:title=fresh.title()[:140]
             metadata={"picker":None,"title":title,"url":url,"submitted_url":submitted_url}
@@ -857,6 +864,11 @@ def explore(url,out,progress,*,request=None,brief=""):
             compiled=complete_verified_prefix(raw,witnessed)
             if compiled!=raw:
                 save(out/"verified-prefix.json",{"requested":parse(raw),"compiled":parse(compiled)})
+            if objective:
+                selected=validated_selection(compiled,witnessed)
+                require(selected and selected["hero_action_id"]==selected["actions"][-1]["id"],
+                        "Operator story did not end on its witnessed hero")
+                creative+=closure+" Judge the final replay image independently of the director's labels. "
             plan,calls,proofs=investigate_story(compiled,witnessed,metadata,graph["opening"],out,conv,creative)
             return plan,calls+scout_calls,proofs
     else:

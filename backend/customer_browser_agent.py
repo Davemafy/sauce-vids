@@ -299,7 +299,8 @@ def run(url,out,conv,browser,shot,media,verify):
                     'Return JSON with selection, region and a concise reason. Copy a selection from the executable choices; use region "none" except when an independent observed result region applies to a click. '
                     'Current objective: '+json.dumps(objective)+' Prior actions and results: '+json.dumps(steps)+' Current public DOM observation: '+json.dumps(public))
             reply=conv.ask(prompt,media=(media(shot(p)),) if can_image else (),json_mode=True,
-                phase='public-browser-exploration',stop_on_rate_limit=True,max_attempts=1,
+                phase='public-browser-exploration',stop_on_rate_limit=True,
+                max_attempts=2 if getattr(conv,'provider_name',None)=='Gemini' and getattr(conv,'call_budget',0)>MAX_STEPS else 1,
                 response_schema=decision_schema(options,regions))
             if not reply:steps.append({'status':'provider-unavailable'});save();break
             try:choice=parse(reply)
@@ -435,4 +436,4 @@ def run(url,out,conv,browser,shot,media,verify):
                     entry['allowed']=known['allowed']
             steps.append(entry);save()
         save()
-    return {'url':current,'actions':actions,'images':images,'proofs':records,'opening':opening,'calls':conv.calls,'steps':steps,'setup':setup}
+    return {'url':current,'actions':actions,'images':images,'proofs':records,'opening':opening,'calls':conv.calls,'steps':steps,'setup':setup,'objective':objective}
