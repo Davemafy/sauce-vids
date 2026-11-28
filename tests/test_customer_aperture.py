@@ -57,3 +57,17 @@ def test_stepper_aperture_keeps_recorded_target_and_growing_result():
     d=translate(m,rect);assert len(d['events'])==2 and len(d['pointer_samples'])==len(m['pointer_samples'])
     assert connected_stepper_regions({'actions':[a,{**b,'region_key':'different'}]},m)==[]
     assert connected_stepper_regions({'actions':[a,{**b,'requires':'unobserved'}]},m)==[]
+
+
+def test_resize_keeps_all_observed_workspace_context():
+    from backend.customer_aperture import enclosing_region
+
+    first, manifest = fixture()
+    resized = {**first, "x": 760, "width": 2360, "height": 1520}
+    assert aperture([first, resized], manifest) is None
+    envelope = enclosing_region([first, resized])
+    assert envelope == [resized]
+    assert aperture(envelope, manifest)
+    assert enclosing_region([first, None, resized]) == []
+    wide = {"x": 80, "y": 342, "width": 3660, "height": 1476}
+    assert aperture(enclosing_region([first, wide]), manifest) is None

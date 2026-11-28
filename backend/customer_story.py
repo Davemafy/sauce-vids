@@ -1469,8 +1469,15 @@ def capture(url,plan,proofs,out):
         stream=next(s for s in probe(source)["streams"] if s["codec_type"]=="video")
         require(not transient_frame_reversion_finding(full_rate_temporal_frames(source,stream),fps=60),"Original source transient viewport jump")
         if local_setup:
-            from backend.customer_aperture import derive
-            return derive(source,out/"manifest.json",aperture_regions)
+            from backend.customer_aperture import derive,enclosing_region
+            # Each checkpoint identifies the same admitted workspace. A
+            # result may resize it. Frame the whole observed area across the
+            # take and retain full capture if any checkpoint is unavailable.
+            regions=enclosing_region(aperture_regions)
+            framed_source,framed_manifest=derive(source,out/"manifest.json",regions)
+            save(out/"workspace-aperture.json",{"checkpoints":aperture_regions,
+                "envelope":regions,"applied":framed_source!=source})
+            return framed_source,framed_manifest
         from backend.agentmail_auth import test_session_active
         if not test_session_active():
             from backend.customer_aperture import connected_stepper_regions,derive
